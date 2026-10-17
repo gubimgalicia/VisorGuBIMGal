@@ -100,7 +100,12 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             className="btn btn-secondary"
             disabled={isWorking}
-            onClick={() => onLoadSample('/samples/SimpleWall.ifc', 'SimpleWall (39 KB)')}
+            onClick={() =>
+              onLoadSample(
+                `${import.meta.env.BASE_URL}samples/SimpleWall.ifc`,
+                'SimpleWall (39 KB)'
+              )
+            }
             title="Cargar modelo de prueba SimpleWall (39 KB)"
           >
             <span>SimpleWall</span>
@@ -108,7 +113,12 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             className="btn btn-secondary"
             disabled={isWorking}
-            onClick={() => onLoadSample('/samples/ManySimpleWalls.ifc', 'ManySimpleWalls (584 KB)')}
+            onClick={() =>
+              onLoadSample(
+                `${import.meta.env.BASE_URL}samples/ManySimpleWalls.ifc`,
+                'ManySimpleWalls (584 KB)'
+              )
+            }
             title="Cargar modelo de prueba ManySimpleWalls (584 KB)"
           >
             <span>ManySimpleWalls</span>

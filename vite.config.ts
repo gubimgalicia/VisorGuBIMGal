@@ -21,6 +21,7 @@ function fixIfcLiteWorkersPlugin() {
 }
 
 export default defineConfig({
+  base: process.env.NODE_ENV === 'production' ? '/VisorGuBIMGal/' : '/',
   plugins: [react(), fixIfcLiteWorkersPlugin()],
   worker: {
     format: 'es',
