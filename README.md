@@ -18,9 +18,14 @@ Visor BIM y GIS de código abierto ejecutado íntegramente en el navegador (clie
 - **GIS 3D:** CesiumJS (módulo opcional).
 - **Hosting objetivo:** Vercel.
 
-## Especificación técnica
+## Documentación técnica
 
-La arquitectura, casos de uso y criterios de aceptación se detallan en [SPEC_IFCLITE_BIM_GIS_VIEWER.md](./SPEC_IFCLITE_BIM_GIS_VIEWER.md).
+La documentación técnica completa, arquitectura y análisis de riesgos se organiza en [`docs/`](./docs/00_index.md):
+- [Índice de documentación (AI-Ready)](./docs/00_index.md)
+- [01 — Arquitectura y especificación del visor web](./docs/01_architecture_viewer.md)
+- [02 — Análisis de riesgos técnicos y mitigaciones](./docs/02_technical_risks.md)
+- [03 — Especificación del kernel BIM/CAD soberano (Rust/WASM)](./docs/03_sovereign_kernel_spec.md)
+- [04 — Plan de trabajo paralelo para equipos (+10 devs)](./docs/04_team_distribution.md)
 
 ## Hoja de ruta
 
