@@ -65,12 +65,15 @@ function firstHit(mesh: SnapMesh, origin: Vec3, direction: Vec3, planes: readonl
   return best;
 }
 
-/** Nothing of the mesh lies between the eye and the point. */
-function visible(mesh: SnapMesh, eye: Vec3, point: Vec3, planes: readonly SectionPlane[]): boolean {
-  const toPoint = sub(point, eye);
+/** Nothing of the mesh lies between the origin of the view ray and the point. */
+function visible(mesh: SnapMesh, viewport: Viewport, point: Vec3, planes: readonly SectionPlane[]): boolean {
+  const projected = viewport.project(point);
+  const ray = projected && viewport.rayAt(projected.x, projected.y);
+  if (!ray) return false;
+  const toPoint = sub(point, ray.origin);
   const distance = length(toPoint);
   if (distance === 0) return true;
-  const hit = firstHit(mesh, eye, scale(toPoint, 1 / distance), planes);
+  const hit = firstHit(mesh, ray.origin, scale(toPoint, 1 / distance), planes);
   // Triangles through the point itself hit at its distance, give or take rounding.
   return hit === null || hit >= distance - Math.max(1e-6, distance * 1e-6);
 }
@@ -137,7 +140,7 @@ export function snap(
     if (pixels !== null && pixels <= VERTEX_RADIUS) corners.push({ pixels, point });
   }
   for (const { point } of corners.sort(byPixels)) {
-    if (visible(mesh, ray.origin, point, planes)) return { kind: 'vertex', point };
+    if (visible(mesh, viewport, point, planes)) return { kind: 'vertex', point };
   }
 
   const edges: Candidate[] = [];
@@ -151,7 +154,7 @@ export function snap(
     if (pixels !== null && pixels <= EDGE_RADIUS) edges.push({ pixels, point });
   }
   for (const { point } of edges.sort(byPixels)) {
-    if (visible(mesh, ray.origin, point, planes)) return { kind: 'edge', point };
+    if (visible(mesh, viewport, point, planes)) return { kind: 'edge', point };
   }
 
   const hit = firstHit(mesh, ray.origin, ray.direction, planes);

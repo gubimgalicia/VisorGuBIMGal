@@ -38,6 +38,7 @@ import { MeasureOverlay } from './ui/components/MeasureOverlay';
 import { MeasureController } from './ui/viewer/MeasureController';
 import { NO_SECTION, sceneBounds, sectionPlanes, type SectionState } from './ui/viewer/section';
 import { BimViewer } from './ui/viewer/BimViewer';
+import { computeElementMeshBounds } from './infrastructure/renderer/Camera';
 import {
   SHOW_ALL,
   classCounts,
@@ -508,6 +509,19 @@ export default function App() {
     [models, spatialTrees]
   );
 
+  const handleZoomToSelection = useCallback(async () => {
+    if (!selectedRef) return;
+    try {
+      const mesh = await kernel.elementMesh(selectedRef.modelId, selectedRef.expressId);
+      const elemBounds = mesh ? computeElementMeshBounds(mesh.positions) : null;
+      if (elemBounds) {
+        renderer.fitToBounds(elemBounds, true);
+      }
+    } catch (err) {
+      console.error('Error al encuadrar elemento seleccionado:', err);
+    }
+  }, [selectedRef]);
+
   // Locate model on GIS map
   const handleLocateOnGis = useCallback((model: ModelRecord) => {
     setIsGisExpanded(true);
@@ -604,6 +618,8 @@ export default function App() {
             onSelectElement={(ref) => void handleSelectElement(ref)}
             onHoverElement={setHoveredRef}
             onInitError={setRendererError}
+            hasSelection={selectedRef !== null}
+            onZoomToSelection={() => void handleZoomToSelection()}
             onPoint={measure.point}
             onPointerMove={measure.hover}
             onFrame={measure.frame}

@@ -1,3 +1,5 @@
+import type { NavigationMode } from '../../domain/kernel/RendererPort';
+import type { Vec3 } from '../../domain/measure/geometry';
 import type { Camera } from './Camera';
 
 /** Travel in CSS pixels, from where the pointer went down, under which a release still picks. */
@@ -12,6 +14,10 @@ export interface CanvasInputHandlers {
   onHover?(at: { x: number; y: number } | null): void;
   /** The mouse cursor while no button is down; 'grab' if not given. */
   idleCursor?(): string;
+  /** Returns the 3D world point under `(cssX, cssY)` to use as the orbit pivot on pointer down. */
+  getOrbitPivot?(cssX: number, cssY: number): Vec3 | null;
+  /** Current navigation mode ('orbit' by default, or 'first-person'). */
+  getNavigationMode?(): NavigationMode;
 }
 
 interface Pair {
@@ -21,9 +27,10 @@ interface Pair {
 }
 
 /**
- * Mouse, pen and touch on the canvas, through pointer events. One pointer orbits, or pans with the
- * middle or right button or Shift; two touches pinch to zoom and move together to pan; a press that
- * does not move picks. Returns a function that removes everything it added.
+ * Mouse, pen, touch, and first-person keyboard on the canvas. One pointer orbits around the pointed
+ * 3D surface (or looks around in first-person mode), or pans with the middle or right button or Shift;
+ * two touches pinch to zoom and move together to pan; a press that does not move picks.
+ * Returns a function that removes everything it added.
  */
 export function attachCanvasInput(
   canvas: HTMLCanvasElement,
@@ -33,6 +40,7 @@ export function attachCanvasInput(
   /** Pointers down on the canvas, at their last applied position. */
   const pointers = new Map<number, { x: number; y: number }>();
   let panning = false;
+  let orbitPivot: Vec3 | null = null;
   let pressX = 0;
   let pressY = 0;
   let pressButton = 0;
@@ -43,6 +51,8 @@ export function attachCanvasInput(
    *  of one touch move land together and a two-finger pan does not wobble the zoom. */
   let lastPair: Pair | null = null;
   let pairFrame = 0;
+
+  const isFirstPerson = (): boolean => handlers.getNavigationMode?.() === 'first-person';
 
   const pairOf = (): Pair | null => {
     if (pointers.size < 2) return null;
@@ -86,10 +96,17 @@ export function attachCanvasInput(
       pressY = e.clientY;
       pressButton = e.button;
       panning = e.pointerType !== 'touch' && (e.button === 1 || e.button === 2 || e.shiftKey);
+      if (!panning && !isFirstPerson() && handlers.getOrbitPivot) {
+        const rect = canvas.getBoundingClientRect();
+        orbitPivot = handlers.getOrbitPivot(e.clientX - rect.left, e.clientY - rect.top);
+      } else {
+        orbitPivot = null;
+      }
       if (e.pointerType === 'mouse') canvas.style.cursor = panning ? 'move' : 'grabbing';
     } else {
       settlePair(true);
       multi = true;
+      orbitPivot = null;
     }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     lastPair = pairOf();
@@ -126,6 +143,10 @@ export function attachCanvasInput(
     pointer.y = e.clientY;
     if (panning) {
       camera.pan(dx, dy);
+    } else if (isFirstPerson()) {
+      camera.look(dx, dy);
+    } else if (orbitPivot) {
+      camera.orbitAround(orbitPivot, dx, dy);
     } else {
       camera.orbit(dx, dy);
     }
@@ -141,6 +162,7 @@ export function attachCanvasInput(
     if (pointers.size > 0) return;
 
     panning = false;
+    orbitPivot = null;
     if (e.pointerType === 'mouse') canvas.style.cursor = idleCursor();
     if (completed && wasOnly && !moved && !multi && pressButton === 0) {
       const rect = canvas.getBoundingClientRect();
@@ -153,8 +175,57 @@ export function attachCanvasInput(
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    camera.zoom(e.deltaY);
+    if (isFirstPerson()) {
+      const step = Math.max(0.3, Math.min(20, camera.getDistance() * 0.08));
+      camera.walk(e.deltaY < 0 ? step : -step, 0, 0);
+    } else {
+      camera.zoom(e.deltaY);
+    }
     handlers.onViewChange();
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (!isFirstPerson()) return;
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable) {
+      return;
+    }
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const baseStep = Math.max(0.35, Math.min(25, camera.getDistance() * 0.06));
+    const step = e.shiftKey ? baseStep * 2.5 : baseStep;
+    let handled = true;
+    switch (e.key.toLowerCase()) {
+      case 'w':
+      case 'arrowup':
+        camera.walk(step, 0, 0);
+        break;
+      case 's':
+      case 'arrowdown':
+        camera.walk(-step, 0, 0);
+        break;
+      case 'd':
+      case 'arrowright':
+        camera.walk(0, step, 0);
+        break;
+      case 'a':
+      case 'arrowleft':
+        camera.walk(0, -step, 0);
+        break;
+      case 'e':
+      case 'pageup':
+        camera.walk(0, 0, step);
+        break;
+      case 'q':
+      case 'pagedown':
+        camera.walk(0, 0, -step);
+        break;
+      default:
+        handled = false;
+    }
+    if (handled) {
+      e.preventDefault();
+      handlers.onViewChange();
+    }
   };
 
   const onContextMenu = (e: MouseEvent) => {
@@ -173,6 +244,9 @@ export function attachCanvasInput(
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('contextmenu', onContextMenu);
   canvas.addEventListener('pointerleave', onPointerLeave);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', onKeyDown);
+  }
   // The browser must not scroll or zoom the page under a finger on the canvas.
   canvas.style.touchAction = 'none';
   canvas.style.cursor = idleCursor();
@@ -187,5 +261,8 @@ export function attachCanvasInput(
     canvas.removeEventListener('wheel', onWheel);
     canvas.removeEventListener('contextmenu', onContextMenu);
     canvas.removeEventListener('pointerleave', onPointerLeave);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', onKeyDown);
+    }
   };
 }

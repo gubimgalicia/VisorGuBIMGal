@@ -1,8 +1,15 @@
-import React, { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
-import { RefreshCw, Box, Compass, Eye, UploadCloud, Activity } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { RefreshCw, Box, Compass, Eye, UploadCloud, Activity, Maximize2, Footprints } from 'lucide-react';
 import { PerfMonitor } from '../components/PerfMonitor';
+import { ViewCube } from '../components/ViewCube';
 import type { ElementRef } from '../../domain/models/ModelRecord';
-import type { RendererEventHandlers, RendererPort } from '../../domain/kernel/RendererPort';
+import type {
+  CameraPose,
+  CameraProjection,
+  NavigationMode,
+  RendererEventHandlers,
+  RendererPort
+} from '../../domain/kernel/RendererPort';
 
 interface BimViewerProps {
   renderer: RendererPort;
@@ -10,6 +17,8 @@ interface BimViewerProps {
   onSelectElement: (ref: ElementRef | null) => void;
   onHoverElement?: (ref: ElementRef | null) => void;
   onInitError?: (message: string | null) => void;
+  hasSelection?: boolean;
+  onZoomToSelection?: () => void;
   /** Measure mode and frames, passed to the renderer as they are. */
   onPoint?: RendererEventHandlers['onPoint'];
   onPointerMove?: RendererEventHandlers['onPointerMove'];
@@ -26,6 +35,8 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   onSelectElement,
   onHoverElement,
   onInitError,
+  hasSelection = false,
+  onZoomToSelection,
   onPoint,
   onPointerMove,
   onFrame,
@@ -37,6 +48,16 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [showPerfMonitor, setShowPerfMonitor] = useState(false);
+  const [cameraPose, setCameraPose] = useState<CameraPose | null>(() => renderer.getCameraPose());
+  const [projection, setProjection] = useState<CameraProjection>(() => renderer.getProjection());
+  const [navMode, setNavMode] = useState<NavigationMode>(() => renderer.getNavigationMode());
+
+  const handleFrame = useCallback(() => {
+    const pose = renderer.getCameraPose();
+    setCameraPose(pose);
+    setProjection(renderer.getProjection());
+    onFrame?.();
+  }, [renderer, onFrame]);
 
   useEffect(() => {
     renderer.setHandlers({
@@ -44,9 +65,9 @@ export const BimViewer: React.FC<BimViewerProps> = ({
       onHover: (ref) => onHoverElement?.(ref),
       onPoint,
       onPointerMove,
-      onFrame
+      onFrame: handleFrame
     });
-  }, [renderer, onSelectElement, onHoverElement, onPoint, onPointerMove, onFrame]);
+  }, [renderer, onSelectElement, onHoverElement, onPoint, onPointerMove, handleFrame]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -55,6 +76,9 @@ export const BimViewer: React.FC<BimViewerProps> = ({
       .initialize(canvasRef.current)
       .then(() => {
         setInitError(null);
+        setCameraPose(renderer.getCameraPose());
+        setProjection(renderer.getProjection());
+        setNavMode(renderer.getNavigationMode());
         onInitError?.(null);
       })
       .catch((err) => {
@@ -68,6 +92,18 @@ export const BimViewer: React.FC<BimViewerProps> = ({
       renderer.destroy();
     };
   }, [renderer, onInitError]);
+
+  const handleToggleProjection = () => {
+    const next: CameraProjection = projection === 'perspective' ? 'orthographic' : 'perspective';
+    renderer.setProjection(next);
+    setProjection(next);
+  };
+
+  const handleToggleNavMode = () => {
+    const next: NavigationMode = navMode === 'orbit' ? 'first-person' : 'orbit';
+    renderer.setNavigationMode(next);
+    setNavMode(next);
+  };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -128,6 +164,34 @@ export const BimViewer: React.FC<BimViewerProps> = ({
         >
           <RefreshCw size={14} />
         </button>
+        <button
+          className="btn btn-ghost btn-icon nav-zoom-sel-btn"
+          disabled={!hasSelection}
+          onClick={() => onZoomToSelection?.()}
+          title="Zoom a la selección"
+        >
+          <Maximize2 size={14} />
+        </button>
+        <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
+        <button
+          className={`btn btn-ghost nav-proj-btn ${projection === 'orthographic' ? 'active' : ''}`}
+          aria-pressed={projection === 'orthographic'}
+          onClick={handleToggleProjection}
+          title="Alternar proyección Perspectiva / Ortográfica"
+          style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
+        >
+          {projection === 'orthographic' ? 'Orto' : 'Persp'}
+        </button>
+        <button
+          className={`btn btn-ghost nav-fp-btn ${navMode === 'first-person' ? 'active' : ''}`}
+          aria-pressed={navMode === 'first-person'}
+          onClick={handleToggleNavMode}
+          title="Modo Primera Persona (WASD / flechas para caminar, arrastrar para mirar)"
+          style={{ fontSize: '11px', padding: '4px 8px', height: '26px', gap: '4px' }}
+        >
+          <Footprints size={13} />
+          <span>{navMode === 'first-person' ? '1.ª pers.' : 'Órbita'}</span>
+        </button>
         <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
         <button
           className={`btn btn-ghost btn-icon perf-toggle-btn ${showPerfMonitor ? 'active' : ''}`}
@@ -138,6 +202,11 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           <Activity size={14} />
         </button>
       </div>
+
+      <ViewCube
+        pose={cameraPose}
+        onSelectPreset={(preset) => renderer.setViewPreset(preset)}
+      />
 
       {showPerfMonitor && <PerfMonitor renderer={renderer} />}
 
@@ -180,7 +249,7 @@ export const BimViewer: React.FC<BimViewerProps> = ({
         </div>
       )}
 
-      {/* WebGPU Error Banner */}
+      {/* Init Error Banner */}
       {initError && (
         <div
           style={{
@@ -190,17 +259,18 @@ export const BimViewer: React.FC<BimViewerProps> = ({
             transform: 'translate(-50%, -50%)',
             background: 'rgba(15, 23, 42, 0.95)',
             border: '1px solid #ef4444',
-            padding: '24px',
+            padding: '20px',
             borderRadius: '8px',
-            maxWidth: '440px',
+            color: '#f8fafc',
+            maxWidth: '420px',
             textAlign: 'center',
             zIndex: 30
           }}
         >
-          <h3 style={{ color: '#ef4444', fontSize: '16px', marginBottom: '8px' }}>
-            Aviso de compatibilidad
-          </h3>
-          <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5' }}>{initError}</p>
+          <h4 style={{ color: '#ef4444', marginBottom: '8px', fontWeight: 600 }}>
+            Error de Inicialización Gráfica
+          </h4>
+          <p style={{ fontSize: '12px', color: '#cbd5e1' }}>{initError}</p>
         </div>
       )}
     </div>

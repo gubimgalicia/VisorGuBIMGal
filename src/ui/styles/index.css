@@ -869,7 +869,7 @@ canvas.bim-viewport {
 }
 .perf-monitor-hud {
   position: absolute;
-  top: 12px;
+  top: 142px;
   right: 12px;
   min-width: 210px;
   background: rgba(15, 23, 42, 0.9);

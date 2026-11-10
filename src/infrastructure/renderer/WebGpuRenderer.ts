@@ -7,7 +7,9 @@ import {
 } from '../../domain/kernel/GeometryBatch';
 import type {
   CameraPose,
+  CameraProjection,
   ElementDisplay,
+  NavigationMode,
   PointerMode,
   RendererEventHandlers,
   RendererPort,
@@ -15,7 +17,7 @@ import type {
   ViewPreset
 } from '../../domain/kernel/RendererPort';
 import type { Ray, Vec3 } from '../../domain/measure/geometry';
-import { Camera } from './Camera';
+import { Camera, pickBatchOrbitPivot } from './Camera';
 import { attachCanvasInput } from './canvasInput';
 import { canvasPoint, canvasRay } from './canvasView';
 import { boxMayShow, markBatchesInView, pixelWindow } from './frustum';
@@ -160,6 +162,7 @@ export class WebGpuRenderer implements RendererPort {
   private isPicking = false;
   private pickQueue: Promise<unknown> = Promise.resolve();
   private pointerMode: PointerMode = 'select';
+  private navigationMode: NavigationMode = 'orbit';
   private initGeneration = 0;
 
   // Telemetry for verification and performance checks
@@ -532,6 +535,9 @@ export class WebGpuRenderer implements RendererPort {
         if (this.pointerMode === 'measure') this.handlers.onPointerMove?.(at);
       },
       idleCursor: () => this.idleCursor(),
+      getNavigationMode: () => this.navigationMode,
+      getOrbitPivot: (cssX, cssY) =>
+        pickBatchOrbitPivot(this.rayAt(cssX, cssY), this.models.values(), this.sectionPlanes),
       onClick: (cssX, cssY) => {
         if (this.pointerMode === 'measure') {
           this.handlers.onPoint?.(cssX, cssY);
@@ -1049,6 +1055,11 @@ export class WebGpuRenderer implements RendererPort {
     this.requestRender();
   }
 
+  fitToBounds(bounds: ModelBounds, keepAngles = false): void {
+    this.camera.fitToBounds(bounds, keepAngles);
+    this.requestRender();
+  }
+
   getCameraPose(): CameraPose {
     return this.camera.getPose();
   }
@@ -1056,6 +1067,26 @@ export class WebGpuRenderer implements RendererPort {
   setCameraPose(pose: CameraPose): void {
     this.camera.setPose(pose);
     this.requestRender();
+  }
+
+  getProjection(): CameraProjection {
+    return this.camera.getProjection();
+  }
+
+  setProjection(projection: CameraProjection): void {
+    if (this.camera.getProjection() === projection) return;
+    this.camera.setProjection(projection);
+    this.requestRender();
+  }
+
+  getNavigationMode(): NavigationMode {
+    return this.navigationMode;
+  }
+
+  setNavigationMode(mode: NavigationMode): void {
+    if (mode !== 'orbit' && mode !== 'first-person') return;
+    this.navigationMode = mode;
+    if (this.canvas) this.canvas.style.cursor = this.idleCursor();
   }
 
   private requestRender(): void {
