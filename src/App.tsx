@@ -9,9 +9,17 @@ import { DisplayBar } from './ui/components/DisplayBar';
 import { SectionBar } from './ui/components/SectionBar';
 import { SearchPanel } from './ui/components/SearchPanel';
 import { IdsPanel } from './ui/components/IdsPanel';
+import { BcfPanel } from './ui/components/BcfPanel';
 import { MeasureBar } from './ui/components/MeasureBar';
 import { SavedViewsBar } from './ui/components/SavedViewsBar';
 import { ColorByBar } from './ui/components/ColorByBar';
+import type { BcfViewpoint } from './ui/viewer/bcf';
+import {
+  buildBcfViewpoint,
+  collectDisplayExceptionRefs,
+  interpretBcfViewpoint,
+  rgbaU32ToBcfHex
+} from './ui/viewer/bcfViewpoint';
 import {
   buildColorScheme,
   collectAvailablePropertyNames,
@@ -60,7 +68,7 @@ import type { KernelDiagnostic, SpatialTree } from './domain/kernel/KernelPort';
 import { kernel, renderer } from './infrastructure/composition';
 import { leafletService } from './infrastructure/gis/LeafletService';
 
-import { Layers, FolderTree, Sliders, Scissors, Search, ShieldCheck } from 'lucide-react';
+import { Layers, FolderTree, Sliders, Scissors, Search, ShieldCheck, MessageSquareWarning } from 'lucide-react';
 
 export default function App() {
   const [models, setModels] = useState<ModelRecord[]>([]);
@@ -80,6 +88,11 @@ export default function App() {
   const [colorByPropName, setColorByPropName] = useState<string>('Name');
   const [colorLegend, setColorLegend] = useState<ColorLegendItem[]>([]);
   const [availableColorProps, setAvailableColorProps] = useState<string[]>([]);
+  const activeColorsByModelRef = useRef<Map<ModelId, Map<number, number>>>(new Map());
+  const bcfColorsByModelRef = useRef<Map<ModelId, Map<number, number>>>(new Map());
+  const refKeyToGuidRef = useRef<Map<string, string>>(new Map());
+  const guidToRefRef = useRef<Map<string, ElementRef>>(new Map());
+  const snapshotWaitersRef = useRef<Array<() => void>>([]);
 
   // Every model follows the display rule, including one loaded after the rule was set
   useEffect(() => {
@@ -110,6 +123,8 @@ export default function App() {
       setNextSavedViewIndex(1);
       setColorByMode('none');
       setColorLegend([]);
+      activeColorsByModelRef.current.clear();
+      bcfColorsByModelRef.current.clear();
     }
   }, [models.length, measure]);
 
@@ -117,11 +132,16 @@ export default function App() {
     let cancelled = false;
     if (colorByMode === 'none' || models.length === 0) {
       setColorLegend([]);
+      const nextColors = new Map<ModelId, Map<number, number>>();
       for (const m of models) {
-        renderer.setElementColors(m.id, new Map());
+        const bcfMap = bcfColorsByModelRef.current.get(m.id) ?? new Map<number, number>();
+        if (bcfMap.size > 0) nextColors.set(m.id, bcfMap);
+        renderer.setElementColors(m.id, bcfMap);
       }
+      activeColorsByModelRef.current = nextColors;
       return;
     }
+    bcfColorsByModelRef.current.clear();
     void (async () => {
       const readyModels = models.filter((m) => m.status === 'ready');
       const elements: ColorableElement[] = readyModels.flatMap((m) =>
@@ -139,6 +159,7 @@ export default function App() {
       if (cancelled) return;
       const scheme = buildColorScheme(elements, colorByMode, colorByPropName);
       setColorLegend(scheme.legend);
+      activeColorsByModelRef.current = scheme.colorsByModel;
       for (const m of models) {
         renderer.setElementColors(m.id, scheme.colorsByModel.get(m.id) ?? new Map());
       }
@@ -147,6 +168,11 @@ export default function App() {
       cancelled = true;
     };
   }, [colorByMode, colorByPropName, models, spatialTrees]);
+
+  const handleChangeColorByMode = useCallback((nextMode: ColorByMode) => {
+    bcfColorsByModelRef.current.clear();
+    setColorByMode(nextMode);
+  }, []);
 
   const handleIsolate = useCallback((target: DisplayTarget) => {
     setDisplayRule((prev) => ({ ...prev, isolate: target }));
@@ -183,7 +209,7 @@ export default function App() {
 
   // Tab state
   const [leftTab, setLeftTab] = useState<'models' | 'tree' | 'search'>('models');
-  const [rightTab, setRightTab] = useState<'props' | 'dxf' | 'ids'>('props');
+  const [rightTab, setRightTab] = useState<'props' | 'dxf' | 'ids' | 'bcf'>('props');
   const [isGisExpanded, setIsGisExpanded] = useState<boolean>(false);
 
   // Load IFC file handler (local File, static fetch, or retry of an existing modelId)
@@ -363,6 +389,14 @@ export default function App() {
 
       const resolvedRef: ElementRef = { modelId: model.id, expressId: ref.expressId, globalId: ref.globalId };
       const details = await kernel.getElementDetails(resolvedRef);
+      if (details?.globalId) {
+        refKeyToGuidRef.current.set(`${model.id}:${ref.expressId}`, details.globalId);
+        guidToRefRef.current.set(details.globalId, {
+          modelId: model.id,
+          expressId: ref.expressId,
+          globalId: details.globalId
+        });
+      }
 
       setSelectedElement(details ? { ...details, modelName: model.fileName } : null);
       if (!keepRightTab) {
@@ -389,6 +423,14 @@ export default function App() {
   // Remove model
   const handleRemoveModel = useCallback((id: ModelId) => {
     modelSourcesRef.current.delete(id);
+    activeColorsByModelRef.current.delete(id);
+    bcfColorsByModelRef.current.delete(id);
+    for (const [k, guid] of refKeyToGuidRef.current.entries()) {
+      if (k.startsWith(`${id}:`)) {
+        refKeyToGuidRef.current.delete(k);
+        guidToRefRef.current.delete(guid);
+      }
+    }
     renderer.removeModel(id);
     void kernel.closeModel(id);
     setModels((prev) => prev.filter((m) => m.id !== id));
@@ -522,6 +564,226 @@ export default function App() {
     }
   }, [selectedRef]);
 
+  const handleViewportFrame = useCallback(() => {
+    measure.frame();
+    if (snapshotWaitersRef.current.length > 0) {
+      const waiters = snapshotWaitersRef.current.splice(0);
+      for (const w of waiters) w();
+    }
+  }, [measure]);
+
+  const resolveRefToGuid = useCallback(async (ref: ElementRef): Promise<string | null> => {
+    const key = `${ref.modelId}:${ref.expressId}`;
+    if (ref.globalId) {
+      refKeyToGuidRef.current.set(key, ref.globalId);
+      guidToRefRef.current.set(ref.globalId, ref);
+      return ref.globalId;
+    }
+    const cached = refKeyToGuidRef.current.get(key);
+    if (cached) return cached;
+    try {
+      const details = await kernel.getElementDetails(ref);
+      const guid = details?.globalId?.trim();
+      if (guid) {
+        refKeyToGuidRef.current.set(key, guid);
+        guidToRefRef.current.set(guid, { modelId: ref.modelId, expressId: ref.expressId, globalId: guid });
+        return guid;
+      }
+    } catch {
+      // ignore missing element details
+    }
+    return null;
+  }, []);
+
+  const resolveGuidToRef = useCallback(
+    async (ifcGuid: string): Promise<ElementRef | null> => {
+      const trimmed = ifcGuid.trim();
+      if (!trimmed) return null;
+      const readyModels = models.filter((m) => m.status === 'ready');
+      const cached = guidToRefRef.current.get(trimmed);
+      if (cached && readyModels.some((m) => m.id === cached.modelId)) {
+        return cached;
+      }
+      for (const model of readyModels) {
+        try {
+          const ids = await kernel.findElements(model.id, { field: 'globalId', text: trimmed });
+          for (const expressId of ids) {
+            const details = await kernel.getElementDetails({ modelId: model.id, expressId });
+            if (details?.globalId === trimmed) {
+              const found: ElementRef = { modelId: model.id, expressId, globalId: trimmed };
+              refKeyToGuidRef.current.set(`${model.id}:${expressId}`, trimmed);
+              guidToRefRef.current.set(trimmed, found);
+              return found;
+            }
+          }
+        } catch {
+          // ignore search failure on model
+        }
+      }
+      return null;
+    },
+    [models]
+  );
+
+  const captureCanvasSnapshot = useCallback((): Promise<
+    { bytes: Uint8Array; format: 'png'; aspectRatio: number } | undefined
+  > => {
+    if (typeof document === 'undefined') return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+      let settled = false;
+      const grab = () => {
+        if (settled) return;
+        settled = true;
+        try {
+          const canvas = document.querySelector<HTMLCanvasElement>('.bim-viewport');
+          if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+            resolve(undefined);
+            return;
+          }
+          const aspectRatio = canvas.width / canvas.height;
+          const maxDim = Math.max(canvas.width, canvas.height);
+          const scale = maxDim > 1500 ? 1500 / maxDim : 1;
+          const targetW = Math.max(1, Math.round(canvas.width * scale));
+          const targetH = Math.max(1, Math.round(canvas.height * scale));
+          const offscreen = document.createElement('canvas');
+          offscreen.width = targetW;
+          offscreen.height = targetH;
+          const ctx = offscreen.getContext('2d');
+          if (!ctx) {
+            resolve(undefined);
+            return;
+          }
+          ctx.drawImage(canvas, 0, 0, targetW, targetH);
+          const dataUrl = offscreen.toDataURL('image/png');
+          const commaIdx = dataUrl.indexOf(',');
+          if (commaIdx < 0) {
+            resolve(undefined);
+            return;
+          }
+          const bin = atob(dataUrl.slice(commaIdx + 1));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) {
+            bytes[i] = bin.charCodeAt(i);
+          }
+          resolve({ bytes, format: 'png', aspectRatio });
+        } catch {
+          resolve(undefined);
+        }
+      };
+
+      snapshotWaitersRef.current.push(grab);
+      const pose = renderer.getCameraPose();
+      if (pose) {
+        renderer.setCameraPose(pose);
+      }
+      setTimeout(grab, 180);
+    });
+  }, []);
+
+  const handleCaptureBcfViewpoint = useCallback(
+    async (index: number): Promise<BcfViewpoint | null> => {
+      const camera = renderer.getCameraPose();
+      const snapshotResult = await captureCanvasSnapshot();
+
+      const selectedGuids: string[] = [];
+      if (selectedRef) {
+        const g = await resolveRefToGuid(selectedRef);
+        if (g) selectedGuids.push(g);
+      }
+
+      const { mode: visMode, refs: exceptionRefs } = collectDisplayExceptionRefs(
+        displayRule,
+        models,
+        spatialTrees
+      );
+      const exceptionGuids: string[] = [];
+      for (const ref of exceptionRefs) {
+        const g = await resolveRefToGuid(ref);
+        if (g && !exceptionGuids.includes(g)) exceptionGuids.push(g);
+      }
+
+      const colorGroupMap = new Map<string, string[]>();
+      for (const [modelId, modelColorMap] of activeColorsByModelRef.current.entries()) {
+        for (const [expressId, rgba] of modelColorMap.entries()) {
+          const g = await resolveRefToGuid({ modelId, expressId });
+          if (!g) continue;
+          const hex = rgbaU32ToBcfHex(rgba);
+          let list = colorGroupMap.get(hex);
+          if (!list) {
+            list = [];
+            colorGroupMap.set(hex, list);
+          }
+          if (!list.includes(g)) list.push(g);
+        }
+      }
+      const coloring = [...colorGroupMap.entries()].map(([color, ifcGuids]) => ({ color, ifcGuids }));
+      const activePlanes = sectionPlanes(section, bounds);
+
+      return buildBcfViewpoint({
+        index,
+        camera,
+        aspectRatio: snapshotResult?.aspectRatio,
+        selectedGuids,
+        visibility: { mode: visMode, exceptionGuids },
+        coloring,
+        sectionPlanes: activePlanes,
+        snapshot: snapshotResult
+          ? { bytes: snapshotResult.bytes, format: snapshotResult.format }
+          : undefined
+      });
+    },
+    [captureCanvasSnapshot, selectedRef, resolveRefToGuid, displayRule, models, spatialTrees, section, bounds]
+  );
+
+  const handleApplyBcfViewpoint = useCallback(
+    async (viewpoint: BcfViewpoint): Promise<void> => {
+      const candidateGuids = new Set<string>();
+      for (const c of viewpoint.selection) {
+        if (c.ifcGuid) candidateGuids.add(c.ifcGuid);
+      }
+      for (const c of viewpoint.visibility?.exceptions ?? []) {
+        if (c.ifcGuid) candidateGuids.add(c.ifcGuid);
+      }
+      for (const group of viewpoint.coloring) {
+        for (const c of group.components) {
+          if (c.ifcGuid) candidateGuids.add(c.ifcGuid);
+        }
+      }
+
+      const resolvedMap = new Map<string, ElementRef>();
+      for (const guid of candidateGuids) {
+        const resolved = await resolveGuidToRef(guid);
+        if (resolved) resolvedMap.set(guid, resolved);
+      }
+
+      const currentPose = renderer.getCameraPose();
+      const interpreted = interpretBcfViewpoint(viewpoint, (guid) => resolvedMap.get(guid) ?? null, {
+        fallbackDistance: currentPose?.distance ?? 12,
+        referenceTarget: currentPose?.target,
+        ghost: displayRule.ghost
+      });
+
+      if (interpreted.camera) {
+        renderer.setCameraPose(interpreted.camera);
+      }
+      setDisplayRule(interpreted.displayRule);
+      setSection(interpreted.sectionState);
+      renderer.setSectionPlanes(interpreted.sectionPlanes);
+      measure.setPlanes(interpreted.sectionPlanes);
+
+      bcfColorsByModelRef.current = interpreted.colorsByModel;
+      activeColorsByModelRef.current = interpreted.colorsByModel;
+      setColorByMode('none');
+      setColorLegend([]);
+      for (const m of models) {
+        renderer.setElementColors(m.id, interpreted.colorsByModel.get(m.id) ?? new Map());
+      }
+
+      await handleSelectElement(interpreted.selectedRef, true);
+    },
+    [resolveGuidToRef, displayRule.ghost, measure, models, handleSelectElement]
+  );
+
   // Locate model on GIS map
   const handleLocateOnGis = useCallback((model: ModelRecord) => {
     setIsGisExpanded(true);
@@ -622,7 +884,7 @@ export default function App() {
             onZoomToSelection={() => void handleZoomToSelection()}
             onPoint={measure.point}
             onPointerMove={measure.hover}
-            onFrame={measure.frame}
+            onFrame={handleViewportFrame}
             statusText={statusText}
             isWorking={isWorking}
           >
@@ -651,7 +913,7 @@ export default function App() {
                 propertyName={colorByPropName}
                 availableProperties={availableColorProps}
                 legend={colorLegend}
-                onChangeMode={setColorByMode}
+                onChangeMode={handleChangeColorByMode}
                 onChangePropertyName={setColorByPropName}
               />
               <SavedViewsBar
@@ -697,6 +959,13 @@ export default function App() {
               <ShieldCheck size={13} />
               <span>IDS</span>
             </button>
+            <button
+              className={`tab-btn tab-bcf ${rightTab === 'bcf' ? 'active' : ''}`}
+              onClick={() => setRightTab('bcf')}
+            >
+              <MessageSquareWarning size={13} />
+              <span>BCF</span>
+            </button>
           </div>
 
           <div className="panel-body">
@@ -710,6 +979,12 @@ export default function App() {
                 selectedRef={selectedRef}
                 onSelectElement={(ref) => void handleSelectElement(ref, true)}
                 onIsolate={handleIsolate}
+              />
+            </div>
+            <div style={{ display: rightTab === 'bcf' ? 'block' : 'none' }}>
+              <BcfPanel
+                onCaptureViewpoint={handleCaptureBcfViewpoint}
+                onApplyViewpoint={handleApplyBcfViewpoint}
               />
             </div>
           </div>
