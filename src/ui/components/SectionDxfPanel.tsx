@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Scissors, Download, FileCode, CheckCircle, RefreshCw } from 'lucide-react';
+import {
+  Scissors,
+  Download,
+  FileCode,
+  CheckCircle,
+  RefreshCw,
+  MousePointerClick,
+  FlipVertical2
+} from 'lucide-react';
 import type { DrawingCut, DrawingOptions } from '../../domain/drawings/DrawingTypes';
 import type {
   ExportedDrawing,
@@ -8,14 +16,19 @@ import type {
   KernelPort
 } from '../../domain/kernel/KernelPort';
 import type { ModelId, ModelRecord } from '../../domain/models/ModelRecord';
+import { faceCutPlane, type SectionState } from '../viewer/section';
 import { widenForPreview } from './drawingPreview';
 
 interface SectionDxfPanelProps {
   models: ModelRecord[];
   kernel: KernelPort;
+  section: SectionState;
+  onChangeSection: (next: SectionState) => void;
+  isPickingFace?: boolean;
+  onTogglePickFace?: (active?: boolean) => void;
 }
 
-type CutPreset = 'plan' | 'section-x' | 'section-y';
+type CutPreset = 'plan' | 'section-x' | 'section-y' | 'face';
 
 function downloadExportedDrawing(res: ExportedDrawing): void {
   const part: BlobPart =
@@ -52,7 +65,14 @@ function drawingStatus(diagnostics: readonly KernelDiagnostic[]): string {
     : summary;
 }
 
-export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({ models, kernel }) => {
+export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
+  models,
+  kernel,
+  section,
+  onChangeSection,
+  isPickingFace = false,
+  onTogglePickFace
+}) => {
   const [cutPreset, setCutPreset] = useState<CutPreset>('plan');
   const [position, setPosition] = useState<number>(1.2); // 1.2m typical floor cut
   const [depthStr, setDepthStr] = useState<string>(''); // Optional projection depth
@@ -73,6 +93,13 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({ models, kernel
       mountedRef.current = false;
     };
   }, []);
+
+  // Automatically switch preset to 'face' when the user picks a 3D face section
+  useEffect(() => {
+    if (section.mode === 'face' && section.face) {
+      setCutPreset('face');
+    }
+  }, [section.mode, section.face]);
 
   // Discard drawing on unmount or when drawing changes
   useEffect(() => {
@@ -115,16 +142,31 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({ models, kernel
       const depth =
         parsedDepth !== undefined && !Number.isNaN(parsedDepth) ? parsedDepth : undefined;
 
-      const cut: DrawingCut =
-        cutPreset === 'plan'
-          ? { kind: 'plan', elevation: position, ...(depth !== undefined ? { depth } : {}) }
-          : {
-              kind: 'section',
-              axis: cutPreset === 'section-x' ? 'x' : 'y',
-              position,
-              look: 'positive',
-              ...(depth !== undefined ? { depth } : {})
-            };
+      let cut: DrawingCut;
+      if (cutPreset === 'face') {
+        const resolvedFace = faceCutPlane(section);
+        if (!resolvedFace) {
+          setStatusMessage('Selecciona primero una cara del modelo 3D.');
+          setIsGenerating(false);
+          return;
+        }
+        cut = {
+          kind: 'plane',
+          origin: resolvedFace.origin,
+          normal: resolvedFace.normal,
+          ...(depth !== undefined ? { depth } : {})
+        };
+      } else if (cutPreset === 'plan') {
+        cut = { kind: 'plan', elevation: position, ...(depth !== undefined ? { depth } : {}) };
+      } else {
+        cut = {
+          kind: 'section',
+          axis: cutPreset === 'section-x' ? 'x' : 'y',
+          position,
+          look: 'positive',
+          ...(depth !== undefined ? { depth } : {})
+        };
+      }
 
       const options: DrawingOptions = {
         cut,
@@ -219,6 +261,8 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({ models, kernel
     }
   };
 
+  const resolvedFace = faceCutPlane(section);
+
   return (
     <div style={{ fontSize: '13px' }}>
       <div style={{ marginBottom: '12px' }}>
@@ -226,33 +270,150 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({ models, kernel
           TIPO DE DIBUJO 2D
         </label>
         <select
-          className="select"
+          className="select dxf-cut-preset"
           style={{ width: '100%' }}
           value={cutPreset}
-          onChange={(e) => setCutPreset(e.target.value as CutPreset)}
+          onChange={(e) => {
+            const next = e.target.value as CutPreset;
+            setCutPreset(next);
+            if (next === 'face' && section.mode !== 'face') {
+              onChangeSection({ ...section, mode: 'face' });
+              if (!section.face) {
+                onTogglePickFace?.(true);
+              }
+            }
+          }}
         >
           <option value="plan">Planta arquitectónica a cota (Z horizontal)</option>
           <option value="section-x">Sección vertical (Eje X)</option>
           <option value="section-y">Sección transversal (Eje Y)</option>
+          <option value="face">Corte por una cara (cualquier dirección)</option>
         </select>
       </div>
 
-      <div style={{ marginBottom: '12px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <label style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-            POSICIÓN DE CORTE (metros)
-          </label>
-          <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>{position.toFixed(2)} m</span>
+      {cutPreset !== 'face' ? (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <label style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+              POSICIÓN DE CORTE (metros)
+            </label>
+            <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>{position.toFixed(2)} m</span>
+          </div>
+          <input
+            type="number"
+            step="0.1"
+            className="select"
+            style={{ width: '100%' }}
+            value={position}
+            onChange={(e) => setPosition(parseFloat(e.target.value) || 0)}
+          />
         </div>
-        <input
-          type="number"
-          step="0.1"
-          className="select"
-          style={{ width: '100%' }}
-          value={position}
-          onChange={(e) => setPosition(parseFloat(e.target.value) || 0)}
-        />
-      </div>
+      ) : (
+        <div style={{ marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              type="button"
+              className={`btn btn-secondary dxf-pick-face-btn ${isPickingFace ? 'active' : ''}`}
+              style={{ flex: 1, justifyContent: 'center', padding: '7px 10px' }}
+              disabled={models.length === 0}
+              onClick={() => onTogglePickFace?.(!isPickingFace)}
+            >
+              <MousePointerClick size={14} />
+              <span>
+                {isPickingFace
+                  ? 'Haz clic sobre una cara 3D…'
+                  : section.face
+                    ? 'Elegir otra cara en 3D'
+                    : 'Elegir cara en 3D'}
+              </span>
+            </button>
+            {section.face && (
+              <button
+                type="button"
+                className={`btn btn-secondary dxf-face-flip ${section.flip ? 'active' : ''}`}
+                aria-pressed={section.flip}
+                onClick={() =>
+                  onChangeSection({
+                    ...section,
+                    mode: 'face',
+                    flip: !section.flip
+                  })
+                }
+                title="Invertir sentido del corte y de la mirada"
+              >
+                <FlipVertical2 size={14} />
+                <span>Invertir</span>
+              </button>
+            )}
+          </div>
+
+          {section.face && resolvedFace ? (
+            <>
+              <div
+                className="dxf-face-summary"
+                style={{
+                  padding: '6px 8px',
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-mono)',
+                  color: '#cbd5e1',
+                  lineHeight: 1.4
+                }}
+              >
+                <div>
+                  Origen: ({resolvedFace.origin[0].toFixed(2)}, {resolvedFace.origin[1].toFixed(2)},{' '}
+                  {resolvedFace.origin[2].toFixed(2)}) m
+                </div>
+                <div>
+                  Mirada: ({resolvedFace.normal[0].toFixed(3)}, {resolvedFace.normal[1].toFixed(3)},{' '}
+                  {resolvedFace.normal[2].toFixed(3)})
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                    Desplazamiento desde la cara (m)
+                  </label>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
+                    {section.face.offset.toFixed(2)} m
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="select dxf-face-offset"
+                  style={{ width: '100%' }}
+                  value={section.face.offset}
+                  onChange={(e) => {
+                    const nextOffset = parseFloat(e.target.value);
+                    onChangeSection({
+                      ...section,
+                      mode: 'face',
+                      face: {
+                        ...section.face!,
+                        offset: Number.isFinite(nextOffset) ? nextOffset : 0
+                      }
+                    });
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <div
+              style={{
+                padding: '6px 8px',
+                background: 'rgba(15, 23, 42, 0.5)',
+                borderRadius: '4px',
+                fontSize: '11px',
+                color: '#94a3b8'
+              }}
+            >
+              Pulsa «Elegir cara en 3D» y haz clic sobre cualquier cara del modelo para cortar en su plano.
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
@@ -290,9 +451,9 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({ models, kernel
       </div>
 
       <button
-        className="btn btn-primary"
+        className="btn btn-primary dxf-generate-btn"
         style={{ width: '100%', justifyContent: 'center', padding: '8px' }}
-        disabled={isGenerating || models.length === 0}
+        disabled={isGenerating || models.length === 0 || (cutPreset === 'face' && !resolvedFace)}
         onClick={() => void handleGenerate()}
       >
         {isGenerating ? <RefreshCw size={15} className="spin" /> : <Scissors size={15} />}

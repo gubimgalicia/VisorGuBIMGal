@@ -299,9 +299,37 @@ fn hidden_lines_left_out_of_the_request_are_gone_for_good() {
 
 #[test]
 fn a_malformed_request_is_refused() {
+    assert!(DrawingRequest::decode(&[]).is_none());
     assert!(DrawingRequest::decode(&[0.0, 1.0]).is_none());
+    assert!(DrawingRequest::decode(&[-1.0, 1.0, 1.0, NO_DEPTH, 0.0, 0.0, 0.0]).is_none());
     assert!(DrawingRequest::decode(&[9.0, 1.0, 1.0, NO_DEPTH, 0.0, 0.0, 0.0]).is_none());
+    assert!(DrawingRequest::decode(&[3.0, 1.0, 1.0, NO_DEPTH, 0.0, 0.0, 0.0]).is_none());
+    assert!(DrawingRequest::decode(&[0.0; 11]).is_none());
     assert!(DrawingRequest::decode(&[0.0; 10]).is_none());
+}
+
+#[test]
+fn plane_cut_request_decodes_and_slices_wall() {
+    let mut wall = model("public/samples/SimpleWall.ifc");
+    // Arbitrary plane cut at z = 3.9 looking towards -Z (unnormalized normal (0, 0, -2)).
+    let words = vec![3.0, 1.5, -0.5, 3.9, 0.0, 0.0, -2.0, NO_DEPTH, 0.0, 0.0, 1.0];
+    let mut sheet = SheetStore::new(request(&words));
+    for chunk in chunks(&mut wall, &words, 65536) {
+        sheet.add_chunk(0, &chunk);
+    }
+    assert_eq!(sheet.generate(), "[]");
+    let length = line_length(&dxf(&sheet));
+    assert!((length - 8.4).abs() < 1e-6, "{length}");
+
+    // Also accepts the 16-word transform suffix (27 words total).
+    let mut with_transform = words.clone();
+    with_transform.extend_from_slice(&[
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ]);
+    assert!(DrawingRequest::decode(&with_transform).unwrap().transform.is_some());
 }
 
 #[test]

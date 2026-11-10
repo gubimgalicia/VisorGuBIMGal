@@ -1,4 +1,5 @@
 // Metres in the drawing frame, IFC Z-up. Plans look towards -Z, and 'positive' looks along +axis.
+// For 'plane', `origin` is a point on the cut plane and `normal` is the look direction into the model.
 // `depth` is measured from the plane along the look direction and limits projection only; omit for no limit.
 export type DrawingCut =
   | { kind: 'plan'; elevation: number; depth?: number }
@@ -7,6 +8,12 @@ export type DrawingCut =
       axis: 'x' | 'y';
       position: number;
       look: 'positive' | 'negative';
+      depth?: number;
+    }
+  | {
+      kind: 'plane';
+      origin: readonly [number, number, number];
+      normal: readonly [number, number, number];
       depth?: number;
     };
 

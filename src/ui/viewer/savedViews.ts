@@ -78,7 +78,14 @@ function cloneSection(section: SectionState): SectionState {
     position: section.position,
     flip: section.flip,
     boxMin: section.boxMin ? { ...section.boxMin } : null,
-    boxMax: section.boxMax ? { ...section.boxMax } : null
+    boxMax: section.boxMax ? { ...section.boxMax } : null,
+    face: section.face
+      ? {
+          origin: [section.face.origin[0], section.face.origin[1], section.face.origin[2]],
+          normal: [section.face.normal[0], section.face.normal[1], section.face.normal[2]],
+          offset: section.face.offset
+        }
+      : null
   };
 }
 

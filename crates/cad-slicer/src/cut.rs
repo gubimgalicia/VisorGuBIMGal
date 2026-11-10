@@ -54,6 +54,11 @@ pub enum Cut {
         position: f64,
         look: Look,
     },
+    /// An arbitrary cut plane through `origin`, looking in the direction of `normal`.
+    Plane {
+        origin: DVec3,
+        normal: DVec3,
+    },
 }
 
 /// The drawing plane: where the cut stands, where the viewer looks, and how world coordinates
@@ -70,7 +75,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// `None` when the cut's position is not a finite number.
+    /// `None` when the cut's position or normal is not a finite usable vector.
     pub fn of(cut: Cut) -> Option<Self> {
         let (origin, look) = match cut {
             Cut::Plan { z } => (DVec3::new(0.0, 0.0, z), -DVec3::Z),
@@ -82,12 +87,23 @@ impl Frame {
                 let sign = if look == Look::Positive { 1.0 } else { -1.0 };
                 (axis.unit() * position, axis.unit() * sign)
             }
+            Cut::Plane { origin, normal } => {
+                if !normal.is_finite() || normal.length_squared() <= 1e-24 {
+                    return None;
+                }
+                (origin, normal.try_normalize()?)
+            }
         };
         if !origin.is_finite() || !look.is_finite() {
             return None;
         }
-        // Looking straight down keeps the world's Y up, so a plan reads like the model.
-        let up = if look.z.abs() > 0.5 { DVec3::Y } else { DVec3::Z };
+        // Project world +Z onto the sheet; for a horizontal plane keep world +Y up.
+        let vertical = DVec3::Z - look * DVec3::Z.dot(look);
+        let up = if vertical.length_squared() > 1e-12 {
+            vertical.normalize()
+        } else {
+            (DVec3::Y - look * DVec3::Y.dot(look)).normalize()
+        };
         // right × up = -look: the sheet is right handed seen from the eye.
         let right = up.cross(-look);
         Some(Self {
@@ -103,7 +119,7 @@ impl Frame {
     }
 
     pub fn unproject(&self, point: DVec2) -> DVec3 {
-        self.origin + self.right * point.x + self.up * point.y
+        self.look * self.origin.dot(self.look) + self.right * point.x + self.up * point.y
     }
 
     /// Distance behind the plane along the look direction. Negative is between eye and plane.

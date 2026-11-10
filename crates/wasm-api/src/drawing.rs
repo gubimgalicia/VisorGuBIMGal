@@ -13,8 +13,10 @@ use glam::{DMat4, DVec3};
 use ifc_geometry::{ElementGeometry, Mesh, ModelEvaluator};
 use spatial_tree::{Hatching, MAX_HATCH_ROWS, ModelData};
 
-/// Words of a request before the optional transform.
-const REQUEST_WORDS: usize = 7;
+/// Words of an axial request before the optional transform.
+const AXIAL_REQUEST_WORDS: usize = 7;
+/// Words of an arbitrary plane request before the optional transform.
+const PLANE_REQUEST_WORDS: usize = 11;
 
 /// What a drawing asks for, as the flat numbers the Worker sends. See `drawingRequest.ts`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,30 +28,48 @@ pub struct DrawingRequest {
 }
 
 impl DrawingRequest {
-    /// `[kind, position, look, depth, projection, hatching, hidden, ...transform]`. Kind is 0 for
-    /// a plan, 1 and 2 for sections on X and Y. A NaN depth means no limit.
+    /// Axial cuts: `[kind, position, look, depth, projection, hatching, hidden, ...transform]`,
+    /// where `kind` is 0 for a plan and 1 or 2 for sections on X and Y.
+    /// Plane cuts: `[3, ox, oy, oz, nx, ny, nz, depth, projection, hatching, hidden, ...transform]`.
+    /// A NaN depth means no limit.
     pub fn decode(words: &[f64]) -> Option<Self> {
-        if words.len() != REQUEST_WORDS && words.len() != REQUEST_WORDS + 16 {
-            return None;
-        }
-        let look = if words[2] > 0.0 { Look::Positive } else { Look::Negative };
-        let cut = match words[0] as u32 {
-            0 => Cut::Plan { z: words[1] },
-            1 => Cut::Section { axis: Axis::X, position: words[1], look },
-            2 => Cut::Section { axis: Axis::Y, position: words[1], look },
+        let kind = *words.first()?;
+        let (cut, rest) = match kind {
+            0.0 => {
+                if words.len() != AXIAL_REQUEST_WORDS && words.len() != AXIAL_REQUEST_WORDS + 16 {
+                    return None;
+                }
+                (Cut::Plan { z: words[1] }, &words[3..])
+            }
+            1.0 | 2.0 => {
+                if words.len() != AXIAL_REQUEST_WORDS && words.len() != AXIAL_REQUEST_WORDS + 16 {
+                    return None;
+                }
+                let axis = if kind == 1.0 { Axis::X } else { Axis::Y };
+                let look = if words[2] > 0.0 { Look::Positive } else { Look::Negative };
+                (Cut::Section { axis, position: words[1], look }, &words[3..])
+            }
+            3.0 => {
+                if words.len() != PLANE_REQUEST_WORDS && words.len() != PLANE_REQUEST_WORDS + 16 {
+                    return None;
+                }
+                let origin = DVec3::new(words[1], words[2], words[3]);
+                let normal = DVec3::new(words[4], words[5], words[6]);
+                (Cut::Plane { origin, normal }, &words[7..])
+            }
             _ => return None,
         };
         let options = DrawingOptions {
             cut,
-            depth: (!words[3].is_nan()).then_some(words[3]),
-            include_projection: words[4] != 0.0,
-            include_hatching: words[5] != 0.0,
+            depth: (!rest[0].is_nan()).then_some(rest[0]),
+            include_projection: rest[1] != 0.0,
+            include_hatching: rest[2] != 0.0,
         };
-        let transform = (words.len() > REQUEST_WORDS)
-            .then(|| <[f64; 16]>::try_from(&words[REQUEST_WORDS..]).ok())
+        let transform = (rest.len() > 4)
+            .then(|| <[f64; 16]>::try_from(&rest[4..]).ok())
             .flatten()
             .map(|matrix| DMat4::from_cols_array(&matrix));
-        Some(Self { options, include_hidden: words[6] != 0.0, transform })
+        Some(Self { options, include_hidden: rest[3] != 0.0, transform })
     }
 }
 

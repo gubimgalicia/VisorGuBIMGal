@@ -203,3 +203,81 @@ fn depth_does_not_change_a_cut() {
     );
     assert_eq!(layer(&drawing, "walls").loops.len(), 1);
 }
+
+#[test]
+fn oblique_plane_cut_builds_right_handed_vertical_up_sheet() {
+    // Plane x + y = 2 through [0, 4] x [0, 4] x [0, 3] cuts a chord from (2, 0) to (0, 2)
+    // of length 2 * sqrt(2) and height 3, so area = 6 * sqrt(2).
+    let cut = Cut::Plane {
+        origin: v(1.0, 1.0, 0.0),
+        normal: v(3.0, 3.0, 0.0),
+    };
+    let drawing = one(cuboid(v(0.0, 0.0, 0.0), v(4.0, 4.0, 3.0)), cut);
+    assert!(drawing.diagnostics.is_empty(), "{:?}", drawing.diagnostics);
+    let frame = drawing.frame;
+    let inv_sqrt2 = std::f64::consts::FRAC_1_SQRT_2;
+    assert!((frame.look - v(inv_sqrt2, inv_sqrt2, 0.0)).length() < 1e-12);
+    assert!((frame.up - v(0.0, 0.0, 1.0)).length() < 1e-12);
+    assert!((frame.right - v(inv_sqrt2, -inv_sqrt2, 0.0)).length() < 1e-12);
+    assert!((frame.right.cross(frame.up) - (-frame.look)).length() < 1e-12);
+
+    let rings = &layer(&drawing, "walls").loops;
+    assert_eq!(rings.len(), 1);
+    assert_sound(&rings[0]);
+    let (min_x, min_y, max_x, max_y) = bounds(&rings[0]);
+    let expected_width = 2.0 * std::f64::consts::SQRT_2;
+    assert!(((max_x - min_x) - expected_width).abs() < 1e-9);
+    assert!((min_y - 0.0).abs() < 1e-9 && (max_y - 3.0).abs() < 1e-9);
+    assert!((rings[0].area() - 3.0 * expected_width).abs() < 1e-9);
+}
+
+#[test]
+fn tilted_and_horizontal_plane_cuts_orient_sheet_axes_and_reject_bad_normals() {
+    // 3D tilted plane: normal = (0, 3, 4) -> look = (0, 0.6, 0.8), up = (0, -0.8, 0.6), right = (1, 0, 0).
+    let tilted = cad_slicer::Frame::of(Cut::Plane {
+        origin: v(1.0, 2.0, 3.0),
+        normal: v(0.0, 3.0, 4.0),
+    })
+    .expect("valid tilted plane");
+    assert!((tilted.look - v(0.0, 0.6, 0.8)).length() < 1e-12);
+    assert!((tilted.up - v(0.0, -0.8, 0.6)).length() < 1e-12);
+    assert!((tilted.right - v(1.0, 0.0, 0.0)).length() < 1e-12);
+    assert!((tilted.right.cross(tilted.up) - (-tilted.look)).length() < 1e-12);
+    let point_on_plane = v(1.0, 2.0, 3.0);
+    assert!((tilted.unproject(tilted.project(point_on_plane)) - point_on_plane).length() < 1e-12);
+
+    // Horizontal plane looking down (-Z) matches Cut::Plan at the same Z.
+    let horiz = one(
+        cuboid(v(0.0, 0.0, 0.0), v(4.0, 3.0, 2.0)),
+        Cut::Plane {
+            origin: v(2.5, 1.5, 1.0),
+            normal: v(0.0, 0.0, -5.0),
+        },
+    );
+    assert!((horiz.frame.up - v(0.0, 1.0, 0.0)).length() < 1e-12);
+    assert!((horiz.frame.right - v(1.0, 0.0, 0.0)).length() < 1e-12);
+    let rings = &layer(&horiz, "walls").loops;
+    assert_eq!(rings.len(), 1);
+    assert!((rings[0].area() - 12.0).abs() < 1e-9);
+
+    // Zero or non-finite normal/origin reports bad-cut.
+    for bad in [
+        Cut::Plane {
+            origin: v(0.0, 0.0, 0.0),
+            normal: v(0.0, 0.0, 0.0),
+        },
+        Cut::Plane {
+            origin: v(0.0, 0.0, 0.0),
+            normal: v(f64::NAN, 1.0, 0.0),
+        },
+        Cut::Plane {
+            origin: v(f64::INFINITY, 0.0, 0.0),
+            normal: v(0.0, 0.0, -1.0),
+        },
+    ] {
+        assert!(cad_slicer::Frame::of(bad).is_none());
+        let bad_drawing = one(cuboid(v(0.0, 0.0, 0.0), v(1.0, 1.0, 1.0)), bad);
+        assert_eq!(bad_drawing.diagnostics.len(), 1);
+        assert_eq!(bad_drawing.diagnostics[0].code, "bad-cut");
+    }
+}

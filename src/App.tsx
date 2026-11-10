@@ -44,6 +44,7 @@ import {
 import { applySavedView, captureSavedView, savedViewWithoutModel, type SavedView } from './ui/viewer/savedViews';
 import { MeasureOverlay } from './ui/components/MeasureOverlay';
 import { MeasureController } from './ui/viewer/MeasureController';
+import { pickFace, VERTEX_RADIUS } from './domain/measure/snap';
 import { NO_SECTION, sceneBounds, sectionPlanes, type SectionState } from './ui/viewer/section';
 import { BimViewer } from './ui/viewer/BimViewer';
 import { computeElementMeshBounds } from './infrastructure/renderer/Camera';
@@ -107,6 +108,7 @@ export default function App() {
   const measure = useMemo(() => new MeasureController(renderer, kernel), []);
 
   const [section, setSection] = useState<SectionState>(NO_SECTION);
+  const [isPickingFace, setIsPickingFace] = useState<boolean>(false);
   const bounds = useMemo(() => sceneBounds(models), [models]);
   useEffect(() => {
     const planes = sectionPlanes(section, bounds);
@@ -114,9 +116,88 @@ export default function App() {
     measure.setPlanes(planes);
   }, [section, bounds, measure]);
 
+  useEffect(() => {
+    return measure.subscribe(() => {
+      if (measure.getState().kind !== null) {
+        setIsPickingFace(false);
+      }
+    });
+  }, [measure]);
+
+  const handleTogglePickFace = useCallback(
+    (active?: boolean) => {
+      const next = active ?? !isPickingFace;
+      if (next) {
+        measure.setKind(null);
+        renderer.setPointerMode('measure');
+        setIsPickingFace(true);
+        setStatusText('Haz clic sobre una cara del modelo 3D para fijar el plano de corte.');
+      } else {
+        setIsPickingFace(false);
+        renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
+      }
+    },
+    [isPickingFace, measure]
+  );
+
+  const handleCanvasPoint = useCallback(
+    async (x: number, y: number): Promise<void> => {
+      if (!isPickingFace) {
+        await measure.point(x, y);
+        return;
+      }
+      const probes: readonly (readonly [number, number])[] = [
+        [0, 0],
+        [VERTEX_RADIUS / 2, 0],
+        [-VERTEX_RADIUS / 2, 0],
+        [0, VERTEX_RADIUS / 2],
+        [0, -VERTEX_RADIUS / 2]
+      ];
+      let ref: ElementRef | null = null;
+      let hitX = x;
+      let hitY = y;
+      for (const [dx, dy] of probes) {
+        ref = await renderer.pick(x + dx, y + dy);
+        if (ref) {
+          hitX = x + dx;
+          hitY = y + dy;
+          break;
+        }
+      }
+      const ray = renderer.rayAt(hitX, hitY) ?? renderer.rayAt(x, y);
+      if (!ref || !ray) {
+        setStatusText('Ninguna cara bajo el cursor. Haz clic sobre un elemento 3D.');
+        return;
+      }
+      const mesh = await kernel.elementMesh(ref.modelId, ref.expressId);
+      if (!mesh) return;
+      const activePlanes = sectionPlanes(section, bounds);
+      const hit = pickFace(mesh, ray, activePlanes) ?? pickFace(mesh, ray, []);
+      if (!hit) {
+        setStatusText('No se pudo determinar la cara en ese punto. Inténtalo en otra zona.');
+        return;
+      }
+      setSection((prev) => ({
+        ...prev,
+        mode: 'face',
+        flip: false,
+        face: {
+          origin: [hit.point[0], hit.point[1], hit.point[2]],
+          normal: [hit.normal[0], hit.normal[1], hit.normal[2]],
+          offset: 0
+        }
+      }));
+      setIsPickingFace(false);
+      renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
+      setStatusText('Plano de corte fijado sobre la cara seleccionada.');
+    },
+    [isPickingFace, measure, section, bounds]
+  );
+
   // With no model left there is nothing to measure on
   useEffect(() => {
     if (models.length === 0) {
+      setIsPickingFace(false);
       measure.setKind(null);
       measure.clear();
       setSavedViews([]);
@@ -882,7 +963,7 @@ export default function App() {
             onInitError={setRendererError}
             hasSelection={selectedRef !== null}
             onZoomToSelection={() => void handleZoomToSelection()}
-            onPoint={measure.point}
+            onPoint={handleCanvasPoint}
             onPointerMove={measure.hover}
             onFrame={handleViewportFrame}
             statusText={statusText}
@@ -902,7 +983,13 @@ export default function App() {
                 onToggleGhost={() => setDisplayRule((prev) => ({ ...prev, ghost: !prev.ghost }))}
                 onShowAll={() => setDisplayRule((prev) => ({ ...SHOW_ALL, ghost: prev.ghost }))}
               />
-              <SectionBar section={section} bounds={bounds} onChange={setSection} />
+              <SectionBar
+                section={section}
+                bounds={bounds}
+                onChange={setSection}
+                isPickingFace={isPickingFace}
+                onTogglePickFace={handleTogglePickFace}
+              />
               <MeasureBar
                 controller={measure}
                 onExportCsv={(groupBy) => void handleExportCsv(groupBy)}
@@ -970,7 +1057,16 @@ export default function App() {
 
           <div className="panel-body">
             {rightTab === 'props' && <PropertiesPanel element={selectedElement} />}
-            {rightTab === 'dxf' && <SectionDxfPanel models={models} kernel={kernel} />}
+            {rightTab === 'dxf' && (
+              <SectionDxfPanel
+                models={models}
+                kernel={kernel}
+                section={section}
+                onChangeSection={setSection}
+                isPickingFace={isPickingFace}
+                onTogglePickFace={handleTogglePickFace}
+              />
+            )}
             <div style={{ display: rightTab === 'ids' ? 'block' : 'none' }}>
               <IdsPanel
                 models={models}
