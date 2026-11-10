@@ -430,7 +430,7 @@ export class Camera {
     const d: Vec3 = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
     const along = (axis: Vec3) => d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
     const depth = along(forward);
-    if (!(depth >= this.near())) return null;
+    if (!(depth >= this.near()) || depth > this.far()) return null;
     if (this.projection === 'orthographic') {
       const { halfW, halfH } = this.orthoHalfExtents();
       return { x: along(right) / halfW, y: along(up) / halfH };
