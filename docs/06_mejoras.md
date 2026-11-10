@@ -71,6 +71,7 @@ Paralelismo: GitHub Pages no envía COOP/COEP y el `coi-serviceworker` se quitó
 | C18 | Interfaz en gallego e inglés además de castellano | Textos en castellano en el código | M | C | Sí |
 | C19 | Abrir un modelo público desde un parámetro de la URL, para compartir enlaces | Solo archivo local y muestra | S | C | Sí. **Hecho en T-128** (2026-11-06): `parseModelUrlParam` lee `?model=<url>` o `?ifc=<url>` al iniciar el visor (restringido a `http:` y `https:`), deduce el nombre `.ifc` y descarga y carga el modelo una vez que el renderizador está listo |
 | C20 | Monitor de rendimiento: fotogramas, memoria GPU, lotes dibujados | `getDebugStats()` existe en ambos renderizadores y ningún componente lo usa | S | G | Sí. **Hecho en T-127** (2026-11-06): botón en la barra flotante del visor (`.perf-toggle-btn`) que abre y cierra un panel HUD (`PerfMonitor`) en la esquina superior derecha con ritmo de fotogramas (`FPS` o `En reposo`), tiempo de CPU del último fotograma (`ms`), lotes dibujados y de selección frente al total (`drawnBatches / batchCount`, `pickedBatches / batchCount`), memoria GPU reservada y número de búferes (`allocatedGpuBytes`, `liveGpuBuffers`), y mallas y modelos cargados (`recordCount / modelCount`) |
+| C21 | Corte y plano por una cara en cualquier dirección: elegir con un clic una cara del modelo y generar en su plano el corte 3D y el plano 2D (DXF y SVG), con desplazamiento desde la cara, inversión del sentido y profundidad. Lo pide el propietario sobre todo para puentes, donde las caras de pilas, estribos y tableros no siguen los ejes X, Y y Z. En una cara curva vale el plano tangente en el punto pulsado. Después, como extensión natural: el corte normal a una alineación en una estación | Los planos solo admiten planta en Z y sección en X o Y (`DrawingTypes.ts:3-11`, tabla «Corte» de `docs/05_kernel_contract.md`, opciones de `SectionDxfPanel.tsx:234-236`). La barra «Corte 3D» solo ofrece X, Y y Z, aunque `RendererPort.setSectionPlanes` ya acepta cualquier normal. La medición (C5) ya obtiene el punto exacto sobre la malla del elemento en `f64` (`KernelPort.elementMesh`), de donde sale la normal de la cara | M | C | Sí. Toca el contrato: un corte nuevo con origen y normal, y unos ejes de hoja definidos (Y de la hoja, la vertical proyectada sobre el plano; si la cara es horizontal, como una planta) |
 
 ## D. Robustez y calidad
 
@@ -101,7 +102,7 @@ Paralelismo: GitHub Pages no envía COOP/COEP y el `coi-serviceworker` se quitó
 
 1. **Fluidez primero, medida:** A1, A2, A3, después A5 y A4. Objetivo: bloqueos por debajo de 200 ms.
 2. **Lo que un usuario echa de menos al abrir el visor:** C1, C3, C6, C2, C4, C5.
-3. **Carreteras:** B1, B2, B3.
+3. **Carreteras y puentes:** B1, B2, B3, C21.
 4. **Escala:** A6, A7, A8, A9, A10.
 5. **Trabajo en equipo:** C9, C10, C12, C13.
 6. **Resto,** según lo que pidan los usuarios.

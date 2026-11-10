@@ -1,4 +1,4 @@
-import type { CameraPose } from '../../domain/kernel/RendererPort';
+import type { CameraPose, CameraProjection } from '../../domain/kernel/RendererPort';
 import type { ElementRef, ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import { withoutModel, type DisplayRule, type DisplayTarget } from './displayRule';
 import type { SectionState } from './section';
@@ -11,6 +11,7 @@ export interface SavedView {
     distance: number;
     azimuth: number;
     elevation: number;
+    projection?: CameraProjection;
   };
   hiddenModelIds: ModelId[];
   displayRule: DisplayRule;
@@ -35,6 +36,7 @@ export interface AppliedSavedView {
     distance: number;
     azimuth: number;
     elevation: number;
+    projection?: CameraProjection;
   };
   modelVisibilities: Map<ModelId, boolean>;
   displayRule: DisplayRule;
@@ -81,12 +83,20 @@ function cloneSection(section: SectionState): SectionState {
 }
 
 function cloneCamera(camera: CameraPose): SavedView['camera'] {
-  return {
-    target: [camera.target[0], camera.target[1], camera.target[2]],
-    distance: camera.distance,
-    azimuth: camera.azimuth,
-    elevation: camera.elevation
-  };
+  return camera.projection
+    ? {
+        target: [camera.target[0], camera.target[1], camera.target[2]],
+        distance: camera.distance,
+        azimuth: camera.azimuth,
+        elevation: camera.elevation,
+        projection: camera.projection
+      }
+    : {
+        target: [camera.target[0], camera.target[1], camera.target[2]],
+        distance: camera.distance,
+        azimuth: camera.azimuth,
+        elevation: camera.elevation
+      };
 }
 
 export function captureSavedView(input: CaptureSavedViewInput): SavedView {

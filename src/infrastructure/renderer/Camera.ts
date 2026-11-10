@@ -1,5 +1,5 @@
 import type { ModelBounds } from '../../domain/models/ModelRecord';
-import type { CameraPose, ViewPreset } from '../../domain/kernel/RendererPort';
+import type { CameraPose, CameraProjection, SectionPlane, ViewPreset } from '../../domain/kernel/RendererPort';
 import type { Ray, Vec3 } from '../../domain/measure/geometry';
 import { WHOLE_VIEW, type Frustum, type ViewWindow } from './frustum';
 
@@ -7,9 +7,125 @@ const ISO_AZIMUTH = -Math.PI / 4; // +X, -Y (front-right in IFC Z-up)
 const ISO_ELEVATION = Math.atan(1 / Math.SQRT2); // ~35.264 deg above horizontal
 
 /**
- * Orbit camera operating in IFC Z-up f64 world coordinates.
+ * Computes the CSS `transform` string (`rotateX(...) rotateY(...)`) that aligns the 3D ViewCube
+ * with the IFC Z-up camera's `azimuth` and `elevation`.
+ */
+export function computeViewCubeTransform(pose: CameraPose | null): string {
+  const azimuth = pose?.azimuth ?? ISO_AZIMUTH;
+  const elevation = pose?.elevation ?? ISO_ELEVATION;
+  const rotXDeg = -(elevation * 180) / Math.PI || 0;
+  const rotYDeg = -((azimuth + Math.PI / 2) * 180) / Math.PI || 0;
+  return `rotateX(${rotXDeg.toFixed(2)}deg) rotateY(${rotYDeg.toFixed(2)}deg)`;
+}
+
+/**
+ * Slab intersection distance along `ray` (`origin + t * direction`, `t >= 0`) to an axis-aligned
+ * bounding box `[min, max]`. Returns the entry distance `t >= 0` (or exit distance if the ray
+ * origin starts inside the box), or `null` when the ray misses the box.
+ */
+export function rayBoxIntersectionDistance(ray: Ray, min: Vec3, max: Vec3): number | null {
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  for (let axis = 0; axis < 3; axis++) {
+    const o = ray.origin[axis];
+    const d = ray.direction[axis];
+    const bMin = min[axis];
+    const bMax = max[axis];
+    if (Math.abs(d) < 1e-12) {
+      if (o < bMin || o > bMax) return null;
+    } else {
+      const invD = 1 / d;
+      let t1 = (bMin - o) * invD;
+      let t2 = (bMax - o) * invD;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      if (t1 > tMin) tMin = t1;
+      if (t2 < tMax) tMax = t2;
+      if (tMin > tMax) return null;
+    }
+  }
+  if (tMax < 0) return null;
+  return tMin >= 0 ? tMin : tMax;
+}
+
+export interface OrbitCullableModel {
+  visible: boolean;
+  batches: ReadonlyArray<{ min: Vec3; max: Vec3 }>;
+}
+
+/**
+ * Finds the nearest 3D surface entry point along `ray` across all visible batch bounding boxes
+ * that is not clipped away by `sectionPlanes`. Returns `null` over background.
+ */
+export function pickBatchOrbitPivot(
+  ray: Ray | null,
+  models: Iterable<OrbitCullableModel>,
+  sectionPlanes: readonly SectionPlane[] = []
+): Vec3 | null {
+  if (!ray) return null;
+  let bestT = Infinity;
+  let bestPoint: Vec3 | null = null;
+  for (const model of models) {
+    if (!model.visible) continue;
+    for (const batch of model.batches) {
+      const t = rayBoxIntersectionDistance(ray, batch.min, batch.max);
+      if (t === null || t >= bestT) continue;
+      const px = ray.origin[0] + t * ray.direction[0];
+      const py = ray.origin[1] + t * ray.direction[1];
+      const pz = ray.origin[2] + t * ray.direction[2];
+      let clipped = false;
+      for (const plane of sectionPlanes) {
+        if (plane.normal[0] * px + plane.normal[1] * py + plane.normal[2] * pz > plane.offset) {
+          clipped = true;
+          break;
+        }
+      }
+      if (!clipped) {
+        bestT = t;
+        bestPoint = [px, py, pz];
+      }
+    }
+  }
+  return bestPoint;
+}
+
+/**
+ * Computes the axis-aligned `ModelBounds` of an element's `f64` vertex positions (`x, y, z` triples).
+ */
+export function computeElementMeshBounds(positions: Float64Array): ModelBounds | null {
+  if (!positions || positions.length < 3) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i + 2 < positions.length; i += 3) {
+    const x = positions[i];
+    const y = positions[i + 1];
+    const z = positions[i + 2];
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (z < minZ) minZ = z;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+    if (z > maxZ) maxZ = z;
+  }
+  if (!Number.isFinite(minX)) return null;
+  return {
+    min: { x: minX, y: minY, z: minZ },
+    max: { x: maxX, y: maxY, z: maxZ }
+  };
+}
+
+/**
+ * Orbit and first-person camera operating in IFC Z-up f64 world coordinates.
  * Produces a rotation-only view matrix at the camera eye (for RTC rendering)
- * and a Reverse-Z perspective projection matrix (depth 1 at near, 0 at far).
+ * and a Reverse-Z perspective or orthographic projection matrix (depth 1 at near, 0 at far).
  */
 export class Camera {
   /** Target point in IFC Z-up f64 metres. */
@@ -24,10 +140,22 @@ export class Camera {
   private aspect = 16 / 9;
   /** Vertical field of view in radians (45 deg). */
   private readonly fovY = Math.PI / 4;
+  /** Perspective or orthographic projection. */
+  private projection: CameraProjection = 'perspective';
 
   setAspect(aspect: number): void {
     if (Number.isFinite(aspect) && aspect > 0) {
       this.aspect = aspect;
+    }
+  }
+
+  getProjection(): CameraProjection {
+    return this.projection;
+  }
+
+  setProjection(projection: CameraProjection): void {
+    if (projection === 'perspective' || projection === 'orthographic') {
+      this.projection = projection;
     }
   }
 
@@ -58,7 +186,8 @@ export class Camera {
       target: [this.target[0], this.target[1], this.target[2]],
       distance: this.distance,
       azimuth: this.azimuth,
-      elevation: this.elevation
+      elevation: this.elevation,
+      projection: this.projection
     };
   }
 
@@ -80,6 +209,9 @@ export class Camera {
     this.azimuth = pose.azimuth;
     const maxElev = Math.PI / 2;
     this.elevation = Math.max(-maxElev, Math.min(maxElev, pose.elevation));
+    if (pose.projection === 'perspective' || pose.projection === 'orthographic') {
+      this.projection = pose.projection;
+    }
   }
 
   orbit(dx: number, dy: number): void {
@@ -87,6 +219,70 @@ export class Camera {
     const nextElev = this.elevation + dy * 0.007;
     const maxElev = Math.PI / 2;
     this.elevation = Math.max(-maxElev, Math.min(maxElev, nextElev));
+  }
+
+  /**
+   * Orbits the camera around an arbitrary 3D world `pivot` point while keeping the camera-space
+   * offset of `(eye - pivot)` invariant, so `pivot` stays pinned in the view without any jump.
+   */
+  orbitAround(pivot: Vec3, dx: number, dy: number): void {
+    if (!pivot.every(Number.isFinite)) {
+      this.orbit(dx, dy);
+      return;
+    }
+    const eye0 = this.getEye();
+    const { forward: f0, right: r0, up: u0 } = this.axes();
+    const vx = eye0[0] - pivot[0];
+    const vy = eye0[1] - pivot[1];
+    const vz = eye0[2] - pivot[2];
+    const cf = vx * f0[0] + vy * f0[1] + vz * f0[2];
+    const cr = vx * r0[0] + vy * r0[1] + vz * r0[2];
+    const cu = vx * u0[0] + vy * u0[1] + vz * u0[2];
+
+    this.orbit(dx, dy);
+
+    const { forward: f1, right: r1, up: u1 } = this.axes();
+    const eye1x = pivot[0] + cf * f1[0] + cr * r1[0] + cu * u1[0];
+    const eye1y = pivot[1] + cf * f1[1] + cr * r1[1] + cu * u1[1];
+    const eye1z = pivot[2] + cf * f1[2] + cr * r1[2] + cu * u1[2];
+
+    this.target = [
+      eye1x + this.distance * f1[0],
+      eye1y + this.distance * f1[1],
+      eye1z + this.distance * f1[2]
+    ];
+  }
+
+  /**
+   * First-person look-around: rotates `azimuth` and `elevation` while keeping the camera `eye`
+   * fixed in world space.
+   */
+  look(dx: number, dy: number): void {
+    const eye = this.getEye();
+    this.azimuth -= dx * 0.005;
+    const nextElev = this.elevation - dy * 0.005;
+    const maxElev = Math.PI / 2 - 0.01;
+    this.elevation = Math.max(-maxElev, Math.min(maxElev, nextElev));
+    const { forward } = this.axes();
+    this.target = [
+      eye[0] + this.distance * forward[0],
+      eye[1] + this.distance * forward[1],
+      eye[2] + this.distance * forward[2]
+    ];
+  }
+
+  /**
+   * First-person walk/fly translation in metres along the camera's forward, right, and world-Z up axes.
+   */
+  walk(forwardMeters: number, rightMeters: number, upMeters = 0): void {
+    const { forward, right } = this.axes();
+    const dx = forward[0] * forwardMeters + right[0] * rightMeters;
+    const dy = forward[1] * forwardMeters + right[1] * rightMeters;
+    const dz = forward[2] * forwardMeters + right[2] * rightMeters + upMeters;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || !Number.isFinite(dz)) return;
+    this.target[0] += dx;
+    this.target[1] += dy;
+    this.target[2] += dz;
   }
 
   pan(dx: number, dy: number): void {
@@ -123,7 +319,7 @@ export class Camera {
     this.distance = Math.max(0.05, Math.min(500000, this.distance * factor));
   }
 
-  fitToBounds(bounds: ModelBounds): void {
+  fitToBounds(bounds: ModelBounds, keepAngles = false): void {
     const cx = (bounds.min.x + bounds.max.x) * 0.5;
     const cy = (bounds.min.y + bounds.max.y) * 0.5;
     const cz = (bounds.min.z + bounds.max.z) * 0.5;
@@ -137,8 +333,10 @@ export class Camera {
     const halfFov = this.fovY * 0.5;
     const fitScale = this.aspect < 1 ? 1 / Math.max(0.25, this.aspect) : 1;
     this.distance = Math.max(1.0, (radius / Math.tan(halfFov)) * 1.25 * fitScale);
-    this.azimuth = ISO_AZIMUTH;
-    this.elevation = ISO_ELEVATION;
+    if (!keepAngles) {
+      this.azimuth = ISO_AZIMUTH;
+      this.elevation = ISO_ELEVATION;
+    }
   }
 
   setPreset(preset: ViewPreset, bounds: ModelBounds | null): void {
@@ -165,14 +363,30 @@ export class Camera {
         this.azimuth = -Math.PI / 2;
         this.elevation = Math.PI / 2;
         break;
+      case 'bottom':
+        // Looking straight up (+Z_ifc)
+        this.azimuth = -Math.PI / 2;
+        this.elevation = -Math.PI / 2;
+        break;
       case 'front':
-        // Looking from -Y_ifc towards +Y_ifc with +Z_ifc up and +X_ifc right
+        // Looking from -Y_ifc (South) towards +Y_ifc (North) with +Z_ifc up and +X_ifc right
         this.azimuth = -Math.PI / 2;
         this.elevation = 0;
         break;
+      case 'back':
+        // Looking from +Y_ifc (North) towards -Y_ifc (South) with +Z_ifc up and -X_ifc right
+        this.azimuth = Math.PI / 2;
+        this.elevation = 0;
+        break;
       case 'side':
-        // Looking from +X_ifc towards -X_ifc with +Z_ifc up and +Y_ifc right
+      case 'right':
+        // Looking from +X_ifc (East) towards -X_ifc (West) with +Z_ifc up and +Y_ifc right
         this.azimuth = 0;
+        this.elevation = 0;
+        break;
+      case 'left':
+        // Looking from -X_ifc (West) towards +X_ifc (East) with +Z_ifc up and -Y_ifc right
+        this.azimuth = Math.PI;
         this.elevation = 0;
         break;
     }
@@ -184,6 +398,13 @@ export class Camera {
 
   private far(): number {
     return Math.max(50000.0, this.distance * 250.0);
+  }
+
+  /** Half-width and half-height in metres of the orthographic view volume at `distance`. */
+  private orthoHalfExtents(): { halfW: number; halfH: number } {
+    const halfH = Math.max(0.05, this.distance * Math.tan(this.fovY * 0.5));
+    const halfW = halfH * this.aspect;
+    return { halfW, halfH };
   }
 
   /** Forward, right and up unit vectors in IFC Z-up; see writeUniforms. */
@@ -209,7 +430,11 @@ export class Camera {
     const d: Vec3 = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
     const along = (axis: Vec3) => d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
     const depth = along(forward);
-    if (!(depth >= this.near())) return null;
+    if (!(depth >= this.near()) || depth > this.far()) return null;
+    if (this.projection === 'orthographic') {
+      const { halfW, halfH } = this.orthoHalfExtents();
+      return { x: along(right) / halfW, y: along(up) / halfH };
+    }
     const h = 1.0 / Math.tan(this.fovY * 0.5);
     return { x: ((h / this.aspect) * along(right)) / depth, y: (h * along(up)) / depth };
   }
@@ -217,6 +442,14 @@ export class Camera {
   /** The ray from the eye through a point in normalised device coordinates. */
   rayAt(ndcX: number, ndcY: number): Ray {
     const { forward, right, up } = this.axes();
+    const eye = this.getEye();
+    if (this.projection === 'orthographic') {
+      const { halfW, halfH } = this.orthoHalfExtents();
+      const ox = eye[0] + right[0] * (ndcX * halfW) + up[0] * (ndcY * halfH);
+      const oy = eye[1] + right[1] * (ndcX * halfW) + up[1] * (ndcY * halfH);
+      const oz = eye[2] + right[2] * (ndcX * halfW) + up[2] * (ndcY * halfH);
+      return { origin: [ox, oy, oz], direction: [forward[0], forward[1], forward[2]] };
+    }
     const h = 1.0 / Math.tan(this.fovY * 0.5);
     const a = (ndcX * this.aspect) / h;
     const b = ndcY / h;
@@ -226,32 +459,42 @@ export class Camera {
       forward[2] + right[2] * a + up[2] * b
     ];
     const l = Math.hypot(v[0], v[1], v[2]);
-    return { origin: this.getEye(), direction: [v[0] / l, v[1] / l, v[2] / l] };
+    return { origin: eye, direction: [v[0] / l, v[1] / l, v[2] / l] };
   }
 
   /**
    * What `writeUniforms` lets through a window of the view, as planes in absolute coordinates:
    * depth between near and far, and each side of the window, where a camera coordinate times
-   * its projection scale equals the depth times the window's edge.
+   * its projection scale equals the depth times the window's edge (or a constant offset in ortho).
    */
   frustum(window: ViewWindow = WHOLE_VIEW): Frustum {
     const eye = this.getEye();
     const { forward, right, up } = this.axes();
-    const h = 1.0 / Math.tan(this.fovY * 0.5);
-    const w = h / this.aspect;
     const planes = new Float64Array(24);
     const put = (at: number, n: Vec3, offset: number) => {
       planes.set(n, at);
       planes[at + 3] = offset - (n[0] * eye[0] + n[1] * eye[1] + n[2] * eye[2]);
     };
+    put(0, forward, -this.near());
+    put(4, [-forward[0], -forward[1], -forward[2]], this.far());
+
+    if (this.projection === 'orthographic') {
+      const { halfW, halfH } = this.orthoHalfExtents();
+      put(8, [-right[0], -right[1], -right[2]], window.right * halfW);
+      put(12, right, -window.left * halfW);
+      put(16, [-up[0], -up[1], -up[2]], window.top * halfH);
+      put(20, up, -window.bottom * halfH);
+      return planes;
+    }
+
+    const h = 1.0 / Math.tan(this.fovY * 0.5);
+    const w = h / this.aspect;
     // edge·forward − scale·side: inside when the side coordinate shows at or before the edge.
     const tilt = (edge: number, scale: number, side: Vec3): Vec3 => [
       edge * forward[0] - scale * side[0],
       edge * forward[1] - scale * side[1],
       edge * forward[2] - scale * side[2]
     ];
-    put(0, forward, -this.near());
-    put(4, [-forward[0], -forward[1], -forward[2]], this.far());
     put(8, tilt(window.right, w, right), 0);
     put(12, tilt(-window.left, -w, right), 0);
     put(16, tilt(window.top, h, up), 0);
@@ -264,33 +507,60 @@ export class Camera {
    * rotation-only view matrix at the camera eye (floats 16..31).
    */
   writeUniforms(out: Float32Array): void {
-    // 1. Reverse-Z perspective projection matrix (clip z in [0, w], near -> 1, far -> 0)
-    const h = 1.0 / Math.tan(this.fovY * 0.5);
-    const w = h / this.aspect;
     const near = this.near();
     const far = this.far();
-    const a = near / (far - near);
-    const b = (far * near) / (far - near);
 
-    out[0] = w;
-    out[1] = 0;
-    out[2] = 0;
-    out[3] = 0;
+    if (this.projection === 'orthographic') {
+      // Reverse-Z orthographic projection: z_view = -near -> z_clip = 1, z_view = -far -> z_clip = 0, w_clip = 1
+      const { halfW, halfH } = this.orthoHalfExtents();
+      const invDepth = 1.0 / (far - near);
 
-    out[4] = 0;
-    out[5] = h;
-    out[6] = 0;
-    out[7] = 0;
+      out[0] = 1.0 / halfW;
+      out[1] = 0;
+      out[2] = 0;
+      out[3] = 0;
 
-    out[8] = 0;
-    out[9] = 0;
-    out[10] = a;
-    out[11] = -1;
+      out[4] = 0;
+      out[5] = 1.0 / halfH;
+      out[6] = 0;
+      out[7] = 0;
 
-    out[12] = 0;
-    out[13] = 0;
-    out[14] = b;
-    out[15] = 0;
+      out[8] = 0;
+      out[9] = 0;
+      out[10] = invDepth;
+      out[11] = 0;
+
+      out[12] = 0;
+      out[13] = 0;
+      out[14] = far * invDepth;
+      out[15] = 1;
+    } else {
+      // Reverse-Z perspective projection matrix (clip z in [0, w], near -> 1, far -> 0)
+      const h = 1.0 / Math.tan(this.fovY * 0.5);
+      const w = h / this.aspect;
+      const a = near / (far - near);
+      const b = (far * near) / (far - near);
+
+      out[0] = w;
+      out[1] = 0;
+      out[2] = 0;
+      out[3] = 0;
+
+      out[4] = 0;
+      out[5] = h;
+      out[6] = 0;
+      out[7] = 0;
+
+      out[8] = 0;
+      out[9] = 0;
+      out[10] = a;
+      out[11] = -1;
+
+      out[12] = 0;
+      out[13] = 0;
+      out[14] = b;
+      out[15] = 0;
+    }
 
     // 2. Rotation-only view matrix at camera eye (maps IFC Z-up into camera space: +X right, +Y up, -Z forward)
     const cosPhi = Math.cos(this.elevation);

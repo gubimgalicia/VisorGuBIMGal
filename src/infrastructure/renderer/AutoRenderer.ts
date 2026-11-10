@@ -3,7 +3,9 @@ import { findBatchError, type GeometryBatch } from '../../domain/kernel/Geometry
 import type { Ray, Vec3 } from '../../domain/measure/geometry';
 import type {
   CameraPose,
+  CameraProjection,
   ElementDisplay,
+  NavigationMode,
   PointerMode,
   RendererEventHandlers,
   RendererPort,
@@ -24,6 +26,8 @@ export class AutoRenderer implements RendererPort {
   private activeBackend: BackendType | null = null;
   private handlers: RendererEventHandlers = {};
   private pointerMode: PointerMode = 'select';
+  private projection: CameraProjection = 'perspective';
+  private navigationMode: NavigationMode = 'orbit';
   private preInitQueue: Array<(r: RendererPort) => void> = [];
   private backendListeners: Set<(backend: BackendType | null) => void> = new Set();
 
@@ -121,6 +125,8 @@ export class AutoRenderer implements RendererPort {
     }
 
     chosenRenderer.setPointerMode(this.pointerMode);
+    chosenRenderer.setProjection(this.projection);
+    chosenRenderer.setNavigationMode(this.navigationMode);
     this.activeRenderer = chosenRenderer;
     this.activeBackend = chosenBackend;
     this.notifyBackendChange(chosenBackend);
@@ -242,16 +248,45 @@ export class AutoRenderer implements RendererPort {
     }
   }
 
+  fitToBounds(bounds: ModelBounds, keepAngles = false): void {
+    if (this.activeRenderer) {
+      this.activeRenderer.fitToBounds(bounds, keepAngles);
+    } else {
+      this.preInitQueue.push((r) => r.fitToBounds(bounds, keepAngles));
+    }
+  }
+
   getCameraPose(): CameraPose | null {
     return this.activeRenderer?.getCameraPose() ?? null;
   }
 
   setCameraPose(pose: CameraPose): void {
+    if (pose.projection === 'perspective' || pose.projection === 'orthographic') {
+      this.projection = pose.projection;
+    }
     if (this.activeRenderer) {
       this.activeRenderer.setCameraPose(pose);
     } else {
       this.preInitQueue.push((r) => r.setCameraPose(pose));
     }
+  }
+
+  getProjection(): CameraProjection {
+    return this.activeRenderer?.getProjection() ?? this.projection;
+  }
+
+  setProjection(projection: CameraProjection): void {
+    this.projection = projection;
+    this.activeRenderer?.setProjection(projection);
+  }
+
+  getNavigationMode(): NavigationMode {
+    return this.activeRenderer?.getNavigationMode() ?? this.navigationMode;
+  }
+
+  setNavigationMode(mode: NavigationMode): void {
+    this.navigationMode = mode;
+    this.activeRenderer?.setNavigationMode(mode);
   }
 
   setPointerMode(mode: PointerMode): void {

@@ -2,7 +2,11 @@ import type { ElementRef, ModelBounds, ModelId } from '../models/ModelRecord';
 import type { GeometryBatch } from './GeometryBatch';
 import type { Ray, Vec3 } from '../measure/geometry';
 
-export type ViewPreset = 'iso' | 'top' | 'front' | 'side';
+export type ViewPreset = 'iso' | 'top' | 'bottom' | 'front' | 'back' | 'side' | 'right' | 'left';
+
+export type CameraProjection = 'perspective' | 'orthographic';
+
+export type NavigationMode = 'orbit' | 'first-person';
 
 export interface RendererDebugStats {
   modelCount: number;
@@ -15,11 +19,13 @@ export interface RendererDebugStats {
   drawnBatches: number;
   pickedBatches: number;
 }
+
 export interface CameraPose {
   target: readonly [number, number, number];
   distance: number;
   azimuth: number;
   elevation: number;
+  projection?: CameraProjection;
 }
 
 /**
@@ -97,8 +103,13 @@ export interface RendererPort {
 
   setViewPreset(preset: ViewPreset): void;
   fitToView(): void;
+  fitToBounds(bounds: ModelBounds, keepAngles?: boolean): void;
   getCameraPose(): CameraPose | null;
   setCameraPose(pose: CameraPose): void;
+  getProjection(): CameraProjection;
+  setProjection(projection: CameraProjection): void;
+  getNavigationMode(): NavigationMode;
+  setNavigationMode(mode: NavigationMode): void;
   getDebugStats(): RendererDebugStats;
 
   /** 'select' until changed. */
