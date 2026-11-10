@@ -24,6 +24,12 @@ export interface Snap {
   point: Vec3;
 }
 
+export interface FaceHit {
+  point: Vec3;
+  /** Unit normal pointing into the cut along the view ray (`dot(normal, ray.direction) >= 0`). */
+  normal: Vec3;
+}
+
 function vertex(positions: Float64Array, index: number): Vec3 {
   const at = index * 3;
   return [positions[at], positions[at + 1], positions[at + 2]];
@@ -63,6 +69,44 @@ function firstHit(mesh: SnapMesh, origin: Vec3, direction: Vec3, planes: readonl
     best = distance;
   }
   return best;
+}
+
+/** Nearest triangle hit along `ray` kept by `planes`, with its inward unit normal. */
+export function pickFace(
+  mesh: ElementMesh,
+  ray: Ray,
+  planes: readonly SectionPlane[] = []
+): FaceHit | null {
+  const { positions, indices } = mesh;
+  const { origin, direction } = ray;
+  let bestDistance: number | null = null;
+  let bestHit: FaceHit | null = null;
+  for (let t = 0; t * 3 < indices.length; t++) {
+    const v0 = vertex(positions, indices[t * 3]);
+    const e1 = sub(vertex(positions, indices[t * 3 + 1]), v0);
+    const e2 = sub(vertex(positions, indices[t * 3 + 2]), v0);
+    const rawNormal = cross(e1, e2);
+    const normalLen = length(rawNormal);
+    if (normalLen <= 1e-12) continue;
+    const p = cross(direction, e2);
+    const det = dot(e1, p);
+    if (det === 0) continue;
+    const s = sub(origin, v0);
+    const u = dot(s, p) / det;
+    if (u < 0 || u > 1) continue;
+    const q = cross(s, e1);
+    const v = dot(direction, q) / det;
+    if (v < 0 || u + v > 1) continue;
+    const distance = dot(e2, q) / det;
+    if (distance <= 0 || (bestDistance !== null && distance >= bestDistance)) continue;
+    const point = add(origin, scale(direction, distance));
+    if (!keptBy(planes, point)) continue;
+    const unitNormal = scale(rawNormal, 1 / normalLen);
+    const inwardNormal = dot(unitNormal, direction) < 0 ? scale(unitNormal, -1) : unitNormal;
+    bestDistance = distance;
+    bestHit = { point, normal: inwardNormal };
+  }
+  return bestHit;
 }
 
 /** Nothing of the mesh lies between the origin of the view ray and the point. */

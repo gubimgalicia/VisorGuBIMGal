@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlipVertical2 } from 'lucide-react';
+import { FlipVertical2, MousePointerClick } from 'lucide-react';
 import type { ModelBounds } from '../../domain/models/ModelRecord';
 import {
   SECTION_AXES,
@@ -13,6 +13,8 @@ interface SectionBarProps {
   section: SectionState;
   bounds: ModelBounds | null;
   onChange: (next: SectionState) => void;
+  isPickingFace?: boolean;
+  onTogglePickFace?: (active?: boolean) => void;
 }
 
 /** Slider steps per axis: fine enough to place a cut within a storey of a large model. */
@@ -40,8 +42,34 @@ const Slider: React.FC<SliderProps> = ({ className, label, min, max, value, onCh
   />
 );
 
-export const SectionBar: React.FC<SectionBarProps> = ({ section, bounds, onChange }) => {
+export const SectionBar: React.FC<SectionBarProps> = ({
+  section,
+  bounds,
+  onChange,
+  isPickingFace = false,
+  onTogglePickFace
+}) => {
   const update = (patch: Partial<SectionState>) => onChange({ ...section, ...patch });
+
+  const handleModeChange = (nextMode: SectionState['mode']) => {
+    update({ mode: nextMode });
+    if (nextMode === 'face' && !section.face) {
+      onTogglePickFace?.(true);
+    } else if (nextMode !== 'face' && isPickingFace) {
+      onTogglePickFace?.(false);
+    }
+  };
+
+  const faceRange = bounds
+    ? Math.max(
+        1,
+        Math.hypot(
+          bounds.max.x - bounds.min.x,
+          bounds.max.y - bounds.min.y,
+          bounds.max.z - bounds.min.z
+        )
+      )
+    : 20;
 
   return (
     <div className="section-bar">
@@ -51,14 +79,74 @@ export const SectionBar: React.FC<SectionBarProps> = ({ section, bounds, onChang
           className="select section-mode"
           value={section.mode}
           disabled={!bounds}
-          onChange={(event) => update({ mode: event.target.value as SectionState['mode'] })}
+          onChange={(event) => handleModeChange(event.target.value as SectionState['mode'])}
           title="Corte 3D"
         >
           <option value="off">Sin corte</option>
           <option value="plane">Plano</option>
           <option value="box">Caja</option>
+          <option value="face">Por cara</option>
         </select>
+        {bounds && (
+          <button
+            type="button"
+            className={`btn btn-ghost btn-icon section-pick-face-btn ${isPickingFace ? 'active' : ''}`}
+            aria-pressed={isPickingFace}
+            onClick={() => onTogglePickFace?.(!isPickingFace)}
+            title="Elegir una cara del modelo 3D para cortar en su plano"
+          >
+            <MousePointerClick size={14} />
+          </button>
+        )}
       </div>
+
+      {bounds && section.mode === 'face' && (
+        <>
+          <div className="display-bar-row">
+            <button
+              type="button"
+              className={`btn btn-secondary section-pick-face-action ${isPickingFace ? 'active' : ''}`}
+              style={{ flex: 1, justifyContent: 'center', padding: '4px 8px', fontSize: '11px' }}
+              onClick={() => onTogglePickFace?.(!isPickingFace)}
+            >
+              <MousePointerClick size={13} />
+              <span>
+                {isPickingFace
+                  ? 'Haz clic en una cara 3D…'
+                  : section.face
+                    ? 'Elegir otra cara'
+                    : 'Elegir cara'}
+              </span>
+            </button>
+            {section.face && (
+              <button
+                type="button"
+                className={`btn btn-ghost btn-icon section-flip ${section.flip ? 'active' : ''}`}
+                aria-pressed={section.flip}
+                onClick={() => update({ flip: !section.flip })}
+                title="Invertir sentido del corte por cara"
+              >
+                <FlipVertical2 size={14} />
+              </button>
+            )}
+          </div>
+          {section.face && (
+            <div className="display-bar-row">
+              <Slider
+                className="section-face-offset"
+                label="Desplazamiento desde la cara"
+                min={-faceRange}
+                max={faceRange}
+                value={section.face.offset}
+                onChange={(offset) =>
+                  update({ face: section.face ? { ...section.face, offset } : null })
+                }
+              />
+              <span className="section-value">{section.face.offset.toFixed(2)} m</span>
+            </div>
+          )}
+        </>
+      )}
 
       {bounds && section.mode === 'plane' && (
         <>

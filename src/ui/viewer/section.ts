@@ -5,12 +5,21 @@ export type SectionAxis = 'x' | 'y' | 'z';
 export const SECTION_AXES: readonly SectionAxis[] = ['x', 'y', 'z'];
 export type AxisValues = Record<SectionAxis, number>;
 
+export interface FaceSection {
+  /** Picked point on the face, absolute model coordinates in metres. */
+  origin: [number, number, number];
+  /** Unit normal pointing into the cut (look direction when `flip` is false). */
+  normal: [number, number, number];
+  /** Displacement in metres from `origin` along `normal`. */
+  offset: number;
+}
+
 /**
  * The section the user set. A value left null follows the models: the plane sits in the middle
  * of the axis, the box spans everything.
  */
 export interface SectionState {
-  mode: 'off' | 'plane' | 'box';
+  mode: 'off' | 'plane' | 'box' | 'face';
   axis: SectionAxis;
   /** Plane position along the axis, absolute model coordinates in metres. */
   position: number | null;
@@ -18,6 +27,7 @@ export interface SectionState {
   flip: boolean;
   boxMin: AxisValues | null;
   boxMax: AxisValues | null;
+  face?: FaceSection | null;
 }
 
 export const NO_SECTION: SectionState = {
@@ -26,7 +36,8 @@ export const NO_SECTION: SectionState = {
   position: null,
   flip: false,
   boxMin: null,
-  boxMax: null
+  boxMax: null,
+  face: null
 };
 
 /** The box around every model with bounds, or null before any has finished loading. */
@@ -68,9 +79,47 @@ const UNIT: Record<SectionAxis, [number, number, number]> = {
 };
 const negated = ([x, y, z]: [number, number, number]): [number, number, number] => [-x, -y, -z];
 
+/**
+ * Resolves the shifted origin and effective look normal of a picked-face section, or null when no
+ * usable face is set.
+ */
+export function faceCutPlane(
+  section: SectionState
+): { origin: [number, number, number]; normal: [number, number, number] } | null {
+  const face = section.face;
+  if (!face) return null;
+  const [nx, ny, nz] = face.normal;
+  const [ox, oy, oz] = face.origin;
+  if (![nx, ny, nz, ox, oy, oz, face.offset].every(Number.isFinite)) return null;
+  const len = Math.hypot(nx, ny, nz);
+  if (!(len > 1e-12)) return null;
+  const ux = nx / len;
+  const uy = ny / len;
+  const uz = nz / len;
+  const origin: [number, number, number] = [
+    ox + face.offset * ux,
+    oy + face.offset * uy,
+    oz + face.offset * uz
+  ];
+  const normal: [number, number, number] = section.flip ? [-ux, -uy, -uz] : [ux, uy, uz];
+  return { origin, normal };
+}
+
 /** The renderer's planes for a section; none while it is off or no model has bounds. */
 export function sectionPlanes(section: SectionState, bounds: ModelBounds | null): SectionPlane[] {
-  if (section.mode === 'off' || !bounds) return [];
+  if (section.mode === 'off') return [];
+  if (section.mode === 'face') {
+    const resolved = faceCutPlane(section);
+    if (!resolved) return [];
+    // Renderer keeps dot(normal, p) <= offset; faceCutPlane.normal points into the kept half-space.
+    const clipNormal = negated(resolved.normal);
+    const clipOffset =
+      clipNormal[0] * resolved.origin[0] +
+      clipNormal[1] * resolved.origin[1] +
+      clipNormal[2] * resolved.origin[2];
+    return [{ normal: clipNormal, offset: clipOffset }];
+  }
+  if (!bounds) return [];
   if (section.mode === 'plane') {
     const position = planePosition(section, bounds);
     const normal = UNIT[section.axis];

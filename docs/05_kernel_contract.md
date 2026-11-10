@@ -231,7 +231,7 @@ Para medir, `RendererPort` da lo mínimo y no sabe nada de medidas:
 
 ### Corte
 
-Se conserva lo que queda detrás del plano, en el sentido de la mirada.
+Se conserva lo que queda detrás del plano, en el sentido de la mirada (`(p − origin) · look ≥ 0`).
 
 | Corte | Mira hacia | X de la hoja | Y de la hoja |
 |---|---|---|---|
@@ -240,8 +240,10 @@ Se conserva lo que queda detrás del plano, en el sentido de la mirada.
 | `section`, `x`, `negative` | −X | +Y | +Z |
 | `section`, `y`, `positive` | +Y | +X | +Z |
 | `section`, `y`, `negative` | −Y | −X | +Z |
+| `plane`, `origin`, `normal` | $\hat{l} = \text{normal}/\|\text{normal}\|$ | $\hat{u} \times (-\hat{l})$ | Proyección de $+Z$ sobre el plano (o $+Y$ si es horizontal) |
 
 - `positive` significa mirar hacia el sentido positivo del eje, desde el ojo hacia el modelo. Así la hoja queda a derechas vista desde el ojo.
+- En `plane`, `origin` es un punto del plano de corte y `normal` el sentido de la mirada hacia el interior del corte (normalizado por el kernel). Si `origin` o `normal` no son finitos, o `normal` es nulo, se emite el diagnóstico `bad-cut`.
 - `depth` son metros desde el plano en el sentido de la mirada, y solo limita la proyección. Si se omite, llega hasta el final de la geometría. Un valor negativo o `NaN` se ignora con `bad-depth`, igual que un infinito, y el plano se genera como si no tuviera `depth`.
 - **Plano coplanario con una cara:** se genera el lazo solo si el material queda detrás del plano. En una planta, un plano en la cara superior de una losa da su contorno, y uno en la cara inferior no da nada.
 

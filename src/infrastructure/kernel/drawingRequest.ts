@@ -11,19 +11,29 @@ function wireDepth(depth: number | undefined): number {
 /** The flat numbers of `DrawingRequest::decode`. Models also get their `localToMap`. */
 export function drawingRequest(options: DrawingOptions, localToMap?: readonly number[]): number[] {
   const { cut } = options;
-  const kind = cut.kind === 'plan' ? 0 : cut.axis === 'x' ? 1 : 2;
-  const position = cut.kind === 'plan' ? cut.elevation : cut.position;
-  const look = cut.kind === 'section' && cut.look === 'positive' ? 1 : -1;
-  return [
-    kind,
-    position,
-    look,
+  const tail = [
     wireDepth(cut.depth),
     options.includeProjection ? 1 : 0,
     options.includeHatching ? 1 : 0,
     options.includeProjection && options.includeHiddenLines ? 1 : 0,
     ...(localToMap ?? [])
   ];
+  if (cut.kind === 'plane') {
+    return [
+      3,
+      cut.origin[0],
+      cut.origin[1],
+      cut.origin[2],
+      cut.normal[0],
+      cut.normal[1],
+      cut.normal[2],
+      ...tail
+    ];
+  }
+  const kind = cut.kind === 'plan' ? 0 : cut.axis === 'x' ? 1 : 2;
+  const position = cut.kind === 'plan' ? cut.elevation : cut.position;
+  const look = cut.kind === 'section' && cut.look === 'positive' ? 1 : -1;
+  return [kind, position, look, ...tail];
 }
 
 export interface FramedModels {

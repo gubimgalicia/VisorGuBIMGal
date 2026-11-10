@@ -216,6 +216,29 @@ export function sectionPlanesToSectionState(planes: readonly SectionPlane[]): Se
   const absX = Math.abs(nx);
   const absY = Math.abs(ny);
   const absZ = Math.abs(nz);
+  const maxAbs = Math.max(absX, absY, absZ);
+  if (maxAbs <= 0.999) {
+    const len = Math.hypot(nx, ny, nz);
+    if (len > 1e-12) {
+      const ux = nx / len;
+      const uy = ny / len;
+      const uz = nz / len;
+      const d = first.offset / len;
+      return {
+        mode: 'face',
+        axis: 'z',
+        position: null,
+        flip: false,
+        boxMin: null,
+        boxMax: null,
+        face: {
+          origin: [ux * d, uy * d, uz * d],
+          normal: [-ux, -uy, -uz],
+          offset: 0
+        }
+      };
+    }
+  }
   let axis: SectionAxis = 'z';
   let comp = nz;
   if (absX >= absY && absX >= absZ) {
@@ -233,7 +256,8 @@ export function sectionPlanesToSectionState(planes: readonly SectionPlane[]): Se
     position,
     flip,
     boxMin: null,
-    boxMax: null
+    boxMax: null,
+    face: null
   };
 }
 
