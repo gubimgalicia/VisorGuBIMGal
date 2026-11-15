@@ -233,18 +233,40 @@ fn oblique_plane_cut_builds_right_handed_vertical_up_sheet() {
 
 #[test]
 fn tilted_and_horizontal_plane_cuts_orient_sheet_axes_and_reject_bad_normals() {
-    // 3D tilted plane: normal = (0, 3, 4) -> look = (0, 0.6, 0.8), up = (0, -0.8, 0.6), right = (1, 0, 0).
+    // Mostly horizontal look, an elevation: normal = (0, 24, 7) -> look = (0, 0.96, 0.28),
+    // +Z projected gives up = (0, -0.28, 0.96), right = (1, 0, 0).
     let tilted = cad_slicer::Frame::of(Cut::Plane {
         origin: v(1.0, 2.0, 3.0),
-        normal: v(0.0, 3.0, 4.0),
+        normal: v(0.0, 24.0, 7.0),
     })
     .expect("valid tilted plane");
-    assert!((tilted.look - v(0.0, 0.6, 0.8)).length() < 1e-12);
-    assert!((tilted.up - v(0.0, -0.8, 0.6)).length() < 1e-12);
+    assert!((tilted.look - v(0.0, 0.96, 0.28)).length() < 1e-12);
+    assert!((tilted.up - v(0.0, -0.28, 0.96)).length() < 1e-12);
     assert!((tilted.right - v(1.0, 0.0, 0.0)).length() < 1e-12);
     assert!((tilted.right.cross(tilted.up) - (-tilted.look)).length() < 1e-12);
     let point_on_plane = v(1.0, 2.0, 3.0);
     assert!((tilted.unproject(tilted.project(point_on_plane)) - point_on_plane).length() < 1e-12);
+
+    // Mostly vertical look, a plan: normal = (0, 3, 4) -> look = (0, 0.6, 0.8), +Y projected
+    // gives up = (0, 0.8, -0.6); seen from below, right = (-1, 0, 0).
+    let steep = cad_slicer::Frame::of(Cut::Plane {
+        origin: v(1.0, 2.0, 3.0),
+        normal: v(0.0, 3.0, 4.0),
+    })
+    .expect("valid steep plane");
+    assert!((steep.up - v(0.0, 0.8, -0.6)).length() < 1e-12);
+    assert!((steep.right - v(-1.0, 0.0, 0.0)).length() < 1e-12);
+    assert!((steep.right.cross(steep.up) - (-steep.look)).length() < 1e-12);
+
+    // A picked floor face a little off -Z, from f32 noise or a fall, keeps the plan's axes
+    // instead of turning the sheet towards the error.
+    for normal in [v(1e-5, 1e-5, -1.0), v(0.02, 0.0, -1.0), v(0.0, -0.02, -1.0)] {
+        let (y, x) = (v(0.0, 1.0, 0.0), v(1.0, 0.0, 0.0));
+        let floor = cad_slicer::Frame::of(Cut::Plane { origin: v(0.0, 0.0, 1.0), normal })
+            .expect("valid floor plane");
+        assert!(floor.up.dot(y) > 0.999, "{normal:?} -> up {:?}", floor.up);
+        assert!(floor.right.dot(x) > 0.999, "{normal:?} -> right {:?}", floor.right);
+    }
 
     // Horizontal plane looking down (-Z) matches Cut::Plan at the same Z.
     let horiz = one(

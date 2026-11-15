@@ -97,13 +97,12 @@ impl Frame {
         if !origin.is_finite() || !look.is_finite() {
             return None;
         }
-        // Project world +Z onto the sheet; for a horizontal plane keep world +Y up.
-        let vertical = DVec3::Z - look * DVec3::Z.dot(look);
-        let up = if vertical.length_squared() > 1e-12 {
-            vertical.normalize()
-        } else {
-            (DVec3::Y - look * DVec3::Y.dot(look)).normalize()
-        };
+        // A cut that looks mostly down or up reads like a plan, with world +Y up; any other reads
+        // like an elevation, with world +Z up. Either is projected onto the sheet. Choosing by
+        // the dominant direction keeps a picked floor face, whose normal is a little off -Z from
+        // f32 noise or a small fall, from turning the sheet towards wherever that error points.
+        let reference = if look.z.abs() > 0.5 { DVec3::Y } else { DVec3::Z };
+        let up = (reference - look * reference.dot(look)).normalize();
         // right × up = -look: the sheet is right handed seen from the eye.
         let right = up.cross(-look);
         Some(Self {
