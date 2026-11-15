@@ -403,7 +403,7 @@ export class WebGpuRenderer implements RendererPort {
         fragment: {
           module: shaderModule,
           entryPoint: 'fs_pick',
-          targets: [{ format: 'rg32uint' }]
+          targets: [{ format: 'rgba32uint' }]
         },
         primitive: {
           topology: 'triangle-list',
@@ -440,7 +440,7 @@ export class WebGpuRenderer implements RendererPort {
 
     this.pickReadBuffer = device.createBuffer({
       label: 'gubim-pick-read-buffer',
-      size: 512,
+      size: 256,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
     });
 
@@ -497,14 +497,14 @@ export class WebGpuRenderer implements RendererPort {
       label: 'gubim-depth-texture',
       size: { width, height, depthOrArrayLayers: 1 },
       format: 'depth32float',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+      usage: GPUTextureUsage.RENDER_ATTACHMENT
     });
     this.depthTextureView = this.depthTexture.createView();
 
     this.idTexture = this.device.createTexture({
       label: 'gubim-id-texture',
       size: { width, height, depthOrArrayLayers: 1 },
-      format: 'rg32uint',
+      format: 'rgba32uint',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
     });
     this.idTextureView = this.idTexture.createView();
@@ -1456,7 +1456,6 @@ export class WebGpuRenderer implements RendererPort {
       !this.sceneBindGroup ||
       !this.idTexture ||
       !this.idTextureView ||
-      !this.depthTexture ||
       !this.depthTextureView ||
       !this.pickReadBuffer
     ) {
@@ -1531,21 +1530,15 @@ export class WebGpuRenderer implements RendererPort {
         { buffer: this.pickReadBuffer, offset: 0, bytesPerRow: 256 },
         { width: 1, height: 1, depthOrArrayLayers: 1 }
       );
-      encoder.copyTextureToBuffer(
-        { texture: this.depthTexture, origin: { x: px, y: py, z: 0 } },
-        { buffer: this.pickReadBuffer, offset: 256, bytesPerRow: 256 },
-        { width: 1, height: 1, depthOrArrayLayers: 1 }
-      );
 
       this.device.queue.submit([encoder.finish()]);
 
-      await this.pickReadBuffer.mapAsync(GPUMapMode.READ, 0, 264);
-      const mapped = this.pickReadBuffer.getMappedRange(0, 264);
-      const u32 = new Uint32Array(mapped, 0, 2);
-      const f32 = new Float32Array(mapped, 256, 1);
+      await this.pickReadBuffer.mapAsync(GPUMapMode.READ, 0, 16);
+      const mapped = this.pickReadBuffer.getMappedRange(0, 16);
+      const u32 = new Uint32Array(mapped);
       const modelNum = u32[0];
       const expressId = u32[1];
-      const depth = f32[0];
+      const depth = new Float32Array(mapped)[2];
       this.pickReadBuffer.unmap();
 
       if (modelNum === 0 || expressId === 0) {
