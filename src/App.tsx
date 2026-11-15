@@ -49,6 +49,12 @@ import { NO_SECTION, sceneBounds, sectionPlanes, type SectionState } from './ui/
 import { BimViewer } from './ui/viewer/BimViewer';
 import { computeElementMeshBounds } from './infrastructure/renderer/Camera';
 import {
+  extractBatchElementMeta,
+  exportVisibleSceneToGlb,
+  type ElementBatchMeta,
+  type ModelExportInput
+} from './infrastructure/export/gltfExport';
+import {
   SHOW_ALL,
   classCounts,
   modelDisplay,
@@ -85,12 +91,16 @@ export default function App() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [nextSavedViewIndex, setNextSavedViewIndex] = useState<number>(1);
   const [isExportingCsv, setIsExportingCsv] = useState<boolean>(false);
+  const [isExportingGlb, setIsExportingGlb] = useState<boolean>(false);
+  const [glbProgress, setGlbProgress] = useState<{ completed: number; total: number } | null>(null);
   const [colorByMode, setColorByMode] = useState<ColorByMode>('none');
   const [colorByPropName, setColorByPropName] = useState<string>('Name');
   const [colorLegend, setColorLegend] = useState<ColorLegendItem[]>([]);
   const [availableColorProps, setAvailableColorProps] = useState<string[]>([]);
   const activeColorsByModelRef = useRef<Map<ModelId, Map<number, number>>>(new Map());
   const bcfColorsByModelRef = useRef<Map<ModelId, Map<number, number>>>(new Map());
+  const elementBatchMetaByModelRef = useRef<Map<ModelId, Map<number, ElementBatchMeta>>>(new Map());
+  const glbAbortControllerRef = useRef<AbortController | null>(null);
   const refKeyToGuidRef = useRef<Map<string, string>>(new Map());
   const guidToRefRef = useRef<Map<string, ElementRef>>(new Map());
   const snapshotWaitersRef = useRef<Array<() => void>>([]);
@@ -206,6 +216,9 @@ export default function App() {
       setColorLegend([]);
       activeColorsByModelRef.current.clear();
       bcfColorsByModelRef.current.clear();
+      elementBatchMetaByModelRef.current.clear();
+      glbAbortControllerRef.current?.abort();
+      glbAbortControllerRef.current = null;
     }
   }, [models.length, measure]);
 
@@ -329,9 +342,11 @@ export default function App() {
         let bounds: ModelBounds | undefined;
         let streamDiagnostics: KernelDiagnostic[] = [];
         let completed = false;
+        const batchMetaMap = new Map<number, ElementBatchMeta>();
 
         for await (const event of kernel.streamGeometry(modelId)) {
           if (event.type === 'batch') {
+            extractBatchElementMeta(event.batch.meshTable, batchMetaMap);
             renderer.addBatch(event.batch);
           } else if (event.type === 'progress') {
             setStatusText(`Cargadas ${event.processedElements} mallas 3D...`);
@@ -348,6 +363,7 @@ export default function App() {
           return;
         }
 
+        elementBatchMetaByModelRef.current.set(modelId, batchMetaMap);
         renderer.finishModel(modelId, bounds);
 
         // 3. Load spatial tree for the model
@@ -506,6 +522,7 @@ export default function App() {
     modelSourcesRef.current.delete(id);
     activeColorsByModelRef.current.delete(id);
     bcfColorsByModelRef.current.delete(id);
+    elementBatchMetaByModelRef.current.delete(id);
     for (const [k, guid] of refKeyToGuidRef.current.entries()) {
       if (k.startsWith(`${id}:`)) {
         refKeyToGuidRef.current.delete(k);
@@ -675,6 +692,90 @@ export default function App() {
     }
     return null;
   }, []);
+
+  const handleCancelGlb = useCallback(() => {
+    glbAbortControllerRef.current?.abort();
+    glbAbortControllerRef.current = null;
+  }, []);
+
+  const handleExportGlb = useCallback(async () => {
+    const visibleModels = models.filter((m) => m.status === 'ready' && m.visible);
+    if (visibleModels.length === 0) {
+      setStatusText('No hay modelos visibles para exportar a GLB.');
+      return;
+    }
+
+    glbAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    glbAbortControllerRef.current = controller;
+
+    setIsExportingGlb(true);
+    setGlbProgress({ completed: 0, total: 0 });
+    setStatusText('Preparando exportación GLB de la escena visible...');
+
+    try {
+      const exportInputs: ModelExportInput[] = visibleModels.map((model) => {
+        const { others, entries } = modelDisplay(displayRule, model.id, spatialTrees[model.id]);
+        return {
+          id: model.id,
+          visible: model.visible,
+          status: model.status,
+          displayOthers: others,
+          displayEntries: entries,
+          colorOverrides: activeColorsByModelRef.current.get(model.id),
+          batchMeta: elementBatchMetaByModelRef.current.get(model.id),
+          spatialTree: spatialTrees[model.id]
+        };
+      });
+
+      const { glb, elementCount } = await exportVisibleSceneToGlb({
+        models: exportInputs,
+        getElementMesh: (modelId, expressId) => kernel.elementMesh(modelId, expressId),
+        getGlobalId: (modelId, expressId) => resolveRefToGuid({ modelId, expressId }),
+        onProgress: ({ completed, total }) => {
+          setGlbProgress({ completed, total });
+          setStatusText(`Exportando GLB (${completed}/${total})...`);
+        },
+        signal: controller.signal,
+        yieldEvery: 1
+      });
+
+      const filename = 'escena-visible.glb';
+      if (typeof window !== 'undefined') {
+        (window as unknown as Record<string, unknown>).__gubim_last_glb__ = {
+          filename,
+          bytes: glb,
+          byteLength: glb.byteLength,
+          elementCount
+        };
+        const blob = new Blob([new Uint8Array(glb)], { type: 'model/gltf-binary' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      setStatusText(`Escena exportada a ${filename} (${elementCount} elementos).`);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setStatusText('Exportación GLB cancelada.');
+      } else {
+        console.error('Error exporting GLB:', err);
+        setStatusText(
+          `Error al exportar GLB: ${err instanceof Error ? err.message : 'Error'}`
+        );
+      }
+    } finally {
+      if (glbAbortControllerRef.current === controller) {
+        glbAbortControllerRef.current = null;
+      }
+      setIsExportingGlb(false);
+      setGlbProgress(null);
+    }
+  }, [models, displayRule, spatialTrees, resolveRefToGuid]);
 
   const resolveGuidToRef = useCallback(
     async (ifcGuid: string): Promise<ElementRef | null> => {
@@ -982,6 +1083,10 @@ export default function App() {
                 onHide={handleHide}
                 onToggleGhost={() => setDisplayRule((prev) => ({ ...prev, ghost: !prev.ghost }))}
                 onShowAll={() => setDisplayRule((prev) => ({ ...SHOW_ALL, ghost: prev.ghost }))}
+                onExportGlb={() => void handleExportGlb()}
+                onCancelGlb={handleCancelGlb}
+                isExportingGlb={isExportingGlb}
+                glbProgress={glbProgress}
               />
               <SectionBar
                 section={section}

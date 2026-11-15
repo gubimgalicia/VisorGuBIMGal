@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Focus, EyeOff, Ghost, Eye } from 'lucide-react';
+import { Focus, EyeOff, Ghost, Eye, Download, X } from 'lucide-react';
 import type { ElementRef } from '../../domain/models/ModelRecord';
 import {
   describeTarget,
@@ -16,6 +16,10 @@ interface DisplayBarProps {
   onHide: (target: DisplayTarget) => void;
   onToggleGhost: () => void;
   onShowAll: () => void;
+  onExportGlb?: () => void;
+  onCancelGlb?: () => void;
+  isExportingGlb?: boolean;
+  glbProgress?: { completed: number; total: number } | null;
 }
 
 export const DisplayBar: React.FC<DisplayBarProps> = ({
@@ -25,7 +29,11 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
   onIsolate,
   onHide,
   onToggleGhost,
-  onShowAll
+  onShowAll,
+  onExportGlb,
+  onCancelGlb,
+  isExportingGlb = false,
+  glbProgress = null
 }) => {
   const [chosenClass, setChosenClass] = useState('');
   const classType = classes.some((item) => item.type === chosenClass) ? chosenClass : '';
@@ -109,6 +117,40 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           <Eye size={14} />
         </button>
       </div>
+
+      {onExportGlb && (
+        <div className="display-bar-row">
+          <span className="display-bar-label">
+            {isExportingGlb && glbProgress
+              ? `GLB (${glbProgress.completed}/${glbProgress.total})`
+              : 'Escena 3D'}
+          </span>
+          {isExportingGlb && onCancelGlb ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm gltf-cancel-btn"
+              style={{ whiteSpace: 'nowrap' }}
+              onClick={onCancelGlb}
+              title="Cancelar exportación GLB"
+            >
+              <X size={12} />
+              <span>Cancelar</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm gltf-export-btn"
+              style={{ whiteSpace: 'nowrap' }}
+              disabled={isExportingGlb}
+              onClick={onExportGlb}
+              title="Exportar la escena visible a glTF binario (.glb)"
+            >
+              <Download size={12} />
+              <span>Exportar GLB</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {active && (
         <div className="display-bar-status">
