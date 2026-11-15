@@ -28,6 +28,10 @@ const all = (name) => args.flatMap((a, i) => (a === name ? [args[i + 1]] : []));
 const RUNS = Number(opt('--runs', 5));
 const THRESHOLD = Number(opt('--threshold', 0.1));
 const MIN_MS = Number(opt('--min-ms', 50));
+// cpu: process CPU time, robust when the machine is busy (default). wall: elapsed time.
+const METRIC = opt('--metric', 'cpu');
+if (!['cpu', 'wall'].includes(METRIC)) throw new Error('--metric is cpu or wall');
+const value = (r) => (METRIC === 'cpu' ? r.ms.cpu : r.ms.total);
 const SUMMARY = opt('--summary');
 const baseRef = opt('--base-ref');
 let basePkg = opt('--base-pkg');
@@ -124,8 +128,8 @@ for (let run = 0; run < RUNS; run++) {
 // noisy moment on a shared runner does not fail the build on its own.
 if (basePkg) {
   workloads.forEach((w, i) => {
-    const h = median(results[i].head.map((r) => r.ms.total));
-    const b = median(results[i].base.map((r) => r.ms.total));
+    const h = median(results[i].head.map(value));
+    const b = median(results[i].base.map(value));
     if (!(h / b > 1 + THRESHOLD && h - b > MIN_MS)) return;
     log(`${w.name} looks ${((h / b - 1) * 100).toFixed(1)} % slower: measuring again`);
     for (let run = 0; run < 2 * RUNS; run++) {
@@ -139,21 +143,21 @@ if (basePkg) {
 let regressions = 0;
 md(basePkg ? `### Kernel benchmark: this commit against ${baseLabel}` : '### Kernel benchmark');
 md('');
-md(`Median of ${RUNS} fresh-process runs per build${basePkg ? ', alternating ABBA' : ''}. Fails above +${Math.round(THRESHOLD * 100)} % and ${MIN_MS} ms.`);
+md(`Median of ${RUNS} fresh-process runs per build${basePkg ? ', alternating ABBA' : ''}. Metric: ${METRIC === 'cpu' ? 'process CPU time' : 'elapsed time'}. Fails above +${Math.round(THRESHOLD * 100)} % and ${MIN_MS} ms.`);
 md('');
 md(basePkg ? '| Workload | Base | This | Change | Spread | Peak WASM | Output |' : '| Workload | Median | Spread | Peak WASM | Breakdown |');
 md(basePkg ? '|---|---|---|---|---|---|---|' : '|---|---|---|---|---|');
 workloads.forEach((w, i) => {
   const head = results[i].head;
-  const h = median(head.map((r) => r.ms.total));
+  const h = median(head.map(value));
   const hMem = Math.max(...head.map((r) => r.wasmMB));
   if (!basePkg) {
-    const parts = Object.keys(head[0].ms).filter((k) => k !== 'total').map((k) => `${k} ${fmt(median(head.map((r) => r.ms[k])))}`).join(', ');
-    md(`| ${w.name} | ${fmt(h)} | ${(spread(head.map((r) => r.ms.total)) * 100).toFixed(1)} % | ${hMem} MB | ${parts} |`);
+    const parts = Object.keys(head[0].ms).filter((k) => k !== 'total' && k !== 'cpu').map((k) => `${k} ${fmt(median(head.map((r) => r.ms[k])))}`).join(', ');
+    md(`| ${w.name} | ${fmt(h)} | ${(spread(head.map(value)) * 100).toFixed(1)} % | ${hMem} MB | ${parts} |`);
     return;
   }
   const base = results[i].base;
-  const b = median(base.map((r) => r.ms.total));
+  const b = median(base.map(value));
   const bMem = Math.max(...base.map((r) => r.wasmMB));
   const ratio = h / b;
   const slower = ratio > 1 + THRESHOLD && h - b > MIN_MS;
@@ -161,7 +165,7 @@ workloads.forEach((w, i) => {
   if (slower || memWorse) regressions++;
   const sameOut = JSON.stringify(base[0].out) === JSON.stringify(head[0].out);
   const change = `${ratio >= 1 ? '+' : ''}${((ratio - 1) * 100).toFixed(1)} %${slower ? ' **slower**' : ''}`;
-  const spr = Math.max(spread(base.map((r) => r.ms.total)), spread(head.map((r) => r.ms.total)));
+  const spr = Math.max(spread(base.map(value)), spread(head.map(value)));
   md(`| ${w.name} | ${fmt(b)} | ${fmt(h)} | ${change} | ${(spr * 100).toFixed(1)} % | ${bMem} → ${hMem} MB${memWorse ? ' **more**' : ''} | ${sameOut ? 'same' : 'changed: ' + Object.keys(head[0].out).filter((k) => head[0].out[k] !== base[0].out[k]).join(', ')} |`);
 });
 md('');

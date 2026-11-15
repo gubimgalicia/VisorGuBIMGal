@@ -67,6 +67,7 @@ function draw(model, options) {
   sheet.free();
 }
 
+const cpu0 = process.cpuUsage();
 for (let r = 0; r < (workload.repeat ?? 1); r++) {
   for (const file of workload.files) {
     const bytes = readFileSync(file);
@@ -77,4 +78,7 @@ for (let r = 0; r < (workload.repeat ?? 1); r++) {
 }
 for (const key of Object.keys(ms)) ms[key] = Math.round(ms[key] * 10) / 10;
 ms.total = Math.round(Object.values(ms).reduce((a, b) => a + b, 0) * 10) / 10;
+// CPU time of this process: unlike wall time, it barely moves when other work shares the machine.
+const cpu = process.cpuUsage(cpu0);
+ms.cpu = Math.round((cpu.user + cpu.system) / 100) / 10;
 console.log(JSON.stringify({ ms, out, wasmMB: Math.round(memoryMB()) }));
