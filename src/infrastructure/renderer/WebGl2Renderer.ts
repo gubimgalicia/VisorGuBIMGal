@@ -18,7 +18,7 @@ import {
   type ViewPreset
 } from '../../domain/kernel/RendererPort';
 import type { Ray, Vec3 } from '../../domain/measure/geometry';
-import { Camera, pickBatchOrbitPivot } from './Camera';
+import { Camera, resolveOrbitPivot, type SurfacePickSample } from './Camera';
 import { attachCanvasInput } from './canvasInput';
 import { canvasPoint, canvasRay } from './canvasView';
 import { boxMayShow, markBatchesInView, pixelWindow } from './frustum';
@@ -288,7 +288,12 @@ out uvec4 fragPick;
 void main() {
   if (sectioned(v_relPos)) discard;
   ${DEPTH_FS_MAIN}
-  fragPick = uvec4(v_pickId.x, v_pickId.y, 0u, 1u);
+#ifdef FRAG_DEPTH
+  float pickDepth = v_clipZW.x / v_clipZW.y;
+#else
+  float pickDepth = gl_FragCoord.z;
+#endif
+  fragPick = uvec4(v_pickId.x, v_pickId.y, floatBitsToUint(pickDepth), 1u);
 }
 `;
 
@@ -655,8 +660,7 @@ export class WebGl2Renderer implements RendererPort {
       },
       idleCursor: () => this.idleCursor(),
       getNavigationMode: () => this.navigationMode,
-      getOrbitPivot: (cssX, cssY) =>
-        pickBatchOrbitPivot(this.rayAt(cssX, cssY), this.models.values(), this.sectionPlanes),
+      getOrbitPivot: (cssX, cssY) => this.pickOrbitPivot(cssX, cssY),
       onClick: (cssX, cssY) => {
         if (this.pointerMode === 'measure') {
           this.handlers.onPoint?.(cssX, cssY);
@@ -1463,9 +1467,28 @@ export class WebGl2Renderer implements RendererPort {
 
   /** One at a time, in order: each waits for the last to read back. */
   pick(cssX: number, cssY: number): Promise<ElementRef | null> {
-    const result = this.pickQueue.then(() => this.pickOnce(cssX, cssY));
+    const result = this.pickQueue.then(() => this.pickOnce(cssX, cssY).ref);
     this.pickQueue = result.catch(() => null);
     return result;
+  }
+
+  private pickOrbitPivot(cssX: number, cssY: number): Vec3 | null {
+    if (!this.canvas || !this.gl) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = this.canvas.clientWidth || rect.width;
+    const height = this.canvas.clientHeight || rect.height;
+    if (!width || !height) return null;
+    const ndcX = (2 * cssX) / width - 1;
+    const ndcY = 1 - (2 * cssY) / height;
+    const hit = this.pickOnce(cssX, cssY);
+    return resolveOrbitPivot(
+      this.camera,
+      ndcX,
+      ndcY,
+      hit.sample,
+      this.models.values(),
+      this.sectionPlanes
+    );
   }
 
   setPointerMode(mode: PointerMode): void {
@@ -1505,7 +1528,10 @@ export class WebGl2Renderer implements RendererPort {
     }
   }
 
-  private async pickOnce(cssX: number, cssY: number): Promise<ElementRef | null> {
+  private pickOnce(
+    cssX: number,
+    cssY: number
+  ): { ref: ElementRef | null; sample: SurfacePickSample } {
     if (
       this.isDestroyed ||
       this.isPicking ||
@@ -1514,7 +1540,7 @@ export class WebGl2Renderer implements RendererPort {
       !this.pickProgram ||
       !this.pickFramebuffer
     ) {
-      return null;
+      return { ref: null, sample: { hit: null } };
     }
 
     const rect = this.canvas.getBoundingClientRect();
@@ -1603,18 +1629,19 @@ export class WebGl2Renderer implements RendererPort {
 
       const modelNum = pixel[0];
       const expressId = pixel[1];
+      const depth = new Float32Array(pixel.buffer)[2];
 
       if (modelNum === 0 || expressId === 0) {
-        return null;
+        return { ref: null, sample: { hit: false } };
       }
 
       const modelId = this.numToModelId.get(modelNum);
-      if (!modelId) return null;
+      if (!modelId) return { ref: null, sample: { hit: false } };
 
-      return { modelId, expressId };
+      return { ref: { modelId, expressId }, sample: { hit: true, depth } };
     } catch (err) {
       console.warn('Pick error in WebGL2:', err);
-      return null;
+      return { ref: null, sample: { hit: null } };
     } finally {
       this.isPicking = false;
     }

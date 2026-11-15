@@ -51,7 +51,7 @@ window.__t = (() => {
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  function hit(m, ray) {
+  function hit(m, ray, planes = []) {
     let best = null; const P = m.positions, I = m.indices;
     for (let t = 0; t < I.length; t += 3) {
       const v0 = [P[I[t] * 3], P[I[t] * 3 + 1], P[I[t] * 3 + 2]];
@@ -60,7 +60,11 @@ window.__t = (() => {
       const p = cross(ray.direction, e2); const det = dot(e1, p); if (Math.abs(det) < 1e-15) continue;
       const s = sub(ray.origin, v0); const u = dot(s, p) / det; if (u < 0 || u > 1) continue;
       const q = cross(s, e1); const v = dot(ray.direction, q) / det; if (v < 0 || u + v > 1) continue;
-      const d = dot(e2, q) / det; if (d > 0 && (best === null || d < best)) best = d;
+      const d = dot(e2, q) / det;
+      if (d > 0 && (best === null || d < best)) {
+        const pt = ray.origin.map((o, k) => o + ray.direction[k] * d);
+        if (planes.every((pl) => dot(pl.normal, pt) <= pl.offset)) best = d;
+      }
     }
     return best === null ? null : ray.origin.map((o, k) => o + ray.direction[k] * best);
   }
@@ -251,9 +255,56 @@ try {
     const moved = Math.abs(p1.azimuth - p0.azimuth) > 0.1;
     const drift = Math.hypot(after.x - before.x, after.y - before.y);
     const boxDrift = Math.hypot(afterBox.x - before0Box.x, afterBox.y - before0Box.y);
-    check('N6 orbit keeps its pivot (batch-box entry) on its pixel', moved && boxDrift < 1, { boxDrift: boxDrift.toFixed(3), dAz: (p1.azimuth - p0.azimuth).toFixed(3) });
+    check('N6 orbit keeps clicked surface point on its pixel', moved && drift < 1, { drift: drift.toFixed(3), boxDrift: boxDrift.toFixed(3), dAz: (p1.azimuth - p0.azimuth).toFixed(3) });
     console.log(`INFO N6 clicked surface point drift ${drift.toFixed(1)} px, pivot ${Bx.map((v) => v.toFixed(2))} vs surface ${W.map((v) => v.toFixed(2))}`);
     await evaluate(`__t.R().setViewPreset('iso'), __t.R().fitToView(), __t.frames(3)`);
+
+    // N6b: with a section plane through the model, the orbit pivot is on the cut-revealed surface, not the removed part.
+    const cutCase = await evaluate(`(async () => {
+      const r = __t.rect();
+      const ray0 = __t.R().rayAt(${target.x}, ${target.y});
+      const n = ray0.direction.map((v) => -v);
+      const w0 = ${JSON.stringify(W)};
+      for (const step of [1.5, 0.5, 0.08]) {
+        const plane = { normal: n, offset: __t.dot(n, w0) - step };
+        __t.R().setSectionPlanes([plane]);
+        await __t.frames(2);
+        for (const [fx, fy] of [[${target.x} / r.width, ${target.y} / r.height], [0.5, 0.55], [0.5, 0.6], [0.45, 0.55], [0.55, 0.55], [0.5, 0.5], [0.45, 0.6], [0.55, 0.6]]) {
+          const x = r.width * fx, y = r.height * fy;
+          const hitRef = await __t.R().pick(x, y);
+          if (!hitRef) continue;
+          const ray = __t.R().rayAt(x, y);
+          const m = await __t.K().elementMesh(hitRef.modelId, hitRef.expressId);
+          const wCut = __t.hit(m, ray, [plane]);
+          if (!wCut) continue;
+          const m0 = hitRef.expressId === ${ref.expressId} ? m : await __t.K().elementMesh(${JSON.stringify(ref.modelId)}, ${ref.expressId});
+          const wFront = __t.hit(m0, ray) ?? w0;
+          const sep = Math.hypot(wCut[0] - wFront[0], wCut[1] - wFront[1], wCut[2] - wFront[2]);
+          if (sep > 0.15) return { x, y, plane, hitRef, wCut, wFront, sep };
+        }
+      }
+      return null;
+    })()`);
+    if (cutCase) {
+      const beforeCut = await evaluate(`__t.R().project(${JSON.stringify(cutCase.wCut)})`);
+      const beforeRemoved = await evaluate(`__t.R().project(${JSON.stringify(cutCase.wFront)})`);
+      const pCut0 = await pose();
+      await mouse('mouseMoved', r.left + cutCase.x, r.top + cutCase.y, { button: 'none' });
+      await mouse('mousePressed', r.left + cutCase.x, r.top + cutCase.y, { buttons: 1 });
+      for (let k = 1; k <= 8; k++) await mouse('mouseMoved', r.left + cutCase.x + k * 10, r.top + cutCase.y + k * 3, { buttons: 1 });
+      await mouse('mouseReleased', r.left + cutCase.x + 80, r.top + cutCase.y + 24, { buttons: 0 });
+      await evaluate('__t.frames(3)');
+      const afterCut = await evaluate(`__t.R().project(${JSON.stringify(cutCase.wCut)})`);
+      const afterRemoved = await evaluate(`__t.R().project(${JSON.stringify(cutCase.wFront)})`);
+      const pCut1 = await pose();
+      const cutMoved = Math.abs(pCut1.azimuth - pCut0.azimuth) > 0.1;
+      const cutDrift = Math.hypot(afterCut.x - beforeCut.x, afterCut.y - beforeCut.y);
+      const removedDrift = beforeRemoved && afterRemoved ? Math.hypot(afterRemoved.x - beforeRemoved.x, afterRemoved.y - beforeRemoved.y) : Infinity;
+      check('N6b sectioned orbit keeps cut-revealed surface point on its pixel', cutMoved && cutDrift < 1 && removedDrift > 2, { cutDrift: cutDrift.toFixed(3), removedDrift: removedDrift.toFixed(3), sep: cutCase.sep.toFixed(2) });
+    } else {
+      check('N6b sectioned orbit keeps cut-revealed surface point on its pixel', false, 'no cut-revealed surface found');
+    }
+    await evaluate(`__t.R().setSectionPlanes([]), __t.R().setViewPreset('iso'), __t.R().fitToView(), __t.frames(3)`);
   }
 
   // Select with a real click.
