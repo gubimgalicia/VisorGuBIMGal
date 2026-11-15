@@ -6,9 +6,10 @@
 //! output small.
 //!
 //! Visibility is exact: each projected edge is clipped against the projected triangles nearer
-//! the viewer, found through a uniform grid, and the parts they cover are its hidden runs.
-//! Each cell lists its triangles nearest first, so an edge stops at the first ones that
-//! cannot hide it, and a fully covered edge stops at once.
+//! the viewer, found through a bounding volume hierarchy whose nodes know their box on the
+//! sheet and their nearest depth, and the parts they cover are its hidden runs. The search
+//! skips what lies off the edge or behind it, nearer parts first, so a fully covered edge
+//! stops at once.
 
 use crate::cut::Frame;
 use crate::geom::{Segment, SEGMENT_EPSILON};
@@ -29,10 +30,8 @@ const MAX_OCCLUSION_TESTS: usize = 2_000_000_000;
 const CREASE_COSINE: f64 = 0.94;
 /// A point this far behind a surface is not hidden by the surface itself. Metres.
 const OCCLUSION_EPSILON: f64 = 1e-6;
-/// Cells one triangle may occupy; wider ones go to a list every edge checks.
-const MAX_CELLS_PER_TRIANGLE: usize = 1024;
-/// Grid cells along each side of the drawing.
-const GRID_RANGE: (f64, f64) = (64.0, 1024.0);
+/// Triangles in a leaf of the occluder hierarchy.
+const LEAF_SIZE: usize = 8;
 /// How far a point may lie outside a triangle and still count as on it, in the units of a
 /// cross product: without this, an edge along a triangle's own border would flicker.
 const COVER_SLACK: f64 = 1e-9;
@@ -46,54 +45,127 @@ pub(crate) struct ProjectReport {
     pub truncated: bool,
 }
 
-/// A projected triangle: two sheet coordinates and the depth at each corner.
+/// A projected triangle: two sheet coordinates and the depth at each corner, with what the
+/// search needs side by side so a leaf reads memory in order: its nearest depth and the box of
+/// the region `covered` treats as inside (the triangle grown by `COVER_SLACK` on each side,
+/// corners included; unbounded for a sliver whose grown sides are nearly parallel). An edge
+/// outside that box cannot be covered by the triangle.
 #[derive(Debug, Clone, Copy)]
 struct Flat {
     points: [DVec2; 3],
     depths: [f64; 3],
     area: f64,
     nearest: f64,
+    low: DVec2,
+    high: DVec2,
+    /// Order of arrival, the tie-break that keeps the build the same on every run.
+    id: u32,
 }
 
-/// The projected triangles of every mesh, in a grid so an edge only meets what is near it.
+/// The box of the triangle each of whose sides is moved out by the slack `covered` allows:
+/// the corners of that grown triangle, where its moved sides meet.
+fn slack_box(points: [DVec2; 3], area: f64) -> (DVec2, DVec2) {
+    let unbounded = (DVec2::splat(f64::NEG_INFINITY), DVec2::splat(f64::INFINITY));
+    let sign = area.signum();
+    // Side i as the half-plane n·x >= c: inside when sign * side.perp_dot(x - from) +
+    // COVER_SLACK >= 0, as in `covered`.
+    let line = |i: usize, j: usize| {
+        let side = points[j] - points[i];
+        let normal = DVec2::new(-side.y, side.x) * sign;
+        (normal, normal.dot(points[i]) - COVER_SLACK)
+    };
+    let lines = [line(0, 1), line(1, 2), line(2, 0)];
+    let mut low = DVec2::splat(f64::INFINITY);
+    let mut high = DVec2::splat(f64::NEG_INFINITY);
+    for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+        let ((n1, c1), (n2, c2)) = (lines[a], lines[b]);
+        let det = n1.perp_dot(n2);
+        if det.abs() <= 1e-12 * n1.length() * n2.length() {
+            return unbounded;
+        }
+        let corner = DVec2::new(c1 * n2.y - c2 * n1.y, n1.x * c2 - n2.x * c1) / det;
+        if !corner.is_finite() {
+            return unbounded;
+        }
+        low = low.min(corner);
+        high = high.max(corner);
+    }
+    (low, high)
+}
+
+/// A node of the hierarchy: the box around everything below it and the nearest depth there.
+/// A leaf owns `triangles[start..start + count]`; an inner node has `count` 0 and its two
+/// children at `start` and `start + 1`.
+#[derive(Debug, Clone, Copy)]
+struct Node {
+    low: DVec2,
+    high: DVec2,
+    nearest: f64,
+    start: u32,
+    count: u32,
+}
+
+/// The projected triangles of every mesh, in a bounding volume hierarchy, so an edge only
+/// meets what lies over it on the sheet and in front of it in depth.
 pub(crate) struct Occluders {
-    cell: f64,
-    cells: BTreeMap<(i64, i64), Vec<usize>>,
-    wide: Vec<usize>,
     triangles: Vec<Flat>,
-    /// Which edge last tested each triangle, so one crossing many cells counts once.
-    seen: Vec<usize>,
-    edge: usize,
+    nodes: Vec<Node>,
     tests_left: usize,
 }
 
 impl Occluders {
-    /// `reach` is the drawing's longest side and `triangles` a count of what will be added.
-    pub(crate) fn new(reach: f64, triangles: usize) -> Self {
-        let side = ((triangles as f64).sqrt() / 2.0).clamp(GRID_RANGE.0, GRID_RANGE.1);
+    pub(crate) fn new() -> Self {
         Self {
-            cell: (reach.max(0.0) / side).max(1e-3),
-            cells: BTreeMap::new(),
-            wide: Vec::new(),
             triangles: Vec::new(),
-            seen: Vec::new(),
-            edge: 0,
+            nodes: Vec::new(),
             tests_left: MAX_OCCLUSION_TESTS,
         }
     }
 
-    /// Call once everything is in: nearest first, with the id as a stable tie-break.
+    /// Call once everything is in: builds the hierarchy, splitting each node at the median of
+    /// its triangles' centres along its longer side. Leaves list their triangles nearest first.
     pub(crate) fn finish(&mut self) {
-        let triangles = &self.triangles;
-        let order = |a: &usize, b: &usize| {
-            triangles[*a].nearest.total_cmp(&triangles[*b].nearest).then(a.cmp(b))
-        };
-        self.wide.sort_by(order);
-        for ids in self.cells.values_mut() {
-            ids.sort_by(order);
+        self.nodes.clear();
+        if self.triangles.is_empty() {
+            return;
         }
-        self.seen = vec![0; self.triangles.len()];
+        self.nodes.push(Node { low: DVec2::ZERO, high: DVec2::ZERO, nearest: 0.0, start: 0, count: 0 });
+        let mut pending = vec![(0usize, 0usize, self.triangles.len())];
+        while let Some((node, start, end)) = pending.pop() {
+            let slice = &mut self.triangles[start..end];
+            let mut low = DVec2::splat(f64::INFINITY);
+            let mut high = DVec2::splat(f64::NEG_INFINITY);
+            let mut nearest = f64::INFINITY;
+            let mut centre_low = DVec2::splat(f64::INFINITY);
+            let mut centre_high = DVec2::splat(f64::NEG_INFINITY);
+            for flat in slice.iter() {
+                low = low.min(flat.low);
+                high = high.max(flat.high);
+                nearest = nearest.min(flat.nearest);
+                let centre = (flat.points[0] + flat.points[1] + flat.points[2]) / 3.0;
+                centre_low = centre_low.min(centre);
+                centre_high = centre_high.max(centre);
+            }
+            if slice.len() <= LEAF_SIZE {
+                slice.sort_by(|a, b| a.nearest.total_cmp(&b.nearest).then(a.id.cmp(&b.id)));
+                self.nodes[node] = Node { low, high, nearest, start: start as u32, count: slice.len() as u32 };
+                continue;
+            }
+            let extent = centre_high - centre_low;
+            let axis = usize::from(extent.y > extent.x);
+            let middle = slice.len() / 2;
+            let key = |flat: &Flat| (flat.points[0][axis] + flat.points[1][axis] + flat.points[2][axis]) / 3.0;
+            slice.select_nth_unstable_by(middle, |a, b| key(a).total_cmp(&key(b)).then(a.id.cmp(&b.id)));
+            let left = self.nodes.len();
+            let placeholder = Node { low: DVec2::ZERO, high: DVec2::ZERO, nearest: 0.0, start: 0, count: 0 };
+            self.nodes.push(placeholder);
+            self.nodes.push(placeholder);
+            self.nodes[node] = Node { low, high, nearest, start: left as u32, count: 0 };
+            pending.push((left, start, start + middle));
+            pending.push((left + 1, start + middle, end));
+        }
     }
+
     /// Adds a triangle, already projected.
     fn add(&mut self, points: [DVec2; 3], depths: [f64; 3]) -> bool {
         if self.triangles.len() >= MAX_OCCLUDERS {
@@ -104,45 +176,17 @@ impl Occluders {
             // Seen edge on: it covers no area and hides nothing.
             return true;
         }
-        let min = DVec2::new(
-            points[0].x.min(points[1].x).min(points[2].x),
-            points[0].y.min(points[1].y).min(points[2].y),
-        );
-        let max = DVec2::new(
-            points[0].x.max(points[1].x).max(points[2].x),
-            points[0].y.max(points[1].y).max(points[2].y),
-        );
-        let id = self.triangles.len();
+        let (low, high) = slack_box(points, area);
+        let id = self.triangles.len() as u32;
         self.triangles.push(Flat {
             points,
             depths,
             area,
             nearest: depths[0].min(depths[1]).min(depths[2]),
+            low,
+            high,
+            id,
         });
-        let mut cells = Vec::new();
-        let low = (
-            (min.x / self.cell).floor() as i64,
-            (min.y / self.cell).floor() as i64,
-        );
-        let high = (
-            (max.x / self.cell).floor() as i64,
-            (max.y / self.cell).floor() as i64,
-        );
-        for x in low.0..=high.0 {
-            for y in low.1..=high.1 {
-                if cells.len() >= MAX_CELLS_PER_TRIANGLE {
-                    break;
-                }
-                cells.push((x, y));
-            }
-        }
-        if (high.0 - low.0 + 1) * (high.1 - low.1 + 1) > MAX_CELLS_PER_TRIANGLE as i64 {
-            self.wide.push(id);
-        } else {
-            for key in cells {
-                self.cells.entry(key).or_default().push(id);
-            }
-        }
         true
     }
 
@@ -191,78 +235,78 @@ impl Occluders {
         Some((start, end))
     }
 
-    /// Tests the edge against `ids`, nearest first. `false` when the budget has run out.
-    fn test_all(ids: &[usize], data: &mut Tests<'_>, edge: &Edge) -> bool {
-        for id in ids {
-            let flat = &data.triangles[*id];
-            if flat.nearest + OCCLUSION_EPSILON >= edge.deepest {
-                break;
-            }
-            if data.seen[*id] == data.edge {
+    /// The hidden spans of an edge, as sorted parameters along it. `None` when the budget ran
+    /// out, because a partial answer would draw hidden lines as visible. The nearer child is
+    /// searched first, so a fully covered edge stops early.
+    fn hidden_spans(&mut self, edge: &Edge) -> Option<Vec<(f64, f64)>> {
+        let join = JOIN_GAP / edge.a.distance(edge.b).max(JOIN_GAP);
+        let mut spans: Vec<(f64, f64)> = Vec::new();
+        let mut merged: Vec<(f64, f64)> = Vec::new();
+        if self.nodes.is_empty() {
+            return Some(merged);
+        }
+        let reaches = |low: DVec2, high: DVec2, nearest: f64| {
+            nearest + OCCLUSION_EPSILON < edge.deepest
+                && edge.high.x >= low.x
+                && edge.low.x <= high.x
+                && edge.high.y >= low.y
+                && edge.low.y <= high.y
+        };
+        let mut stack = vec![0u32];
+        while let Some(index) = stack.pop() {
+            let node = self.nodes[index as usize];
+            if !reaches(node.low, node.high, node.nearest) {
                 continue;
             }
-            data.seen[*id] = data.edge;
-            if *data.tests_left == 0 {
-                return false;
+            if node.count == 0 {
+                let (a, b) = (node.start, node.start + 1);
+                // Pushed last, popped first: the child with the nearer triangle.
+                if self.nodes[a as usize].nearest <= self.nodes[b as usize].nearest {
+                    stack.push(b);
+                    stack.push(a);
+                } else {
+                    stack.push(a);
+                    stack.push(b);
+                }
+                continue;
             }
-            *data.tests_left -= 1;
-            if let Some(span) = Self::covered(flat, edge) {
-                data.spans.push(span);
+            let before = spans.len();
+            let leaf = &self.triangles[node.start as usize..(node.start + node.count) as usize];
+            for flat in leaf {
+                if flat.nearest + OCCLUSION_EPSILON >= edge.deepest {
+                    break;
+                }
+                if !reaches(flat.low, flat.high, flat.nearest) {
+                    continue;
+                }
+                if self.tests_left == 0 {
+                    return None;
+                }
+                self.tests_left -= 1;
+                if let Some(span) = Self::covered(flat, edge) {
+                    spans.push(span);
+                }
             }
-        }
-        true
-    }
-
-    /// The hidden spans of an edge, as sorted parameters along it. `None` when the budget ran
-    /// out, because a partial answer would draw hidden lines as visible.
-    fn hidden_spans(&mut self, edge: &Edge) -> Option<Vec<(f64, f64)>> {
-        self.edge += 1;
-        let join = JOIN_GAP / edge.a.distance(edge.b).max(JOIN_GAP);
-        let mut data = Tests {
-            triangles: &self.triangles,
-            seen: &mut self.seen,
-            edge: self.edge,
-            tests_left: &mut self.tests_left,
-            spans: Vec::new(),
-        };
-        if !Self::test_all(&self.wide, &mut data, edge) {
-            return None;
-        }
-        let mut merged = merge_spans(&mut data.spans, join);
-        let mut walk = GridWalk::new(edge.a, edge.b, self.cell);
-        while let Some(key) = walk.next() {
-            if merged.len() == 1 && merged[0].0 <= 0.0 && merged[0].1 >= 1.0 {
-                break;
-            }
-            let Some(ids) = self.cells.get(&key) else { continue };
-            let before = data.spans.len();
-            if !Self::test_all(ids, &mut data, edge) {
-                return None;
-            }
-            if data.spans.len() != before {
-                merged = merge_spans(&mut data.spans, join);
+            if spans.len() != before {
+                merged = merge_spans(&mut spans, join);
+                if merged.len() == 1 && merged[0].0 <= 0.0 && merged[0].1 >= 1.0 {
+                    break;
+                }
             }
         }
         Some(merged)
     }
 }
 
-/// An edge on the sheet, with the depth at each end and the deepest of the two.
+/// An edge on the sheet, with the depth at each end, the deepest of the two, and its box.
 struct Edge {
     a: DVec2,
     b: DVec2,
     depth_a: f64,
     depth_b: f64,
     deepest: f64,
-}
-
-/// What one edge's tests share, kept apart so the grid can stay borrowed.
-struct Tests<'a> {
-    triangles: &'a [Flat],
-    seen: &'a mut [usize],
-    edge: usize,
-    tests_left: &'a mut usize,
-    spans: Vec<(f64, f64)>,
+    low: DVec2,
+    high: DVec2,
 }
 
 /// Sorts and joins spans in place, snapping to the ends of the edge, and returns a copy.
@@ -285,60 +329,7 @@ fn merge_spans(spans: &mut Vec<(f64, f64)>, join: f64) -> Vec<(f64, f64)> {
     out
 }
 
-/// The grid cells a segment passes through, in order.
-struct GridWalk {
-    cell: (i64, i64),
-    last: (i64, i64),
-    step: (i64, i64),
-    next_at: (f64, f64),
-    each: (f64, f64),
-    left: u64,
-}
 
-impl GridWalk {
-    fn new(a: DVec2, b: DVec2, size: f64) -> Self {
-        let cell = ((a.x / size).floor() as i64, (a.y / size).floor() as i64);
-        let last = ((b.x / size).floor() as i64, (b.y / size).floor() as i64);
-        let axis = |from: f64, to: f64, index: i64| -> (i64, f64, f64) {
-            let run = to - from;
-            if run.abs() <= f64::MIN_POSITIVE {
-                return (0, f64::INFINITY, f64::INFINITY);
-            }
-            let step = if run > 0.0 { 1 } else { -1 };
-            let border = (index + i64::from(run > 0.0)) as f64 * size;
-            (step, (border - from) / run, size / run.abs())
-        };
-        let (step_x, next_x, each_x) = axis(a.x, b.x, cell.0);
-        let (step_y, next_y, each_y) = axis(a.y, b.y, cell.1);
-        Self {
-            cell,
-            last,
-            step: (step_x, step_y),
-            next_at: (next_x, next_y),
-            each: (each_x, each_y),
-            left: (last.0 - cell.0).unsigned_abs() + (last.1 - cell.1).unsigned_abs() + 1,
-        }
-    }
-
-    fn next(&mut self) -> Option<(i64, i64)> {
-        if self.left == 0 {
-            return None;
-        }
-        self.left -= 1;
-        let current = self.cell;
-        if self.left == 0 {
-            return Some(self.last);
-        }
-        if self.next_at.0 < self.next_at.1 {
-            self.cell.0 += self.step.0;
-            self.next_at.0 += self.each.0;
-        } else {
-            self.cell.1 += self.step.1;
-            self.next_at.1 += self.each.1;
-        }
-        Some(current)
-    }
-}
 /// Projects one mesh's triangles into the occluder grid.
 pub(crate) fn add_occluders(
     mesh: &Mesh,
@@ -454,6 +445,8 @@ pub(crate) fn project_mesh(
             depth_a,
             depth_b,
             deepest: depth_a.max(depth_b),
+            low: a.min(b),
+            high: a.max(b),
         };
         let Some(spans) = occluders.hidden_spans(&edge) else {
             report.truncated = true;
@@ -687,7 +680,7 @@ mod tests {
     fn a_spent_budget_is_reported_and_draws_nothing_unchecked() {
         let frame = Frame::of(crate::cut::Cut::Plan { z: 10.0 }).unwrap();
         let (roof, floor) = (square(5.0), square(1.0));
-        let mut grid = Occluders::new(4.0, 4);
+        let mut grid = Occluders::new();
         add_occluders(&roof, &frame, None, &mut grid);
         grid.finish();
 
@@ -704,29 +697,4 @@ mod tests {
         assert!(!hidden.is_empty());
     }
 
-    #[test]
-    fn a_walk_visits_every_cell_a_segment_crosses() {
-        let cells = |a: DVec2, b: DVec2| {
-            let mut walk = GridWalk::new(a, b, 1.0);
-            let mut out = Vec::new();
-            while let Some(cell) = walk.next() {
-                out.push(cell);
-            }
-            out
-        };
-        assert_eq!(cells(DVec2::new(0.5, 0.5), DVec2::new(0.6, 0.7)), [(0, 0)]);
-        assert_eq!(
-            cells(DVec2::new(0.5, 0.5), DVec2::new(2.5, 0.5)),
-            [(0, 0), (1, 0), (2, 0)]
-        );
-        assert_eq!(
-            cells(DVec2::new(2.5, 1.5), DVec2::new(0.5, 1.5)),
-            [(2, 1), (1, 1), (0, 1)]
-        );
-        // Up and to the right, crossing X first: y reaches 1 at about x = 2.17.
-        assert_eq!(
-            cells(DVec2::new(0.5, 0.25), DVec2::new(2.5, 1.15)),
-            [(0, 0), (1, 0), (2, 0), (2, 1)]
-        );
-    }
 }
