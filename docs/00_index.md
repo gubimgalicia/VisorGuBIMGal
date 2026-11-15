@@ -15,6 +15,7 @@
 | [`04_team_distribution.md`](./04_team_distribution.md) | Asignación por squads para +10 desarrolladores en paralelo, límites de módulo y gobernanza. | Al distribuir tareas de desarrollo paralelo o acordar interfaces entre equipos. |
 | [`05_kernel_contract.md`](./05_kernel_contract.md) | Contrato entre kernel, renderizador y aplicación: coordenadas, lotes binarios, identidad, planos 2D y límite WASM. | Antes de tocar cualquier código a ambos lados de ese límite. |
 | [`06_mejoras.md`](./06_mejoras.md) | Lista de optimizaciones y nuevas funciones, con evidencia en el código y orden de trabajo. | Al terminar el visor básico, o al elegir la siguiente mejora. |
+| [`09_propuesta_instancias_compresion.md`](./09_propuesta_instancias_compresion.md) | Propuesta de cambio de contrato para A13 (instancias en GPU) y A11 (vértices comprimidos), con las mediciones que la justifican. Pendiente de acks. | Antes de tocar `GeometryBatch` o los renderizadores por A11 o A13. |
 
 ---
 
