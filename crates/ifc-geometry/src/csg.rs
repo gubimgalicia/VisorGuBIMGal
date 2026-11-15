@@ -8,7 +8,7 @@
 
 use crate::mesh::Mesh;
 use glam::DVec3;
-use std::collections::HashMap;
+use crate::hash::KeyedMap;
 use std::fmt;
 
 /// A vertex this close to a plane lies on it. Metres.
@@ -426,7 +426,7 @@ impl Node {
 #[derive(Default)]
 struct Welder {
     positions: Vec<DVec3>,
-    cells: HashMap<(i64, i64, i64), Vec<u32>>,
+    cells: KeyedMap<(i64, i64, i64), Vec<u32>>,
 }
 
 impl Welder {
@@ -593,7 +593,7 @@ fn assemble(polygons: &[Polygon]) -> Mesh {
 
     let positions = welder.positions;
     let scanner = EdgeScanner::new(&positions);
-    let mut on_edge: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
+    let mut on_edge: KeyedMap<(u32, u32), Vec<u32>> = KeyedMap::default();
     let mut triangles = Vec::new();
     for ring in &rings {
         let mut full = Vec::with_capacity(ring.len());

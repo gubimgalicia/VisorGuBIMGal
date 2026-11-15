@@ -1,7 +1,7 @@
 //! Indexed triangle meshes in `f64`, in metres.
 
 use glam::DVec3;
-use std::collections::HashMap;
+use crate::hash::KeyedMap;
 
 /// A triangle side that is open, or shared by three or more faces.
 const NO_NEIGHBOUR: u32 = u32::MAX;
@@ -98,7 +98,8 @@ impl Mesh {
 
     /// Directed edges with no opposite partner. Zero means watertight.
     pub fn open_edges(&self) -> usize {
-        let mut balance: HashMap<(u32, u32), i32> = HashMap::new();
+        // Summed below, so the walk order of a keyed map does not matter.
+        let mut balance: KeyedMap<(u32, u32), i32> = KeyedMap::default();
         for [a, b, c] in &self.triangles {
             for (from, to) in [(*a, *b), (*b, *c), (*c, *a)] {
                 if from < to {
