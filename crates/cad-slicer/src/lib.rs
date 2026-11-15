@@ -203,7 +203,9 @@ pub fn draw(meshes: &[DrawingMesh], options: &DrawingOptions) -> Drawing {
     // Sorted by name through a tree, so the sheet never depends on hash order.
     let mut layers: std::collections::BTreeMap<String, Layer> = std::collections::BTreeMap::new();
 
-    let mut grid = options.include_projection.then(project::Occluders::new);
+    let mut grid = options.include_projection.then(|| {
+        project::Occluders::new(meshes.iter().map(|item| item.mesh.triangles.len()).sum())
+    });
     if let Some(grid) = grid.as_mut() {
         for item in meshes {
             let report = project::add_occluders(&item.mesh, &frame, depth, grid);

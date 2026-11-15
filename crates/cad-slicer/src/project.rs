@@ -37,6 +37,10 @@ const LEAF_SIZE: usize = 8;
 const COVER_SLACK: f64 = 1e-9;
 /// Gaps between hidden spans narrower than this are rounding between neighbours. Metres.
 const JOIN_GAP: f64 = 1e-7;
+/// Hidden spans shorter than this are dropped. A triangle that only touches an edge, within
+/// `COVER_SLACK`, hides a few micrometres of it at most; drawn, that is a dash of no length
+/// between two visible pieces. Metres.
+const MIN_HIDDEN_RUN: f64 = 1e-5;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProjectReport {
@@ -114,9 +118,11 @@ pub(crate) struct Occluders {
 }
 
 impl Occluders {
-    pub(crate) fn new() -> Self {
+    /// `triangles` is an upper bound on what will be added: reserving it up front avoids the
+    /// moment when a growing list and its copy are both alive, twice the memory at the peak.
+    pub(crate) fn new(triangles: usize) -> Self {
         Self {
-            triangles: Vec::new(),
+            triangles: Vec::with_capacity(triangles.min(MAX_OCCLUDERS)),
             nodes: Vec::new(),
             tests_left: MAX_OCCLUSION_TESTS,
         }
@@ -453,7 +459,7 @@ pub(crate) fn project_mesh(
             break;
         };
         let mut cursor = 0.0;
-        for (start, end) in spans {
+        for (start, end) in spans.into_iter().filter(|(start, end)| (end - start) * length >= MIN_HIDDEN_RUN) {
             push_run(a, b, cursor, start, true, visible, hidden);
             push_run(a, b, start, end, false, visible, hidden);
             cursor = end;
@@ -680,7 +686,7 @@ mod tests {
     fn a_spent_budget_is_reported_and_draws_nothing_unchecked() {
         let frame = Frame::of(crate::cut::Cut::Plan { z: 10.0 }).unwrap();
         let (roof, floor) = (square(5.0), square(1.0));
-        let mut grid = Occluders::new();
+        let mut grid = Occluders::new(4);
         add_occluders(&roof, &frame, None, &mut grid);
         grid.finish();
 
