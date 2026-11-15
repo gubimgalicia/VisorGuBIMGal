@@ -216,7 +216,7 @@ fn format_number(value: f64) -> String {
     if !value.is_finite() {
         return "0.000000".into();
     }
-    let rounded = format!("{value:.6}");
+    let rounded = crate::fixed::fixed(value, 6);
     // -0.000000 is legal but ugly, and it changes between platforms.
     if rounded.starts_with('-') && rounded[1..].bytes().all(|byte| byte == b'0' || byte == b'.') {
         return rounded[1..].to_string();

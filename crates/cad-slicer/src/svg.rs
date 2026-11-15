@@ -187,7 +187,7 @@ fn number(value: f64) -> String {
     if !value.is_finite() {
         return "0".into();
     }
-    let rounded = format!("{value:.4}");
+    let rounded = crate::fixed::fixed(value, 4);
     if rounded.starts_with('-') && rounded[1..].bytes().all(|byte| byte == b'0' || byte == b'.') {
         return rounded[1..].to_string();
     }

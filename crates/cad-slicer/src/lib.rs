@@ -6,6 +6,7 @@
 
 mod cut;
 mod dxf;
+mod fixed;
 mod geom;
 mod hatch;
 mod project;
