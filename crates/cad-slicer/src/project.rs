@@ -71,6 +71,10 @@ struct Flat {
 fn slack_box(points: [DVec2; 3], area: f64) -> (DVec2, DVec2) {
     let unbounded = (DVec2::splat(f64::NEG_INFINITY), DVec2::splat(f64::INFINITY));
     let sign = area.signum();
+    // Relative to the first corner: at map coordinates, normal · point would cancel away the
+    // precision a sliver needs, and its box would miss the triangle.
+    let base = points[0];
+    let points = points.map(|point| point - base);
     // Side i as the half-plane n·x >= c: inside when sign * side.perp_dot(x - from) +
     // COVER_SLACK >= 0, as in `covered`.
     let line = |i: usize, j: usize| {
@@ -94,7 +98,7 @@ fn slack_box(points: [DVec2; 3], area: f64) -> (DVec2, DVec2) {
         low = low.min(corner);
         high = high.max(corner);
     }
-    (low, high)
+    (low + base, high + base)
 }
 
 /// A node of the hierarchy: the box around everything below it and the nearest depth there.
