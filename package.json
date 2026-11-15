@@ -8,7 +8,10 @@
     "kernel": "node scripts/build-kernel.mjs",
     "build": "npm run kernel && tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:unit": "node --experimental-strip-types test/t138-gltf-test.mjs",
+    "test:e2e": "node test/e2e/run.mjs",
+    "test": "npm run test:unit && npm run test:e2e"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
