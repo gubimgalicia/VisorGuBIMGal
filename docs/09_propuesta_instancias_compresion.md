@@ -190,11 +190,11 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 
 `CONTRACT_VERSION` 2 define los dos desde el primer corte. Con A11 sola, el kernel emite `shapes: []`, `instanceTable` y `instanceTransforms` vacíos y `quantBox` igual a `box`. Así el contrato y `CACHE_FORMAT` cambian una sola vez, con una sola ronda de acks. Gemini está de acuerdo con este orden (T-147).
 
-## 7. Preguntas abiertas, para Nick
+## 7. Decisiones de Nick (2026-11-15)
 
-1. **`MAX_QUANT_STEP` de 1 mm.** Gemini lo acepta (error máximo 0,5 mm, imperceptible a escala de edificio), a condición de los cambios de §3 sobre el estiramiento y `quantBox`, que ya están dentro. Queda confirmarlo.
-2. **Infraestructura lineal y los lotes de 1,01 a 1,22 mm:** ¿volver a `f32`, como propone esta revisión, o partir los lotes hasta que quepan en 16 bits? Partirlos ahorra memoria en la carretera, el puente, la arquitectura de la clínica y los 20.000 muros, a cambio de más lotes y de tocar el reparto por `MAX_BATCH_RADIUS`.
-3. **`MIN_INSTANCE_USES` = 2.** Gemini lo respalda con el censo: los 31 modelos de 1,00× quedan fuera del todo. Queda confirmarlo.
+1. **`MAX_QUANT_STEP` = 1 mm**, confirmado. Error máximo de posición 0,5 mm.
+2. **Lotes que no caben en 16 bits** (infraestructura lineal, y los lotes de 1,01 a 1,22 mm): **vuelven a `f32`**, como propone §3. No se parten.
+3. **`MIN_INSTANCE_USES` = 2**, confirmado.
 
 ## 8. Cambios respecto a la revisión 1 (T-147)
 
