@@ -20,3 +20,7 @@ node test/e2e/smoke.mjs none "<same url>" "$TEMP/gubim-e2e"           # WebGPU w
 first person), T-136 (BCF topic, viewpoint with snapshot, restore, 3.0 export read back with an
 independent unzip, re-import) and T-137 (face pick, 3D clip on both sides, plane cut equal to the
 plan cut, DXF and SVG downloads, vertical face elevation with the door notch: 20.268 m).
+
+`glb-check.mjs` (T-138): exports SimpleWall to GLB, reads it back with its own parser (header,
+chunks, alignment, GlobalId node names, the wall box after the Y-up round trip to 1 mm), then
+with a class hidden and isolated: `node test/e2e/glb-check.mjs gpu http://127.0.0.1:5173/ "$TEMP/gubim-e2e"`.
