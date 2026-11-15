@@ -1,0 +1,27 @@
+{
+  "svgElements": {
+    "svg": 1,
+    "g": 3,
+    "path": 7
+  },
+  "loops": 3,
+  "layers": {
+    "Aluminum": 9.089354,
+    "Aluminum-HIDDEN": 14.959683,
+    "Basic_Wall_Outside_wall": 17.78,
+    "Basic_Wall_Outside_wall-HIDDEN": 4.42,
+    "Basic_Wall_Special_wall": 78.6373,
+    "Basic_Wall_Special_wall-HIDDEN": 8.5627,
+    "Door_-_Frame": 22.352,
+    "Door_-_Frame-HIDDEN": 0.1,
+    "IfcBuildingElementProxy": 4.050812,
+    "IfcBuildingElementProxy-HIDDEN": 20.23
+  },
+  "extents": [
+    -8.422994,
+    0,
+    0.745406,
+    8
+  ],
+  "diagnostics": []
+}

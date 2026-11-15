@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test:unit": "node --experimental-strip-types test/t138-gltf-test.mjs && node --experimental-strip-types test/t139-orbit-pivot-test.mjs",
+    "test:drawings": "node --experimental-strip-types scripts/check-drawings.mjs",
     "test:e2e": "node test/e2e/run.mjs",
     "test": "npm run test:unit && npm run test:e2e",
     "bench": "node scripts/bench/bench.mjs"
