@@ -89,6 +89,9 @@ jobs:
       - name: Check drawing requests
         run: node --experimental-strip-types scripts/check-drawing-request.mjs
 
+      - name: Check 2D drawings
+        run: node --experimental-strip-types scripts/check-drawings.mjs
+
       - name: Type check
         run: npx tsc --noEmit
 

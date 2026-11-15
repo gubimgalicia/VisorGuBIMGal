@@ -1,0 +1,4 @@
+# Reference drawings and summaries: keep the LF line endings the kernel and
+# check-drawings.mjs write so a checkout matches byte for byte on any platform.
+*.svg text eol=lf
+*.json text eol=lf

@@ -1,0 +1,23 @@
+{
+  "svgElements": {
+    "svg": 1,
+    "g": 3,
+    "path": 6
+  },
+  "loops": 12,
+  "layers": {
+    "guBIM_brick": 102.735443,
+    "guBIM_brick-HIDDEN": 0.4,
+    "guBIM_concrete": 84.818081,
+    "guBIM_concrete-HIDDEN": 29.6,
+    "guBIM_glass": 11.48,
+    "guBIM_steel": 16.001936
+  },
+  "extents": [
+    -8,
+    -0.2,
+    0,
+    6.4
+  ],
+  "diagnostics": []
+}

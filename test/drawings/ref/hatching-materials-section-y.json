@@ -1,0 +1,21 @@
+{
+  "svgElements": {
+    "svg": 1,
+    "g": 2,
+    "path": 3
+  },
+  "loops": 2,
+  "layers": {
+    "Hormig_n": 24,
+    "Vidrio": 18
+  },
+  "extents": [
+    0.1,
+    0,
+    12.1,
+    1
+  ],
+  "diagnostics": [
+    "bad-hatch-style"
+  ]
+}

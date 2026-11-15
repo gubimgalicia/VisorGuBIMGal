@@ -1,0 +1,19 @@
+{
+  "svgElements": {
+    "svg": 1,
+    "g": 1,
+    "path": 2
+  },
+  "loops": 1,
+  "layers": {
+    "IfcColumn": 24.000001,
+    "IfcSlab": 2029.986671
+  },
+  "extents": [
+    0,
+    -5,
+    381.925599,
+    101.297442
+  ],
+  "diagnostics": []
+}

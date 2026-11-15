@@ -1,0 +1,19 @@
+{
+  "svgElements": {
+    "svg": 1,
+    "g": 1,
+    "path": 2
+  },
+  "loops": 2,
+  "layers": {
+    "Basic_Wall_Outside_wall": 34.6,
+    "Basic_Wall_Special_wall": 30
+  },
+  "extents": [
+    -12.503405,
+    -0.582047,
+    4.596595,
+    8.266507
+  ],
+  "diagnostics": []
+}
