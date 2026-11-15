@@ -95,8 +95,13 @@ export interface SpatialNode {
   type: string;
   name?: string;
   longName?: string;
-  /** Metres, for storeys. */
+  /** Metres, for storeys: the `Elevation` attribute, relative to the building and often absent. */
   elevation?: number;
+  /**
+   * Metres, for storeys: the height of the storey's own placement in model coordinates, the level
+   * its floor is drawn at. Plans project down to it by default.
+   */
+  level?: number;
   /** Ascending expressId. */
   children: SpatialNode[];
   /** Ascending expressId. Excludes IfcFeatureElementSubtraction. */

@@ -90,6 +90,7 @@ impl ToJson for SpatialNode {
             .some("name", &self.name)
             .some("longName", &self.long_name)
             .some("elevation", &self.elevation)
+            .some("level", &self.level)
             .field("children", &self.children)
             .field("elements", &self.elements)
             .end();

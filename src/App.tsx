@@ -119,6 +119,9 @@ export default function App() {
 
   const [section, setSection] = useState<SectionState>(NO_SECTION);
   const [isPickingFace, setIsPickingFace] = useState<boolean>(false);
+  /** Which end of a plan's view range the next click on the model sets, if any. */
+  const [heightPick, setHeightPick] = useState<'top' | 'bottom' | null>(null);
+  const [pickedHeight, setPickedHeight] = useState<{ target: 'top' | 'bottom'; z: number; seq: number } | null>(null);
   const bounds = useMemo(() => sceneBounds(models), [models]);
   useEffect(() => {
     const planes = sectionPlanes(section, bounds);
@@ -138,6 +141,7 @@ export default function App() {
     (active?: boolean) => {
       const next = active ?? !isPickingFace;
       if (next) {
+        setHeightPick(null);
         measure.setKind(null);
         renderer.setPointerMode('measure');
         setIsPickingFace(true);
@@ -150,9 +154,28 @@ export default function App() {
     [isPickingFace, measure]
   );
 
+  const handlePickHeight = useCallback(
+    (target: 'top' | 'bottom' | null) => {
+      setHeightPick(target);
+      if (target) {
+        setIsPickingFace(false);
+        measure.setKind(null);
+        renderer.setPointerMode('measure');
+        setStatusText(
+          target === 'top'
+            ? 'Haz clic sobre el modelo 3D para fijar la cota del corte (arriba).'
+            : 'Haz clic sobre el modelo 3D para fijar la cota del fondo (abajo).'
+        );
+      } else {
+        renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
+      }
+    },
+    [measure]
+  );
+
   const handleCanvasPoint = useCallback(
     async (x: number, y: number): Promise<void> => {
-      if (!isPickingFace) {
+      if (!isPickingFace && !heightPick) {
         await measure.point(x, y);
         return;
       }
@@ -187,6 +210,13 @@ export default function App() {
         setStatusText('No se pudo determinar la cara en ese punto. Inténtalo en otra zona.');
         return;
       }
+      if (heightPick) {
+        setPickedHeight({ target: heightPick, z: hit.point[2], seq: Date.now() });
+        setHeightPick(null);
+        renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
+        setStatusText(`Cota ${heightPick === 'top' ? 'del corte' : 'del fondo'}: ${hit.point[2].toFixed(2)} m`);
+        return;
+      }
       setSection((prev) => ({
         ...prev,
         mode: 'face',
@@ -201,13 +231,14 @@ export default function App() {
       renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
       setStatusText('Plano de corte fijado sobre la cara seleccionada.');
     },
-    [isPickingFace, measure, section, bounds]
+    [isPickingFace, heightPick, measure, section, bounds]
   );
 
   // With no model left there is nothing to measure on
   useEffect(() => {
     if (models.length === 0) {
       setIsPickingFace(false);
+      setHeightPick(null);
       measure.setKind(null);
       measure.clear();
       setSavedViews([]);
@@ -1170,6 +1201,10 @@ export default function App() {
                 onChangeSection={setSection}
                 isPickingFace={isPickingFace}
                 onTogglePickFace={handleTogglePickFace}
+                spatialTrees={spatialTrees}
+                pickingHeight={heightPick}
+                onPickHeight={handlePickHeight}
+                pickedHeight={pickedHeight}
               />
             )}
             <div style={{ display: rightTab === 'ids' ? 'block' : 'none' }}>

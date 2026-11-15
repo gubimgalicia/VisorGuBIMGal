@@ -6,6 +6,7 @@
 
 mod cut;
 mod dxf;
+mod fixed;
 mod geom;
 mod hatch;
 mod project;
@@ -19,7 +20,6 @@ pub use hatch::HatchStyle;
 pub use svg::{SvgOptions, to_svg, to_svg_with};
 
 use ifc_geometry::Mesh;
-use glam::DVec2;
 
 /// Something skipped or degraded on one element of one model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,21 +205,7 @@ pub fn draw(meshes: &[DrawingMesh], options: &DrawingOptions) -> Drawing {
     let mut layers: std::collections::BTreeMap<String, Layer> = std::collections::BTreeMap::new();
 
     let mut grid = options.include_projection.then(|| {
-        let mut low = DVec2::splat(f64::MAX);
-        let mut high = DVec2::splat(f64::MIN);
-        for item in meshes {
-            for point in &item.mesh.positions {
-                if !point.is_finite() {
-                    continue;
-                }
-                let flat = frame.project(*point);
-                low = low.min(flat);
-                high = high.max(flat);
-            }
-        }
-        let span = if low.x <= high.x { (high - low).max_element() } else { 0.0 };
-        let triangles = meshes.iter().map(|item| item.mesh.triangles.len()).sum();
-        project::Occluders::new(span, triangles)
+        project::Occluders::new(meshes.iter().map(|item| item.mesh.triangles.len()).sum())
     });
     if let Some(grid) = grid.as_mut() {
         for item in meshes {

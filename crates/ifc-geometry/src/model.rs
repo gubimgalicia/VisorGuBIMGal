@@ -907,6 +907,15 @@ impl<'a> ModelEvaluator<'a> {
         Some(geometry)
     }
 
+    /// Where a product's own origin lies in model coordinates, metres: its `ObjectPlacement`
+    /// resolved as its geometry's is. `None` without a placement or with one not finite.
+    pub fn placement_origin(&mut self, id: u32) -> Option<DVec3> {
+        let (entity, def) = self.lookup(id)?;
+        let placement = attribute(&entity, &def, "ObjectPlacement").and_then(reference)?;
+        let origin = self.placement(placement, 0).transform_point3(DVec3::ZERO);
+        origin.is_finite().then_some(origin)
+    }
+
     fn product_meshes(&mut self, entity: &Entity, def: &EntityDef) -> Vec<ElementMesh> {
         let placement = match attribute(entity, def, "ObjectPlacement").and_then(reference) {
             Some(id) => self.placement(id, 0),
