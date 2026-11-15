@@ -91,6 +91,16 @@ on('Runtime.exceptionThrown', (p) => consoleErrors.push(p.exceptionDetails?.exce
 on('Page.javascriptDialogOpening', () => void send('Page.handleJavaScriptDialog', { accept: true }));
 on('Network.requestWillBeSent', (p) => requests.push({ url: p.request.url, method: p.request.method, body: !!p.request.hasPostData }));
 on('Network.webSocketCreated', (p) => sockets.push(p.url));
+on('Log.entryAdded', (p) => {
+  const e = p.entry;
+  if (e.level !== 'error' && e.level !== 'warning') return;
+  // Remote map tiles may fail offline or on CI; a missing favicon is not the app's.
+  let local = true;
+  try { const h = new URL(e.url ?? '').hostname; local = !h || h === '127.0.0.1' || h === 'localhost'; } catch {}
+  if (e.source === 'network' && (!local || /favicon\.ico$/.test(e.url ?? ''))) return;
+  consoleErrors.push(`log ${e.level}: ${e.text.slice(0, 300)}${e.url ? ' ' + e.url : ''}`);
+});
+await send('Log.enable');
 await send('Runtime.enable');
 await send('Page.enable');
 await send('Network.enable');

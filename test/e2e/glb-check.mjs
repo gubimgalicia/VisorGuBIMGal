@@ -15,6 +15,16 @@ const cdp = await connect(wsUrl);
 const errors = [];
 cdp.on('Runtime.consoleAPICalled', (p) => p.type === 'error' && errors.push(p.args.map((a) => a.value ?? a.description).join(' ')));
 cdp.on('Runtime.exceptionThrown', (p) => errors.push(p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text));
+cdp.on('Log.entryAdded', (p) => {
+  const e = p.entry;
+  if (e.level !== 'error' && e.level !== 'warning') return;
+  // Remote map tiles may fail offline or on CI; a missing favicon is not the app's.
+  let local = true;
+  try { const h = new URL(e.url ?? '').hostname; local = !h || h === '127.0.0.1' || h === 'localhost'; } catch {}
+  if (e.source === 'network' && (!local || /favicon\.ico$/.test(e.url ?? ''))) return;
+  errors.push(`log ${e.level}: ${e.text.slice(0, 300)}${e.url ? ' ' + e.url : ''}`);
+});
+await cdp.send('Log.enable');
 await cdp.send('Runtime.enable');
 await cdp.send('Page.enable');
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: path.resolve(outDir, `dl-glb-${mode}`) });
