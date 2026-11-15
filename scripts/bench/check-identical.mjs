@@ -30,10 +30,11 @@ if (process.argv[2] === '--child') {
     }
     view.free();
   }
-  stream.update(model.finishStream());
-  const summary = JSON.parse(model.summaryJson());
-  const bounds = summary.bounds;
-  const z = bounds ? (bounds.min[2] + bounds.max[2]) / 2 : 1;
+  const finished = model.finishStream();
+  stream.update(finished);
+  // The model's bounds come with the end of the stream: cut the plan at mid-height.
+  const bounds = JSON.parse(finished).bounds;
+  const z = bounds ? (bounds.min.z + bounds.max.z) / 2 : 1;
   const request = drawingRequest({ cut: { kind: 'plan', elevation: z }, frame: { kind: 'project' }, includeProjection: true, includeHiddenLines: true, includeHatching: true });
   model.startDrawing(new Float64Array(request));
   const sheet = new Sheet(new Float64Array(request));

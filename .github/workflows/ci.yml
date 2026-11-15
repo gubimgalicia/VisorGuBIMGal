@@ -190,6 +190,16 @@ jobs:
       - name: Build kernel bindings
         run: npm run kernel
 
+      # Real buildingSMART community models (CC BY 4.0), pinned by sha256 in scripts/models.json.
+      - name: Cache real models
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: test/models/bench
+          key: bench-models-${{ hashFiles('scripts/models.json') }}
+
+      - name: Fetch real models
+        run: node scripts/fetch-models.mjs --bench
+
       - name: Benchmark against the base
         env:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}

@@ -11,7 +11,7 @@
 // A workload regresses when median(head) / median(base) > 1 + threshold and the difference is
 // over --min-ms. Exit code 1 on any regression, 0 otherwise (including no comparable base).
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +53,16 @@ function stress(walls) {
   }
   return file;
 }
+// Real models pinned in scripts/models.json, once fetched with: node scripts/fetch-models.mjs --bench
+const MODELS_DIR = path.resolve(process.env.GUBIM_MODELS_DIR ?? path.join(REPO, 'test/models'));
+const pinned = JSON.parse(readFileSync(path.join(REPO, 'scripts/models.json'), 'utf8')).bench.models.map((m) => ({
+  ...m,
+  file: path.join(MODELS_DIR, 'bench', path.basename(m.path))
+}));
+const present = args.includes('--no-real') ? [] : pinned.filter((m) => existsSync(m.file) && statSync(m.file).size === m.bytes);
+if (!args.includes('--no-real') && present.length < pinned.length) {
+  console.log(`${pinned.length - present.length} real model(s) missing: node scripts/fetch-models.mjs --bench`);
+}
 const ifcIn = (dir) => readdirSync(path.join(REPO, dir)).filter((f) => f.toLowerCase().endsWith('.ifc')).sort().map((f) => path.join(REPO, dir, f));
 const plan = (elevation) => ({ cut: { kind: 'plan', elevation }, frame: { kind: 'project' }, includeProjection: true, includeHiddenLines: true, includeHatching: true });
 const workloads = [
@@ -60,6 +70,10 @@ const workloads = [
   { name: 'stress 20k walls', files: [stress(20000)] },
   { name: 'fixtures x3', files: [...ifcIn('public/samples'), ...ifcIn('test/fixtures'), ...ifcIn('test/fixtures/authored')], repeat: 3 },
   { name: 'plan drawing 5k walls', files: [stress(5000)], drawing: plan(1.2) },
+  ...present.map((m) => ({ name: m.name, files: [m.file] })),
+  ...present
+    .filter((m) => m.name === 'Clinic architecture')
+    .map((m) => ({ name: 'plan drawing clinic', files: [m.file], drawing: plan('mid') })),
   ...all('--extra').map((f) => ({ name: path.basename(f), files: [path.resolve(f)] }))
 ];
 workloads.forEach((w, i) => {

@@ -23,6 +23,7 @@ const time = (key, fn) => {
   return result;
 };
 
+let lastBounds = null;
 function loadAndStream(bytes) {
   const model = time('open', () => new Model(bytes));
   const summary = time('summary', () => JSON.parse(model.summaryJson()));
@@ -40,14 +41,19 @@ function loadAndStream(bytes) {
       count('triangles', indices.length / 3);
       count('batches', 1);
     }
-    model.finishStream();
+    lastBounds = JSON.parse(model.finishStream()).bounds ?? null;
   });
   count('elements', summary.elementCount ?? 0);
   return model;
 }
 
 function draw(model, options) {
-  const request = drawingRequest(options);
+  // elevation 'mid': halfway up the model, from the bounds the stream reported.
+  const cut =
+    options.cut.elevation === 'mid'
+      ? { ...options.cut, elevation: lastBounds ? (lastBounds.min.z + lastBounds.max.z) / 2 : 1 }
+      : options.cut;
+  const request = drawingRequest({ ...options, cut });
   const sheet = time('drawing', () => {
     model.startDrawing(new Float64Array(request));
     const s = new Sheet(new Float64Array(request));

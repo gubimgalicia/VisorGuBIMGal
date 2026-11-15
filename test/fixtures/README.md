@@ -45,3 +45,7 @@ Todos los archivos han sido verificados previamente en cuanto a su licencia (ún
    - `IfcSegmentedReferenceCurve` sigue su curva base sin el peralte (`cant-ignored`), e `IfcSectionedSurface` e `IfcSectionedSpine` aún no están implementadas.
 3. **Modelos de estrés de gran tamaño (50 MB – 200 MB) para `T-061` (RSK-03):**
    - Por límite de repositorio (< 20 MB por archivo y < 100 MB en total), las pruebas de rendimiento y memoria de modelos pesados (`T-061`) requerirán generación sintética local o descarga bajo demanda fuera de Git.
+
+## Modelos públicos descargados (`test/models/`, fuera del repositorio)
+
+Los modelos públicos de buildingSMART no se suben al repositorio (decisión de Nick, 2026-11-15). `node scripts/fetch-models.mjs --all` los descarga en `test/models/`, que está en `.gitignore`: `Sample-Test-Files` (CC BY 4.0), `IFC4.3.x-sample-models` (todos los derechos reservados hasta su publicación: solo para pruebas locales) y `Community-Sample-Test-Files` (aportaciones CC BY 4.0). Los archivos de Git LFS se bajan por HTTPS y se comprueban con su sha256. `--bench` baja solo los cinco modelos reales que usa el banco de rendimiento, fijados por commit y sha256 en `scripts/models.json`.

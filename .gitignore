@@ -52,3 +52,6 @@ playwright-report/
 .eslintcache
 .cache/
 scratch/
+
+# Downloaded IFC models for tests and the benchmark: never committed (scripts/fetch-models.mjs)
+test/models/
