@@ -91,7 +91,7 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 ## 4. Lo que hay que cambiar
 
 1. **Kernel** (`ifc-geometry`, `wasm-api/batches.rs`): recuento de usos de cada forma al abrir; separar las piezas que cumplen §2; tabla de formas del flujo; cuantización y elección de formato por lote.
-2. **Límite WASM** (`BatchView`): `takeShapes`, `takeInstanceTable`, `takeInstanceTransforms`, y `takePositions` y `takeNormals` en el formato elegido. Sigue habiendo una sola copia (§6).
+2. **Límite WASM** (`BatchView`): `vertexFormat()`, `takeShapes`, `takeInstanceTable`, `takeInstanceTransforms`, y `takePositions` y `takeNormals` en el formato elegido. Sigue habiendo una sola copia (§6). Son los nombres que ya lee `scripts/bench/check-equivalent.mjs`.
 3. **`GeometryBatch.ts`**: campos nuevos, `findBatchError`, `CONTRACT_VERSION` 1 → 2.
 4. **Renderizadores** WebGPU y WebGL2: formas por modelo, dibujo instanciado, decodificación en el sombreador, selección por índice de registro.
 5. **Caché OPFS** (`geometryCache.ts`): `CACHE_FORMAT` 1 → 2. Las entradas antiguas se descartan solas, porque cambia la huella del kernel.
@@ -100,7 +100,7 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 ## 5. Cómo se prueba
 
 - **Antes de empezar:** el sondeo de T-145 da los usos de formas en los 285 modelos y fija `MIN_INSTANCE_USES` y `MAX_QUANT_STEP` con datos.
-- **Kernel:** el flujo expandido de un lote instanciado (cada instancia multiplicada por su matriz) debe coincidir con el flujo de hoy, en cada registro, con tolerancia de `f32`, en los 285 modelos. Una herramienta como `check-identical.mjs` que expande y compara. Con A11, dentro de medio paso.
+- **Kernel:** el flujo expandido de un lote instanciado (cada instancia multiplicada por su matriz) debe coincidir con el flujo de hoy, en cada registro, en los 285 modelos. La herramienta ya existe (T-146): `scripts/bench/check-equivalent.mjs <kernel de hoy> <kernel nuevo> <archivos>` expande los dos flujos con `expand-batch.mjs` y compara cada elemento con 0,05 mm más medio paso de 16 bits por lado, y las normales con 0,5°. Probada: dos versiones iguales del kernel dan 0 mm y 0° en los modelos reales; un desplazamiento de 0,2 mm y un cambio de color se detectan, y uno de 0,01 mm no. `test/t146-expand-test.mjs` prueba el formato v2 con lotes sintéticos (16 bits, octaédricas, forma más instancia con escala no uniforme) y mata 7 de 7 mutantes.
 - **Planos (D3):** los 28 casos, idénticos byte a byte, porque los planos no usan lotes.
 - **Navegador (D1):** las 9 ejecuciones de `npm run test:e2e`. Las capturas cambian como mucho en el borde de los píxeles por la cuantización; si superan el 0,5 %, se mira la imagen y se decide.
 - **Rendimiento (D2):** banco con los modelos reales: memoria máxima y tiempo de carga. En el navegador, con el método de T-144: tiempo de GPU por fotograma en la fontanería de la clínica y en el modelo de 60.000 muros, antes y después, en los dos motores.
