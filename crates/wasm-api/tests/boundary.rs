@@ -573,7 +573,7 @@ fn streaming_twice_gives_the_same_geometry_and_diagnostics() {
 #[test]
 fn summary_and_details_use_the_contract_field_names() {
     let bytes = fs::read(root().join("public/samples/SimpleWall.ifc")).unwrap();
-    let model = LoadedModel::open(bytes).unwrap();
+    let mut model = LoadedModel::open(bytes).unwrap();
 
     let summary = model.summary_json();
     for expected in [

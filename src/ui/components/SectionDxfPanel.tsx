@@ -13,10 +13,12 @@ import type {
   ExportedDrawing,
   GeneratedDrawing,
   KernelDiagnostic,
-  KernelPort
+  KernelPort,
+  SpatialTree
 } from '../../domain/kernel/KernelPort';
 import type { ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import { faceCutPlane, type SectionState } from '../viewer/section';
+import { defaultPlanDepth } from '../viewer/planDepth';
 import { widenForPreview } from './drawingPreview';
 
 interface SectionDxfPanelProps {
@@ -26,7 +28,15 @@ interface SectionDxfPanelProps {
   onChangeSection: (next: SectionState) => void;
   isPickingFace?: boolean;
   onTogglePickFace?: (active?: boolean) => void;
+  /** Spatial trees by model id: storey levels give a plan its default projection depth. */
+  spatialTrees?: Record<string, SpatialTree | null | undefined>;
 }
+
+/**
+ * 'auto': plans down to their storey (defaultPlanDepth), sections and face cuts without limit.
+ * 'none': no limit. 'custom': the depth typed in the field.
+ */
+type DepthMode = 'auto' | 'none' | 'custom';
 
 type CutPreset = 'plan' | 'section-x' | 'section-y' | 'face';
 
@@ -71,11 +81,13 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
   section,
   onChangeSection,
   isPickingFace = false,
-  onTogglePickFace
+  onTogglePickFace,
+  spatialTrees = {}
 }) => {
   const [cutPreset, setCutPreset] = useState<CutPreset>('plan');
   const [position, setPosition] = useState<number>(1.2); // 1.2m typical floor cut
-  const [depthStr, setDepthStr] = useState<string>(''); // Optional projection depth
+  const [depthStr, setDepthStr] = useState<string>(''); // Projection depth when depthMode is 'custom'
+  const [depthMode, setDepthMode] = useState<DepthMode>('auto');
   const [includeHidden, setIncludeHidden] = useState<boolean>(true);
   const [includeHatching, setIncludeHatching] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -125,6 +137,9 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
     }
   }, [models, currentDrawing, drawingModelIds, kernel]);
 
+  const visibleTrees = models.filter((m) => m.visible).map((m) => spatialTrees[m.id]);
+  const planDepth = defaultPlanDepth(position, visibleTrees.length ? visibleTrees : models.map((m) => spatialTrees[m.id]));
+
   const handleGenerate = async () => {
     const visibleIds = models.filter((m) => m.visible).map((m) => m.id);
     const modelIds = visibleIds.length > 0 ? visibleIds : models.map((m) => m.id);
@@ -139,8 +154,14 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
     let generated: GeneratedDrawing | null = null;
     try {
       const parsedDepth = depthStr.trim() !== '' ? parseFloat(depthStr) : undefined;
-      const depth =
+      const typed =
         parsedDepth !== undefined && !Number.isNaN(parsedDepth) ? parsedDepth : undefined;
+      const depth =
+        depthMode === 'custom'
+          ? typed
+          : depthMode === 'auto' && cutPreset === 'plan'
+            ? planDepth.depth
+            : undefined;
 
       let cut: DrawingCut;
       if (cutPreset === 'face') {
@@ -417,18 +438,37 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
 
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
-          Profundidad de proyección (m)
+          Profundidad de proyección
         </label>
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          placeholder="Opcional (sin límite)"
-          className="select"
-          style={{ width: '100%' }}
-          value={depthStr}
-          onChange={(e) => setDepthStr(e.target.value)}
-        />
+        <select
+          className="select dxf-depth-mode"
+          style={{ width: '100%', marginBottom: depthMode === 'custom' ? '6px' : 0 }}
+          value={depthMode}
+          onChange={(e) => setDepthMode(e.target.value as DepthMode)}
+        >
+          <option value="auto">{cutPreset === 'plan' ? 'Hasta la planta (automática)' : 'Sin límite (automática)'}</option>
+          <option value="none">Sin límite</option>
+          <option value="custom">Personalizada</option>
+        </select>
+        {depthMode === 'custom' && (
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="Metros desde el corte"
+            className="select dxf-depth"
+            style={{ width: '100%' }}
+            value={depthStr}
+            onChange={(e) => setDepthStr(e.target.value)}
+          />
+        )}
+        {depthMode === 'auto' && cutPreset === 'plan' && (
+          <div className="dxf-depth-hint" style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+            {planDepth.storey
+              ? `${planDepth.depth.toFixed(2)} m, hasta «${planDepth.storey.name}» (${planDepth.storey.level.toFixed(2)} m)`
+              : `${planDepth.depth.toFixed(2)} m: no hay ninguna planta bajo el corte`}
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>

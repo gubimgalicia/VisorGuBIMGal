@@ -67,8 +67,12 @@ pub struct SpatialNode {
     pub type_name: String,
     pub name: Option<String>,
     pub long_name: Option<String>,
-    /// Metres, for storeys.
+    /// Metres, for storeys: the `Elevation` attribute, relative to the building and often
+    /// missing.
     pub elevation: Option<f64>,
+    /// Metres, for storeys: the height of the storey's own placement in model coordinates, the
+    /// level its floor is drawn at. Filled by the caller that resolves placements.
+    pub level: Option<f64>,
     pub children: Vec<SpatialNode>,
     pub elements: Vec<SpatialElement>,
 }
@@ -869,6 +873,7 @@ impl<'a> ModelData<'a> {
             long_name: text(attribute(&entity, &def, "LongName")),
             elevation: number(attribute(&entity, &def, "Elevation"))
                 .map(|elevation| elevation * self.units.length),
+            level: None,
             children,
             elements,
         })

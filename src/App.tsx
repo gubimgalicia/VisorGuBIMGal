@@ -1170,6 +1170,7 @@ export default function App() {
                 onChangeSection={setSection}
                 isPickingFace={isPickingFace}
                 onTogglePickFace={handleTogglePickFace}
+                spatialTrees={spatialTrees}
               />
             )}
             <div style={{ display: rightTab === 'ids' ? 'block' : 'none' }}>

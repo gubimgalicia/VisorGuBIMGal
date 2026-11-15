@@ -119,7 +119,7 @@ impl Model {
     }
 
     #[wasm_bindgen(js_name = spatialTreeJson)]
-    pub fn spatial_tree_json(&self) -> Option<String> {
+    pub fn spatial_tree_json(&mut self) -> Option<String> {
         self.inner.spatial_tree_json()
     }
 

@@ -67,6 +67,16 @@ struct Query {
     drawn: Vec<u32>,
 }
 
+/// Storeys get the height of their placement, as their geometry is placed.
+fn fill_levels(node: &mut spatial_tree::SpatialNode, evaluator: &mut ModelEvaluator<'static>) {
+    if node.type_name.eq_ignore_ascii_case("IfcBuildingStorey") {
+        node.level = evaluator.placement_origin(node.express_id).map(|origin| origin.z);
+    }
+    for child in &mut node.children {
+        fill_levels(child, evaluator);
+    }
+}
+
 pub struct LoadedModel {
     stream: Option<ActiveStream>,
     drawing: Option<DrawingStream>,
@@ -90,8 +100,23 @@ impl LoadedModel {
         to_json(&self.data.summary())
     }
 
-    pub fn spatial_tree_json(&self) -> Option<String> {
-        self.data.spatial_tree().map(|tree| to_json(&tree))
+    pub fn spatial_tree_json(&mut self) -> Option<String> {
+        let mut tree = self.data.spatial_tree()?;
+        if let Some(query) = self.query_evaluator() {
+            fill_levels(&mut tree.root, &mut query.evaluator);
+        }
+        Some(to_json(&tree))
+    }
+
+    /// The evaluator for one-off questions, made on first use.
+    fn query_evaluator(&mut self) -> Option<&mut Query> {
+        if self.query.is_none() {
+            self.query = ModelEvaluator::new(self.file).ok().map(|evaluator| {
+                let drawn = evaluator.element_ids();
+                Query { evaluator, drawn }
+            });
+        }
+        self.query.as_mut()
     }
 
     pub fn element_details_json(&self, express_id: u32) -> Option<String> {
@@ -122,13 +147,7 @@ impl LoadedModel {
 
     /// `None` for an id the stream does not draw. Its own evaluator, kept for the next query.
     pub fn element_mesh(&mut self, express_id: u32) -> Option<ElementShape> {
-        if self.query.is_none() {
-            self.query = ModelEvaluator::new(self.file).ok().map(|evaluator| {
-                let drawn = evaluator.element_ids();
-                Query { evaluator, drawn }
-            });
-        }
-        let query = self.query.as_mut()?;
+        let query = self.query_evaluator()?;
         query.drawn.binary_search(&express_id).ok()?;
         element_shape(&query.evaluator.evaluate(express_id)?)
     }
