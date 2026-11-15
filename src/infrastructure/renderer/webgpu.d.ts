@@ -6,7 +6,7 @@ type GPUSize64 = number;
 type GPUIndex32 = number;
 type GPUSignedOffset32 = number;
 
-type GPUTextureFormat = 'bgra8unorm' | 'rgba8unorm' | 'depth32float' | 'rg32uint';
+type GPUTextureFormat = 'bgra8unorm' | 'rgba8unorm' | 'depth32float' | 'rg32uint' | 'rgba32uint';
 type GPUCompareFunction =
   | 'never'
   | 'less'

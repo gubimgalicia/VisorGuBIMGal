@@ -56,6 +56,36 @@ export interface OrbitCullableModel {
   batches: ReadonlyArray<{ min: Vec3; max: Vec3 }>;
 }
 
+export interface SurfacePickSample {
+  /**
+   * Whether a visible surface fragment covered the pixel (`true`), the pixel was background (`false`),
+   * or the GPU pick readback could not be obtained (`null`).
+   */
+  hit: boolean | null;
+  /** Reverse-Z depth in `(0, 1]` read from the pick pass when `hit` is `true`. */
+  depth?: number;
+}
+
+/**
+ * Returns `true` when `point` lies on the clipped side (`dot(normal, point) > offset + tolerance`)
+ * of any plane in `sectionPlanes`.
+ */
+export function isPointSectioned(
+  point: Vec3,
+  sectionPlanes: readonly SectionPlane[],
+  tolerance = 0
+): boolean {
+  for (const plane of sectionPlanes) {
+    if (
+      plane.normal[0] * point[0] + plane.normal[1] * point[1] + plane.normal[2] * point[2] >
+      plane.offset + tolerance
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Finds the nearest 3D surface entry point along `ray` across all visible batch bounding boxes
  * that is not clipped away by `sectionPlanes`. Returns `null` over background.
@@ -73,23 +103,69 @@ export function pickBatchOrbitPivot(
     for (const batch of model.batches) {
       const t = rayBoxIntersectionDistance(ray, batch.min, batch.max);
       if (t === null || t >= bestT) continue;
-      const px = ray.origin[0] + t * ray.direction[0];
-      const py = ray.origin[1] + t * ray.direction[1];
-      const pz = ray.origin[2] + t * ray.direction[2];
-      let clipped = false;
-      for (const plane of sectionPlanes) {
-        if (plane.normal[0] * px + plane.normal[1] * py + plane.normal[2] * pz > plane.offset) {
-          clipped = true;
-          break;
-        }
-      }
-      if (!clipped) {
+      const candidate: Vec3 = [
+        ray.origin[0] + t * ray.direction[0],
+        ray.origin[1] + t * ray.direction[1],
+        ray.origin[2] + t * ray.direction[2]
+      ];
+      if (!isPointSectioned(candidate, sectionPlanes, 0)) {
         bestT = t;
-        bestPoint = [px, py, pz];
+        bestPoint = candidate;
       }
     }
   }
   return bestPoint;
+}
+
+/**
+ * Resolves the 3D world orbit pivot at `(ndcX, ndcY)` from one or more pick-pass depth samples:
+ * 1. First visible surface sample whose unprojected point is not clipped by `sectionPlanes`.
+ * 2. Over confirmed background (`hit: false` with no unclipped surface), returns `null` (no pivot change).
+ * 3. When the surface point cannot be had (`sample` null/unavailable, or `hit: true` with unusable depth),
+ *    falls back to `pickBatchOrbitPivot` across visible batch bounding boxes.
+ */
+export function resolveOrbitPivot(
+  camera: Camera,
+  ndcX: number,
+  ndcY: number,
+  sample: SurfacePickSample | readonly SurfacePickSample[] | null | undefined,
+  models: Iterable<OrbitCullableModel>,
+  sectionPlanes: readonly SectionPlane[] = []
+): Vec3 | null {
+  const samples: readonly SurfacePickSample[] = Array.isArray(sample)
+    ? sample
+    : sample
+      ? [sample]
+      : [];
+
+  let sawBackground = false;
+  let sawCorruptedHit = false;
+
+  for (const s of samples) {
+    if (!s || s.hit === null) continue;
+    if (s.hit === false) {
+      sawBackground = true;
+      continue;
+    }
+    if (typeof s.depth === 'number') {
+      const point = camera.unproject(ndcX, ndcY, s.depth);
+      if (point) {
+        if (!isPointSectioned(point, sectionPlanes, 1e-3)) {
+          return point;
+        }
+        sawBackground = true;
+        continue;
+      }
+    }
+    sawCorruptedHit = true;
+  }
+
+  if (sawBackground && !sawCorruptedHit) {
+    return null;
+  }
+
+  const ray = camera.rayAt(ndcX, ndcY);
+  return pickBatchOrbitPivot(ray, models, sectionPlanes);
 }
 
 /**
@@ -437,6 +513,48 @@ export class Camera {
     }
     const h = 1.0 / Math.tan(this.fovY * 0.5);
     return { x: ((h / this.aspect) * along(right)) / depth, y: (h * along(up)) / depth };
+  }
+
+  /**
+   * Unprojects normalised device coordinates `(ndcX, ndcY)` and a Reverse-Z depth (`1` at near,
+   * `0` at far) into IFC Z-up f64 world coordinates relative to the camera eye. Returns `null`
+   * over cleared background (`reverseZDepth <= 0`) or out-of-range inputs.
+   */
+  unproject(ndcX: number, ndcY: number, reverseZDepth: number): Vec3 | null {
+    if (
+      !Number.isFinite(ndcX) ||
+      !Number.isFinite(ndcY) ||
+      !Number.isFinite(reverseZDepth) ||
+      !(reverseZDepth > 0 && reverseZDepth <= 1)
+    ) {
+      return null;
+    }
+    const near = this.near();
+    const far = this.far();
+    const eye = this.getEye();
+    const { forward, right, up } = this.axes();
+
+    let viewDepth: number;
+    let xCam: number;
+    let yCam: number;
+
+    if (this.projection === 'orthographic') {
+      viewDepth = far - reverseZDepth * (far - near);
+      const { halfW, halfH } = this.orthoHalfExtents();
+      xCam = ndcX * halfW;
+      yCam = ndcY * halfH;
+    } else {
+      viewDepth = (near * far) / (near + reverseZDepth * (far - near));
+      const h = 1.0 / Math.tan(this.fovY * 0.5);
+      xCam = (ndcX * this.aspect * viewDepth) / h;
+      yCam = (ndcY * viewDepth) / h;
+    }
+
+    return [
+      eye[0] + forward[0] * viewDepth + right[0] * xCam + up[0] * yCam,
+      eye[1] + forward[1] * viewDepth + right[1] * xCam + up[1] * yCam,
+      eye[2] + forward[2] * viewDepth + right[2] * xCam + up[2] * yCam
+    ];
   }
 
   /** The ray from the eye through a point in normalised device coordinates. */

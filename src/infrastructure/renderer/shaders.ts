@@ -174,10 +174,10 @@ fn vs_pick(
 }
 
 @fragment
-fn fs_pick(in: PickVaryings) -> @location(0) vec2<u32> {
+fn fs_pick(in: PickVaryings) -> @location(0) vec4<u32> {
   if (sectioned(in.relPos)) {
     discard;
   }
-  return in.pickId;
+  return vec4<u32>(in.pickId.x, in.pickId.y, bitcast<u32>(in.clipPos.z), 1u);
 }
 `;

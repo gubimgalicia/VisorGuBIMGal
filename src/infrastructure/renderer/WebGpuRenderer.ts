@@ -17,7 +17,7 @@ import type {
   ViewPreset
 } from '../../domain/kernel/RendererPort';
 import type { Ray, Vec3 } from '../../domain/measure/geometry';
-import { Camera, pickBatchOrbitPivot } from './Camera';
+import { Camera, resolveOrbitPivot, type SurfacePickSample } from './Camera';
 import { attachCanvasInput } from './canvasInput';
 import { canvasPoint, canvasRay } from './canvasView';
 import { boxMayShow, markBatchesInView, pixelWindow } from './frustum';
@@ -403,7 +403,7 @@ export class WebGpuRenderer implements RendererPort {
         fragment: {
           module: shaderModule,
           entryPoint: 'fs_pick',
-          targets: [{ format: 'rg32uint' }]
+          targets: [{ format: 'rgba32uint' }]
         },
         primitive: {
           topology: 'triangle-list',
@@ -504,7 +504,7 @@ export class WebGpuRenderer implements RendererPort {
     this.idTexture = this.device.createTexture({
       label: 'gubim-id-texture',
       size: { width, height, depthOrArrayLayers: 1 },
-      format: 'rg32uint',
+      format: 'rgba32uint',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
     });
     this.idTextureView = this.idTexture.createView();
@@ -536,8 +536,7 @@ export class WebGpuRenderer implements RendererPort {
       },
       idleCursor: () => this.idleCursor(),
       getNavigationMode: () => this.navigationMode,
-      getOrbitPivot: (cssX, cssY) =>
-        pickBatchOrbitPivot(this.rayAt(cssX, cssY), this.models.values(), this.sectionPlanes),
+      getOrbitPivot: (cssX, cssY) => this.pickOrbitPivot(cssX, cssY),
       onClick: (cssX, cssY) => {
         if (this.pointerMode === 'measure') {
           this.handlers.onPoint?.(cssX, cssY);
@@ -1390,9 +1389,35 @@ export class WebGpuRenderer implements RendererPort {
 
   /** One at a time, in order: each waits for the last to read back. */
   pick(cssX: number, cssY: number): Promise<ElementRef | null> {
+    return this.pickHit(cssX, cssY).then((hit) => hit.ref);
+  }
+
+  private pickHit(
+    cssX: number,
+    cssY: number
+  ): Promise<{ ref: ElementRef | null; sample: SurfacePickSample }> {
     const result = this.pickQueue.then(() => this.pickOnce(cssX, cssY));
-    this.pickQueue = result.catch(() => null);
+    this.pickQueue = result.catch(() => ({ ref: null, sample: { hit: null } }));
     return result;
+  }
+
+  private async pickOrbitPivot(cssX: number, cssY: number): Promise<Vec3 | null> {
+    if (!this.canvas || !this.device) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = this.canvas.clientWidth || rect.width;
+    const height = this.canvas.clientHeight || rect.height;
+    if (!width || !height) return null;
+    const ndcX = (2 * cssX) / width - 1;
+    const ndcY = 1 - (2 * cssY) / height;
+    const hit = await this.pickHit(cssX, cssY);
+    return resolveOrbitPivot(
+      this.camera,
+      ndcX,
+      ndcY,
+      hit.sample,
+      this.models.values(),
+      this.sectionPlanes
+    );
   }
 
   setPointerMode(mode: PointerMode): void {
@@ -1413,10 +1438,14 @@ export class WebGpuRenderer implements RendererPort {
   }
 
   /**
-   * Offscreen GPU ID-texture picking at CSS coordinates (cssX, cssY) relative to the canvas.
-   * Returns the picked ElementRef { modelId, expressId }, or null on background.
+   * Offscreen GPU ID-and-depth picking at CSS coordinates (cssX, cssY) relative to the canvas.
+   * Returns the picked ElementRef { modelId, expressId } (or null on background) together with
+   * the Reverse-Z surface depth sample.
    */
-  private async pickOnce(cssX: number, cssY: number): Promise<ElementRef | null> {
+  private async pickOnce(
+    cssX: number,
+    cssY: number
+  ): Promise<{ ref: ElementRef | null; sample: SurfacePickSample }> {
     if (
       this.isDestroyed ||
       this.isPicking ||
@@ -1430,7 +1459,7 @@ export class WebGpuRenderer implements RendererPort {
       !this.depthTextureView ||
       !this.pickReadBuffer
     ) {
-      return null;
+      return { ref: null, sample: { hit: null } };
     }
 
     const rect = this.canvas.getBoundingClientRect();
@@ -1505,22 +1534,24 @@ export class WebGpuRenderer implements RendererPort {
       this.device.queue.submit([encoder.finish()]);
 
       await this.pickReadBuffer.mapAsync(GPUMapMode.READ, 0, 16);
-      const u32 = new Uint32Array(this.pickReadBuffer.getMappedRange(0, 16));
+      const mapped = this.pickReadBuffer.getMappedRange(0, 16);
+      const u32 = new Uint32Array(mapped);
       const modelNum = u32[0];
       const expressId = u32[1];
+      const depth = new Float32Array(mapped)[2];
       this.pickReadBuffer.unmap();
 
       if (modelNum === 0 || expressId === 0) {
-        return null;
+        return { ref: null, sample: { hit: false } };
       }
 
       const modelId = this.numToModelId.get(modelNum);
-      if (!modelId) return null;
+      if (!modelId) return { ref: null, sample: { hit: false } };
 
-      return { modelId, expressId };
+      return { ref: { modelId, expressId }, sample: { hit: true, depth } };
     } catch (err) {
       console.warn('Pick error:', err);
-      return null;
+      return { ref: null, sample: { hit: null } };
     } finally {
       this.isPicking = false;
     }

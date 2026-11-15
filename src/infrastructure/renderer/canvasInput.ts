@@ -15,7 +15,7 @@ export interface CanvasInputHandlers {
   /** The mouse cursor while no button is down; 'grab' if not given. */
   idleCursor?(): string;
   /** Returns the 3D world point under `(cssX, cssY)` to use as the orbit pivot on pointer down. */
-  getOrbitPivot?(cssX: number, cssY: number): Vec3 | null;
+  getOrbitPivot?(cssX: number, cssY: number): Vec3 | null | Promise<Vec3 | null>;
   /** Current navigation mode ('orbit' by default, or 'first-person'). */
   getNavigationMode?(): NavigationMode;
 }
@@ -24,6 +24,13 @@ interface Pair {
   midX: number;
   midY: number;
   separation: number;
+}
+
+interface OrbitGesture {
+  cancelled: boolean;
+  resolved: boolean;
+  pivot: Vec3 | null;
+  moves: Array<[number, number]>;
 }
 
 /**
@@ -40,7 +47,7 @@ export function attachCanvasInput(
   /** Pointers down on the canvas, at their last applied position. */
   const pointers = new Map<number, { x: number; y: number }>();
   let panning = false;
-  let orbitPivot: Vec3 | null = null;
+  let activeOrbit: OrbitGesture | null = null;
   let pressX = 0;
   let pressY = 0;
   let pressButton = 0;
@@ -53,6 +60,22 @@ export function attachCanvasInput(
   let pairFrame = 0;
 
   const isFirstPerson = (): boolean => handlers.getNavigationMode?.() === 'first-person';
+
+  const cancelActiveOrbit = () => {
+    if (activeOrbit) {
+      activeOrbit.cancelled = true;
+      activeOrbit.moves.length = 0;
+      activeOrbit = null;
+    }
+  };
+
+  const applyOrbitDelta = (pivot: Vec3 | null, dx: number, dy: number) => {
+    if (pivot) {
+      camera.orbitAround(pivot, dx, dy);
+    } else {
+      camera.orbit(dx, dy);
+    }
+  };
 
   const pairOf = (): Pair | null => {
     if (pointers.size < 2) return null;
@@ -98,15 +121,40 @@ export function attachCanvasInput(
       panning = e.pointerType !== 'touch' && (e.button === 1 || e.button === 2 || e.shiftKey);
       if (!panning && !isFirstPerson() && handlers.getOrbitPivot) {
         const rect = canvas.getBoundingClientRect();
-        orbitPivot = handlers.getOrbitPivot(e.clientX - rect.left, e.clientY - rect.top);
+        const gesture: OrbitGesture = {
+          cancelled: false,
+          resolved: false,
+          pivot: null,
+          moves: []
+        };
+        activeOrbit = gesture;
+        const syncOrAsync = handlers.getOrbitPivot(e.clientX - rect.left, e.clientY - rect.top);
+        if (syncOrAsync && typeof (syncOrAsync as PromiseLike<Vec3 | null>).then === 'function') {
+          const settle = (pivot: Vec3 | null) => {
+            if (gesture.cancelled) return;
+            gesture.resolved = true;
+            gesture.pivot = pivot;
+            if (gesture.moves.length > 0) {
+              for (const [bx, by] of gesture.moves) {
+                applyOrbitDelta(pivot, bx, by);
+              }
+              gesture.moves.length = 0;
+              handlers.onViewChange();
+            }
+          };
+          (syncOrAsync as PromiseLike<Vec3 | null>).then(settle, () => settle(null));
+        } else {
+          gesture.resolved = true;
+          gesture.pivot = (syncOrAsync as Vec3 | null) ?? null;
+        }
       } else {
-        orbitPivot = null;
+        activeOrbit = null;
       }
       if (e.pointerType === 'mouse') canvas.style.cursor = panning ? 'move' : 'grabbing';
     } else {
       settlePair(true);
       multi = true;
-      orbitPivot = null;
+      cancelActiveOrbit();
     }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     lastPair = pairOf();
@@ -143,14 +191,16 @@ export function attachCanvasInput(
     pointer.y = e.clientY;
     if (panning) {
       camera.pan(dx, dy);
+      handlers.onViewChange();
     } else if (isFirstPerson()) {
       camera.look(dx, dy);
-    } else if (orbitPivot) {
-      camera.orbitAround(orbitPivot, dx, dy);
+      handlers.onViewChange();
+    } else if (activeOrbit && !activeOrbit.resolved) {
+      activeOrbit.moves.push([dx, dy]);
     } else {
-      camera.orbit(dx, dy);
+      applyOrbitDelta(activeOrbit?.pivot ?? null, dx, dy);
+      handlers.onViewChange();
     }
-    handlers.onViewChange();
   };
 
   const release = (e: PointerEvent, completed: boolean) => {
@@ -162,9 +212,14 @@ export function attachCanvasInput(
     if (pointers.size > 0) return;
 
     panning = false;
-    orbitPivot = null;
+    const isClick = completed && wasOnly && !moved && !multi && pressButton === 0;
+    if (!completed || isClick || multi) {
+      cancelActiveOrbit();
+    } else {
+      activeOrbit = null;
+    }
     if (e.pointerType === 'mouse') canvas.style.cursor = idleCursor();
-    if (completed && wasOnly && !moved && !multi && pressButton === 0) {
+    if (isClick) {
       const rect = canvas.getBoundingClientRect();
       handlers.onClick(e.clientX - rect.left, e.clientY - rect.top);
     }
@@ -253,6 +308,7 @@ export function attachCanvasInput(
 
   return () => {
     settlePair(false);
+    cancelActiveOrbit();
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
