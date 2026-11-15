@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync
 import { inflateRawSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launch, connect, sleep } from './cdp.mjs';
+import { launch, connect, sleep, applyMode } from './cdp.mjs';
 
 const [mode = 'gpu', base = 'http://127.0.0.1:5173/', outDir = './out'] = process.argv.slice(2);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -22,7 +22,7 @@ function check(id, ok, detail) {
 const near = (a, b, tol) => Math.abs(a - b) <= tol;
 const vnear = (a, b, tol) => a.every((v, i) => near(v, b[i], tol));
 
-const port = mode === 'gpu' ? 9301 : 9302;
+const port = 9300 + ({ gpu: 1, gl2: 2, none: 3 }[mode] ?? 9);
 const { proc, wsUrl } = await launch({ port, profileDir: path.resolve(outDir, `profile-${mode}`) });
 const cdp = await connect(wsUrl);
 const { send, on, evaluate } = cdp;
@@ -35,11 +35,7 @@ on('Page.javascriptDialogOpening', () => void send('Page.handleJavaScriptDialog'
 await send('Runtime.enable');
 await send('Page.enable');
 await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads, eventsEnabled: true });
-if (mode === 'gl2') {
-  await send('Page.addScriptToEvaluateOnNewDocument', {
-    source: "Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });"
-  });
-}
+await applyMode(send, mode);
 
 const HELPERS = String.raw`
 window.__t = (() => {
@@ -458,6 +454,7 @@ try {
   writeFileSync(path.join(outDir, `results-${mode}.json`), JSON.stringify(results, null, 2));
   const failed = results.filter((r) => !r.ok).length;
   console.log(`\n${mode}: ${results.length - failed}/${results.length} pass`);
+  process.exitCode = failed ? 1 : 0;
   cdp.close();
   proc.kill();
 }

@@ -2,7 +2,7 @@
 // Usage: node glb-check.mjs <gpu|gl2> <baseUrl> <outDir>
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { launch, connect, sleep } from './cdp.mjs';
+import { launch, connect, sleep, applyMode } from './cdp.mjs';
 
 const [mode, base, outDir] = process.argv.slice(2);
 mkdirSync(outDir, { recursive: true });
@@ -10,7 +10,7 @@ const results = [];
 const check = (id, ok, detail) => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${id} ${JSON.stringify(detail)}`); };
 const near = (a, b, t) => Math.abs(a - b) <= t;
 
-const { proc, wsUrl } = await launch({ port: mode === 'gpu' ? 9321 : 9322, profileDir: path.resolve(outDir, `profile-glb-${mode}`) });
+const { proc, wsUrl } = await launch({ port: 9320 + ({ gpu: 1, gl2: 2, none: 3 }[mode] ?? 9), profileDir: path.resolve(outDir, `profile-glb-${mode}`) });
 const cdp = await connect(wsUrl);
 const errors = [];
 cdp.on('Runtime.consoleAPICalled', (p) => p.type === 'error' && errors.push(p.args.map((a) => a.value ?? a.description).join(' ')));
@@ -18,7 +18,7 @@ cdp.on('Runtime.exceptionThrown', (p) => errors.push(p.exceptionDetails?.excepti
 await cdp.send('Runtime.enable');
 await cdp.send('Page.enable');
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: path.resolve(outDir, `dl-glb-${mode}`) });
-if (mode === 'gl2') await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: "Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });" });
+await applyMode(cdp.send, mode);
 const ev = cdp.evaluate;
 async function waitFor(expr, timeout = 30000) { const t0 = Date.now(); while (Date.now() - t0 < timeout) { try { const v = await ev(expr); if (v) return v; } catch {} await sleep(100); } throw new Error('timeout ' + expr); }
 
@@ -97,6 +97,7 @@ try {
 } finally {
   check('C0 console errors', errors.length === 0, errors.slice(0, 3));
   console.log(`${mode}: ${results.filter(Boolean).length}/${results.length} pass`);
+  process.exitCode = results.every(Boolean) ? 0 : 1;
   cdp.close();
   proc.kill();
 }

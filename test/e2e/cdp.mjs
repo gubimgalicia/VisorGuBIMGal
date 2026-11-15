@@ -1,13 +1,20 @@
 // Minimal CDP client over Node's global WebSocket, plus Chrome launch helpers.
+// CHROME_PATH overrides the browser; E2E_CHROME_FLAGS adds flags (space-separated), e.g. on a
+// Linux CI runner without a GPU: --no-sandbox --enable-unsafe-swiftshader --use-angle=swiftshader
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const DEFAULT_CHROME = {
+  win32: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  linux: '/usr/bin/google-chrome',
+  darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function launch({ port, profileDir, gpu = true }) {
+export async function launch({ port, profileDir }) {
   rmSync(profileDir, { recursive: true, force: true });
   mkdirSync(profileDir, { recursive: true });
+  const chrome = process.env.CHROME_PATH || DEFAULT_CHROME[process.platform];
   const args = [
     '--headless=new',
     `--remote-debugging-port=${port}`,
@@ -15,15 +22,15 @@ export async function launch({ port, profileDir, gpu = true }) {
     '--no-first-run',
     '--no-default-browser-check',
     '--window-size=1400,900',
+    '--force-device-scale-factor=1',
     '--enable-unsafe-webgpu',
-    '--enable-features=Vulkan',
-    '--use-angle=d3d11',
     '--ignore-gpu-blocklist',
+    ...(process.platform === 'win32' ? ['--use-angle=d3d11'] : []),
+    ...(process.env.E2E_CHROME_FLAGS ?? '').split(/\s+/).filter(Boolean),
     'about:blank'
   ];
-  if (!gpu) args.push('--disable-gpu');
-  const proc = spawn(CHROME, args, { stdio: 'ignore' });
-  for (let i = 0; i < 100; i++) {
+  const proc = spawn(chrome, args, { stdio: 'ignore' });
+  for (let i = 0; i < 150; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/list`);
       const list = await res.json();
@@ -33,7 +40,22 @@ export async function launch({ port, profileDir, gpu = true }) {
     await sleep(100);
   }
   proc.kill();
-  throw new Error('Chrome did not start');
+  throw new Error(`Chrome did not start: ${chrome}`);
+}
+
+/** gpu: as the browser is. gl2: no navigator.gpu. none: WebGPU present but no adapter. */
+export async function applyMode(send, mode) {
+  if (mode === 'gl2') {
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: "Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });"
+    });
+  } else if (mode === 'none') {
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: 'if (navigator.gpu) navigator.gpu.requestAdapter = async () => null;'
+    });
+  } else if (mode !== 'gpu') {
+    throw new Error(`unknown mode ${mode}`);
+  }
 }
 
 export async function connect(wsUrl) {

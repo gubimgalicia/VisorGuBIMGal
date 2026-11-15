@@ -1,26 +1,45 @@
-# Browser checks (headless Chrome over CDP)
+# Browser tests (headless Chrome over CDP)
 
-Keep the output folder outside the repo: Chrome profiles inside it crash the Vite watcher.
-
-Needs Google Chrome at `C:/Program Files/Google/Chrome/Application/chrome.exe` and Node 22 or later
-(global `WebSocket`). Expected values come from the IFC text and geometry, not from the app.
+Backlog D1. Expected values come from the IFC text, from formulas in the tests and from geometry,
+never from the app's own code paths.
 
 ```sh
-npx vite --port 5173 --strictPort --host 127.0.0.1          # dev server: exposes the renderer hooks
-node test/e2e/e2e.mjs gpu http://127.0.0.1:5173/ "$TEMP/gubim-e2e"    # WebGPU
-node test/e2e/e2e.mjs gl2 http://127.0.0.1:5173/ "$TEMP/gubim-e2e"    # WebGL2 (navigator.gpu hidden)
-
-npm run build && npx vite preview --port 4173 --strictPort --host 127.0.0.1
-node test/e2e/smoke.mjs gpu  "http://127.0.0.1:4173/VisorGuBIMGal/?model=/VisorGuBIMGal/samples/ManySimpleWalls.ifc" "$TEMP/gubim-e2e"
-node test/e2e/smoke.mjs gl2  "<same url>" "$TEMP/gubim-e2e"
-node test/e2e/smoke.mjs none "<same url>" "$TEMP/gubim-e2e"           # WebGPU without an adapter
+npm run test:e2e        # starts Vite, runs every suite on WebGPU, WebGL2 and WebGPU without an adapter
+npm test                # unit tests, then the browser tests
 ```
 
-`e2e.mjs` covers T-135 (view cube, ortho, saved view projection, orbit pivot, zoom to selection,
-first person), T-136 (BCF topic, viewpoint with snapshot, restore, 3.0 export read back with an
-independent unzip, re-import) and T-137 (face pick, 3D clip on both sides, plane cut equal to the
-plan cut, DXF and SVG downloads, vertical face elevation with the door notch: 20.268 m).
+| Variable | Meaning | Default |
+|---|---|---|
+| `E2E_MODES` | Backends: `gpu`, `gl2` (no `navigator.gpu`), `none` (WebGPU with no adapter) | `gpu,gl2,none` |
+| `E2E_SUITES` | `tc`, `e2e`, `glb` | all |
+| `E2E_OUT` | Output folder. Must be outside the repo: Chrome profiles inside it crash the Vite watcher | `<tmp>/gubim-e2e` |
+| `E2E_PORT` | Vite port; the runner stops if it is taken | `5173` |
+| `CHROME_PATH` | Chrome binary | per platform |
+| `E2E_CHROME_FLAGS` | Extra Chrome flags, e.g. SwiftShader on a machine without a GPU | none |
+| `E2E_UPDATE_REFS=1` | Write missing screenshot references into `ref/` | off |
+| `E2E_REQUIRE_REFS=1` | A missing reference fails instead of being reported as NEW | off |
 
-`glb-check.mjs` (T-138): exports SimpleWall to GLB, reads it back with its own parser (header,
-chunks, alignment, GlobalId node names, the wall box after the Y-up round trip to 1 mm), then
-with a class hidden and isolated: `node test/e2e/glb-check.mjs gpu http://127.0.0.1:5173/ "$TEMP/gubim-e2e"`.
+Needs Google Chrome and Node 22 or later (global `WebSocket`).
+
+## Suites
+
+- `tc.mjs`: acceptance tests TC-001..008 of `docs/01`.
+  - TC-001: open a local file through the file input; the backend badge and renderer match the mode.
+  - TC-002: SimpleWall and ManySimpleWalls both contain `#219`, a wall with the same GlobalId but a different name. A click on each selects that model's wall and the panel shows that file's name, never the other.
+  - TC-003: hide and show by pick. Removing a model frees exactly its buffers; with every model removed, GPU memory is back to the empty scene. WebGPU's shared tables keep their grown capacity while any model is open, by design.
+  - TC-004: GlobalId, name, class and every property set related to the wall in the STEP file.
+  - TC-005: plan and section SVG identical when generated twice.
+  - TC-006: DXF R12 (`AC1009`) and SVG downloads.
+  - TC-007: the Galicia fixture's marker against an inverse UTM 29N written here (Snyder 1987), to 2e-5 degrees, and the PNOA layer present.
+  - TC-008: every request is logged. None carries a body, and the only external requests are GETs for OpenStreetMap and IGN map tiles.
+  - Screenshots of the 3D view and the plan preview, with overlays hidden, against `ref/<platform>-<mode>/`. More than 0.5 % of pixels off by more than 24 fails. A 3° change of the default iso angle fails at 1.9 %.
+- `e2e.mjs`: T-135 navigation, T-136 BCF, T-137 face cut.
+- `glb-check.mjs`: T-138 GLB export, read back with its own parser.
+- `smoke.mjs`: the production build (`vite preview`) loads a sample: `node test/e2e/smoke.mjs gpu "http://127.0.0.1:4173/VisorGuBIMGal/?model=/VisorGuBIMGal/samples/ManySimpleWalls.ifc" "$TEMP/gubim-e2e"`.
+
+## CI
+
+The `browser` job in `.github/workflows/ci.yml` runs `gl2` and `none` on SwiftShader as a required
+step, and `gpu` on SwiftShader as a step that does not block yet. Linux has no references in `ref/`
+until the first run: its screenshots come back as NEW in the `e2e-output` artifact
+(`new-refs/linux-*`), to be checked by eye and committed.
