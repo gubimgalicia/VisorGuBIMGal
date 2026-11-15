@@ -1,7 +1,7 @@
 // T-148: a plan's default projection depth, down to the storey the cut stands in.
 // node --experimental-strip-types test/t148-plan-depth-test.mjs
 import assert from 'node:assert/strict';
-import { defaultPlanDepth, FALLBACK_PLAN_DEPTH, FLOOR_MARGIN } from '../src/ui/viewer/planDepth.ts';
+import { defaultPlanDepth, planRange, FALLBACK_PLAN_DEPTH, FLOOR_MARGIN } from '../src/ui/viewer/planDepth.ts';
 
 let passed = 0;
 const check = (name, fn) => { fn(); passed++; console.log(`PASS ${name}`); };
@@ -45,4 +45,22 @@ check('storeys of several models count together, and only storeys count', () => 
   assert.ok(near(got.depth, 1.0 + FLOOR_MARGIN));
 });
 
-console.log(`\nt148-plan-depth-test: ${passed}/5 pass`);
+check('a view range from a typed bottom, and its errors', () => {
+  const ok = planRange(21.0, { kind: 'height', height: 18.5 }, [offsetBuilding]);
+  assert.deepEqual(ok, { depth: 2.5, bottom: 18.5, storey: null, error: null });
+  assert.match(planRange(21.0, { kind: 'height', height: 21.0 }, []).error, /por debajo del corte/);
+  assert.match(planRange(21.0, { kind: 'height', height: 22.0 }, []).error, /por debajo del corte/);
+  assert.match(planRange(21.0, { kind: 'height', height: Number.NaN }, []).error, /no es un número/);
+  assert.match(planRange(Number.NaN, { kind: 'none' }, []).error, /no es un número/);
+  assert.deepEqual(planRange(21.0, { kind: 'none' }, [offsetBuilding]), { bottom: null, storey: null, error: null });
+});
+
+check('the storey bottom is the default depth, as an absolute height', () => {
+  const got = planRange(18.6, { kind: 'storey' }, [offsetBuilding]);
+  assert.equal(got.storey.name, 'A');
+  assert.ok(near(got.depth, 18.6 - 17.4 + FLOOR_MARGIN));
+  assert.ok(near(got.bottom, 17.4 - FLOOR_MARGIN));
+  assert.equal(got.error, null);
+});
+
+console.log(`\nt148-plan-depth-test: ${passed}/7 pass`);

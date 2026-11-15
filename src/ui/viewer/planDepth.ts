@@ -25,6 +25,38 @@ export function storeyLevels(trees: ReadonlyArray<SpatialTree | null | undefined
   return out;
 }
 
+/** Where a plan's view range ends below the cut. */
+export type PlanBottom =
+  | { kind: 'storey' } // The floor of the storey the cut stands in (defaultPlanDepth).
+  | { kind: 'height'; height: number } // An absolute height, metres, model coordinates.
+  | { kind: 'none' }; // Everything below the cut.
+
+export interface PlanRange {
+  /** Metres below the cut, or undefined for no limit. */
+  depth?: number;
+  /** The bottom's absolute height, or null with no limit. */
+  bottom: number | null;
+  /** The storey the default bottom came from, if it did. */
+  storey: { name: string; level: number } | null;
+  /** Why the range cannot be drawn, in Spanish for the panel; null when it can. */
+  error: string | null;
+}
+
+/** A plan's view range from its top (the cut) and its bottom. */
+export function planRange(top: number, bottom: PlanBottom, trees: ReadonlyArray<SpatialTree | null | undefined>): PlanRange {
+  if (!Number.isFinite(top)) return { bottom: null, storey: null, error: 'La cota del corte no es un número.' };
+  if (bottom.kind === 'none') return { bottom: null, storey: null, error: null };
+  if (bottom.kind === 'height') {
+    if (!Number.isFinite(bottom.height)) return { bottom: null, storey: null, error: 'La cota del fondo no es un número.' };
+    if (bottom.height >= top) {
+      return { bottom: bottom.height, storey: null, error: 'El fondo tiene que quedar por debajo del corte.' };
+    }
+    return { depth: top - bottom.height, bottom: bottom.height, storey: null, error: null };
+  }
+  const { depth, storey } = defaultPlanDepth(top, trees);
+  return { depth, bottom: top - depth, storey, error: null };
+}
+
 /**
  * A plan's default projection depth, like a CAD view range: from the cut down to the level of
  * the storey the cut stands in (the highest storey level at or below the cut), plus

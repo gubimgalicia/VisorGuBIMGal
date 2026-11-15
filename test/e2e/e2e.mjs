@@ -507,6 +507,50 @@ try {
     const wallLayer = Object.entries(vd.byLayer).find(([k]) => /wall/i.test(k));
     check('F5b elevation sheet 4 x 4 m, wall ring 20.268 m', near(w, 4, 1e-6) && near(h, 4, 1e-6) && wallLayer && near(wallLayer[1], 20.268, 1e-6), { w, h, byLayer: vd.byLayer });
     await shot('wall-elevation');
+
+    // ---- T-148: a plan's view range, top (the cut) and bottom ----
+    const setValue = (selector, value) => evaluate(`__t.setInput(document.querySelector('${selector}'), ${JSON.stringify(String(value))}), __t.frames(2)`);
+    const topInput = `[...document.querySelectorAll('.dxf-cut-preset ~ * input, input.select')].find((i) => i.closest('div') && i.closest('div').textContent.includes('ARRIBA'))`;
+    await setValue('.dxf-cut-preset', 'plan');
+    await evaluate(`__t.setInput(${topInput}, '2'), __t.frames(2)`);
+    // V1: a typed bottom reaches the kernel as top minus bottom.
+    await setValue('.dxf-bottom-mode', 'height');
+    await setValue('.dxf-bottom', '0.5');
+    const summaryV1 = await evaluate(`document.querySelector('.dxf-range-summary').textContent`);
+    await evaluate(`window.__lastDrawing = null; document.querySelector('.dxf-generate-btn').click()`);
+    await waitFor(`window.__lastDrawing && window.__lastDrawing.cut.kind === 'plan'`, 20000, 'plan with a range');
+    const sentV1 = (await evaluate('window.__lastDrawing')).cut;
+    check('V1 typed bottom sends depth = top - bottom', sentV1.elevation === 2 && near(sentV1.depth, 1.5, 1e-12) && /de 2\.00 m a 0\.50 m \(1\.50 m\)/.test(summaryV1), { sentV1, summaryV1 });
+    // V2: a bottom at or above the top is refused before the kernel is asked.
+    await setValue('.dxf-bottom', '2.5');
+    const summaryV2 = await evaluate(`document.querySelector('.dxf-range-summary').textContent`);
+    await evaluate(`window.__lastDrawing = null; document.querySelector('.dxf-generate-btn').click()`);
+    await sleep(800);
+    const sentV2 = await evaluate('window.__lastDrawing');
+    check('V2 a bottom above the top is refused', sentV2 === null && /por debajo del corte/.test(summaryV2), { summaryV2, sentV2 });
+    // V3: the default bottom is the floor of the storey the cut stands in.
+    await setValue('.dxf-bottom-mode', 'storey');
+    const level = await evaluate(`(async () => { const t = await __t.K().getSpatialTree(${MID}); const out = []; const walk = (n) => { if (n.type === 'IfcBuildingStorey' && typeof n.level === 'number') out.push(n.level); n.children.forEach(walk); }; walk(t.root); return out.filter((l) => l <= 2).sort((a, b) => b - a)[0] ?? null; })()`);
+    await evaluate(`window.__lastDrawing = null; document.querySelector('.dxf-generate-btn').click()`);
+    await waitFor(`window.__lastDrawing && window.__lastDrawing.cut.kind === 'plan'`, 20000, 'plan with the storey range');
+    const sentV3 = (await evaluate('window.__lastDrawing')).cut;
+    check('V3 default bottom is the storey floor', level !== null && near(sentV3.depth, 2 - level + 0.05, 1e-9), { level, sentV3 });
+    // V4: the top picked on the wall's top face, seen from above.
+    await evaluate(`__t.R().fitToView(), __t.R().setViewPreset('top'), __t.frames(3)`);
+    await evaluate(`document.querySelector('.dxf-pick-top').click(), __t.frames(2)`);
+    const topPick = await evaluate(`__t.R().project([${cx}, ${cy}, ${box.max[2]}])`);
+    await canvasClick(topPick.x, topPick.y);
+    await waitFor(`Math.abs(parseFloat(${topInput}.value) - ${box.max[2]}) < 1e-3`, 5000, 'top picked').catch(() => null);
+    const pickedTop = await evaluate(`parseFloat(${topInput}.value)`);
+    check('V4 top picked on the model', near(pickedTop, box.max[2], 1e-3), { pickedTop, wallTop: box.max[2] });
+    // V5: the range shown in 3D as a section box from the bottom to the top.
+    await setValue('.dxf-bottom-mode', 'height');
+    await setValue('.dxf-bottom', '1');
+    await evaluate(`document.querySelector('.dxf-show-range').click(), __t.frames(3)`);
+    const planes = await evaluate(`JSON.parse(JSON.stringify(window.__gubim_dev__.activeRenderer.sectionPlanes ?? []))`);
+    const up = planes.find((p) => near(p.normal[2], 1, 1e-9)), down = planes.find((p) => near(p.normal[2], -1, 1e-9));
+    check('V5 the range shown in 3D clips from the bottom to the top', planes.length === 6 && up && down && near(up.offset, pickedTop, 1e-9) && near(down.offset, -1, 1e-9), { planes: planes.length, up, down });
+    await setValue('.section-mode', 'off');
   }
 } catch (err) {
   check('HARNESS', false, String(err?.stack ?? err));
