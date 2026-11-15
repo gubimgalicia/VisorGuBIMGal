@@ -39,6 +39,9 @@ on('Log.entryAdded', (p) => {
   let local = true;
   try { const h = new URL(e.url ?? '').hostname; local = !h || h === '127.0.0.1' || h === 'localhost'; } catch {}
   if (e.source === 'network' && (!local || /favicon\.ico$/.test(e.url ?? ''))) return;
+  // A GL driver's performance note (Mesa on CI: «GPU stall due to ReadPixels» from the 1-pixel
+  // pick read) is advice, not an error. Driver messages of any other type still fail.
+  if (e.level === 'warning' && /GL Driver Message \([^,]*, Performance,/.test(e.text)) return;
   consoleErrors.push(`log ${e.level}: ${e.text.slice(0, 300)}${e.url ? ' ' + e.url : ''}`);
 });
 await send('Log.enable');
@@ -414,7 +417,7 @@ try {
     const afterDelete = await evaluate(`document.querySelectorAll('.bcf-topic-card').length`);
     const { root } = await send('DOM.getDocument');
     const { nodeId } = await send('DOM.querySelector', { nodeId: root.nodeId, selector: '.bcf-file-input' });
-    await send('DOM.setFileInputFiles', { nodeId, files: [bcfPath.replace(/\//g, '\\')] });
+    await send('DOM.setFileInputFiles', { nodeId, files: [path.resolve(bcfPath)] });
     await waitFor(`document.querySelectorAll('.bcf-topic-card').length === 1`, 8000, 'bcf import');
     const title = await evaluate(`document.querySelector('.bcf-topic-title')?.textContent ?? ''`);
     check('B8 delete then re-import', afterDelete === 0 && title.includes('Prueba E2E muro'), { afterDelete, title });

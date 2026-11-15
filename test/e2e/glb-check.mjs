@@ -22,6 +22,9 @@ cdp.on('Log.entryAdded', (p) => {
   let local = true;
   try { const h = new URL(e.url ?? '').hostname; local = !h || h === '127.0.0.1' || h === 'localhost'; } catch {}
   if (e.source === 'network' && (!local || /favicon\.ico$/.test(e.url ?? ''))) return;
+  // A GL driver's performance note (Mesa on CI: «GPU stall due to ReadPixels» from the 1-pixel
+  // pick read) is advice, not an error. Driver messages of any other type still fail.
+  if (e.level === 'warning' && /GL Driver Message \([^,]*, Performance,/.test(e.text)) return;
   errors.push(`log ${e.level}: ${e.text.slice(0, 300)}${e.url ? ' ' + e.url : ''}`);
 });
 await cdp.send('Log.enable');
