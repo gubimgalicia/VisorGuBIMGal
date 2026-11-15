@@ -37,6 +37,10 @@ La documentación técnica completa, arquitectura y análisis de riesgos se orga
 - [x] **Fase 3 (GIS):** Integración con Leaflet y sincronización de coordenadas.
 - [ ] **Fase 4 (Robustez y CI/CD):** Persistencia en IndexedDB, accesibilidad y despliegue continuo.
 
+## Pruebas
+
+- Exportación glTF/GLB (T-138): `node test/t138-gltf-test.mjs`
+
 ## Licencia
 
 Código abierto bajo licencia MIT (o la que determine la organización GuBIM Galicia).
