@@ -1,6 +1,6 @@
 # 05 — Contrato del Kernel y del Renderizador
 
-**Estado:** v1, revisión 8: la revisión 7 con la bandera `Closed` de las mallas cerradas (sección 3, T-118). La revisión 7 era la revisión 6 con la caja de cada lote (`box`, sección 3, T-116). La revisión 6 era la revisión 5, que recogía la revisión de DeepSeek a la revisión 4, con dos aclaraciones de redacción de la sección 6 tras la revisión de Gemini. `CONTRACT_VERSION` sigue en 1 porque ninguna versión se ha publicado aún. La sección 7 lista lo que el código aún no cumple.  
+**Estado:** v1, revisión 9: la revisión 8 con la cota `level` de cada planta en el árbol espacial (sección 4, T-148; aceptada por Gemini en T-149). La revisión 8 era la revisión 7 con la bandera `Closed` de las mallas cerradas (sección 3, T-118). La revisión 7 era la revisión 6 con la caja de cada lote (`box`, sección 3, T-116). La revisión 6 era la revisión 5, que recogía la revisión de DeepSeek a la revisión 4, con dos aclaraciones de redacción de la sección 6 tras la revisión de Gemini. `CONTRACT_VERSION` sigue en 1 porque ninguna versión se ha publicado aún. La sección 7 lista lo que el código aún no cumple.  
 **Propósito:** Fuente única de los límites entre kernel, renderizador y aplicación.  
 **Código normativo:** [`src/domain/kernel/`](../src/domain/kernel/), [`DrawingTypes.ts`](../src/domain/drawings/DrawingTypes.ts) y [`ModelRecord.ts`](../src/domain/models/ModelRecord.ts). Si este documento y los tipos discrepan, es un error que debe corregirse.
 
