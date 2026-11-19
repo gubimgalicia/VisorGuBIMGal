@@ -203,6 +203,8 @@ struct Accepted {
 struct ShapeEntry {
     shape_id: u32,
     centre: DVec3,
+    /// Usable triangles of the shape: a copy is an instance only if it keeps as many.
+    triangles: usize,
     /// Until the first batch that uses it takes it.
     pending: Option<ShapeData>,
     q16: bool,
@@ -223,22 +225,25 @@ pub(crate) struct ShapeRegistry {
 
 impl ShapeRegistry {
     /// Whether a mesh may be drawn as an instance of `key`'s shape, building the shape the first
-    /// time it is seen. `None` after that if it cannot be: too few uses, or no usable triangle.
-    fn register(&mut self, key: u32, shape: &Mesh, closed: bool) -> bool {
+    /// time it is seen: not with too few uses or no usable triangle, and not when the placed copy
+    /// keeps a different number of triangles than the shape (`triangles`), as a placement can
+    /// turn a triangle degenerate in the shape into one that shows.
+    fn register(&mut self, key: u32, shape: &Mesh, closed: bool, triangles: usize) -> bool {
         if self.uses.get(&key).copied().unwrap_or(0) < MIN_INSTANCE_USES {
             return false;
         }
         if let Some(entry) = self.entries.get(&key) {
-            return entry.is_some();
+            return entry.as_ref().is_some_and(|entry| entry.triangles == triangles);
         }
         let entry = shape_data(shape).map(|(mut data, centre)| {
             self.next_id += 1;
             data.shape_id = self.next_id;
             data.closed = closed;
             let steps = crate::wire::quant_steps(data.min, data.max);
-            ShapeEntry { shape_id: data.shape_id, centre, q16: false, steps, closed, min: data.min, max: data.max, pending: Some(data) }
+            let shape_triangles = data.indices.len() / 3;
+            ShapeEntry { shape_id: data.shape_id, centre, q16: false, steps, closed, min: data.min, max: data.max, triangles: shape_triangles, pending: Some(data) }
         });
-        let usable = entry.is_some();
+        let usable = entry.as_ref().is_some_and(|entry| entry.triangles == triangles);
         self.entries.insert(key, entry);
         usable
     }
@@ -525,7 +530,7 @@ fn prepare(geometry: ElementGeometry, evaluator: &mut ModelEvaluator<'_>, shapes
                     && f32_determinant(&transform) >= f64::from(f32::MIN_POSITIVE);
                 if usable {
                     let closed = evaluator.shape_closed(instance.key).unwrap_or(false);
-                    if shapes.register(instance.key, &instance.shape, closed) {
+                    if shapes.register(instance.key, &instance.shape, closed, part.indices.len() / 3) {
                         part.instance = Some(PartInstance { key: instance.key, transform });
                     }
                 }

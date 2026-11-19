@@ -89,12 +89,15 @@ function compareElement(a, b, worst) {
       worst.slivers = (worst.slivers ?? 0) + 1;
     }
     // Each side may be off by its own quantisation error, so both count.
-    const tolerance = TOL + Math.max(0, ...ra.map((r) => r.tolerance)) + Math.max(0, ...rb.map((r) => r.tolerance));
+    // f32 positions relative to a batch origin round by up to half an ulp of their size, and an
+    // instance's matrix product a few more: allow 4 ulps of the farthest coordinate per side.
+    const rounding = (records) => Math.max(0, ...records.map((r) => r.extent ?? 0)) * 4 * 2 ** -24;
+    const tolerance = TOL + rounding(ra) + rounding(rb) + Math.max(0, ...ra.map((r) => r.tolerance)) + Math.max(0, ...rb.map((r) => r.tolerance));
     // Per axis too: rounding moves each coordinate by at most half that axis's step (docs/05).
     // Instances rotate their shape's axes, so they have no per-axis bound and fall back to the distance.
     const axisOf = (records) => [0, 1, 2].map((a) => Math.max(0, ...records.map((r) => (r.axisTolerance ? r.axisTolerance[a] : r.tolerance))));
     const [axa, axb] = [axisOf(ra), axisOf(rb)];
-    const axisTolerance = [0, 1, 2].map((a) => TOL + axa[a] + axb[a]);
+    const axisTolerance = [0, 1, 2].map((a) => TOL + rounding(ra) + rounding(rb) + axa[a] + axb[a]);
     const flat = (records) => records.map((r) => ({ t: r.triangles, n: r.normals }));
     const result =
       compareTriangles(flat(ra), flat(rb), tolerance, axisTolerance, false) ??

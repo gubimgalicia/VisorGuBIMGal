@@ -92,7 +92,8 @@ export function expandBatch(batch, shapes, emit) {
         normals[3 * k + axis] = nor[3 * v + axis];
       }
     }
-    emit({ expressId, rgba, flags, triangles, normals, tolerance: quantError(batch), axisTolerance: halfSteps(batch) });
+    const extent = maxAbs(pos);
+    emit({ expressId, rgba, flags, triangles, normals, tolerance: quantError(batch), axisTolerance: halfSteps(batch), extent });
   }
   const instances = batch.instanceTable ?? new Uint32Array(0);
   for (let i = 0; i < instances.length / INSTANCE_WORDS; i++) {
@@ -118,8 +119,17 @@ export function expandBatch(batch, shapes, emit) {
     }
     // The shape's quantisation error, stretched by the longest column of the matrix.
     const stretch = Math.max(...[0, 3, 6].map((c) => Math.hypot(m[c], m[c + 1], m[c + 2])));
-    emit({ expressId, rgba, flags, triangles, normals, tolerance: quantError(shape) * stretch });
+    let extent = 0;
+    for (let k = 0; k < triangles.length; k++) extent = Math.max(extent, Math.abs(triangles[k] - origin[k % 3]));
+    emit({ expressId, rgba, flags, triangles, normals, tolerance: quantError(shape) * stretch, extent });
   }
+}
+
+/** The largest coordinate magnitude in a batch's own positions, relative to its origin. */
+function maxAbs(values) {
+  let most = 0;
+  for (let i = 0; i < values.length; i++) most = Math.max(most, Math.abs(values[i]));
+  return most;
 }
 
 /** Half the 16-bit step on each axis, the most rounding moves a coordinate; zeros for f32. */
