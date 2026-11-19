@@ -1,6 +1,6 @@
 # 09 — Propuesta: instancias en GPU (A13) y compresión de vértices (A11)
 
-**Estado:** propuesta, revisión 4 (2026-11-19), de Claude. Las revisiones 1, 2 y 3 recogieron de Gemini sendos ACK WITH CHANGES: ocho hallazgos en T-147, cuatro en T-150, y un hallazgo más cuatro notas menores en T-151. Esta revisión incorpora todo; la sección 8 dice dónde queda cada punto. Nick ya decidió las preguntas de §7. Cambia el contrato (`docs/05` secciones 3 y 6, `GeometryBatch.ts`, `CONTRACT_VERSION`), así que necesita el ack final de Gemini a esta revisión y la aprobación de Nick antes de construir nada (R4). Cuando se apruebe, el texto normativo pasa a `docs/05` y este archivo queda como registro de la decisión.
+**Estado:** propuesta, revisión 4 (2026-11-19), de Claude. Las revisiones 1, 2 y 3 recogieron de Gemini sendos ACK WITH CHANGES: ocho hallazgos en T-147, cuatro en T-150, y un hallazgo más cuatro notas menores en T-151. Esta revisión incorpora todo; la sección 8 dice dónde queda cada punto. Nick ya decidió las preguntas de §7. Cambia el contrato (`docs/05` secciones 3 y 6, `GeometryBatch.ts`, `CONTRACT_VERSION`), así que necesitaba el ack final de Gemini a esta revisión, que dio en T-152 (2026-11-19), y necesita aún la aprobación de Nick antes de construir nada (R4). Cuando se apruebe, el texto normativo pasa a `docs/05` y este archivo queda como registro de la decisión.
 
 ## 1. Qué se midió
 
@@ -112,7 +112,8 @@ Hoy `Closed` se evalúa en cada copia ya colocada. Si el redondeo en `f64` de un
   - Los datos por instancia (matriz, matriz normal e índice de registro) van en un búfer de almacenamiento por lote, en un `@group(1)` propio de los pipelines instanciados, con su `GPUPipelineLayout`. Ese layout comparte el `GPUBindGroupLayout` de `@group(0)`, así que `@group(0)` no cambia entre lotes normales e instanciados. Se indexa con `instance_index` desde `firstInstance` = inicio del rango. Los pipelines normales no cambian de layout.
   - **El índice de lote no va en la instancia.** `batchIdx` es la posición plana del lote en `batches[]` recorriendo todos los modelos, y se recalcula en cada fotograma (`WebGpuRenderer.ts:1279-1352`). Cambia cuando se quita un modelo y cuando los lotes de dos modelos llegan intercalados al cargar. Si se grabara en cada instancia al subir el lote, las instancias de otro modelo leerían el desplazamiento de cámara y el `recordBase` de otro lote, o se saldrían del búfer.
     - Por eso el búfer de instancias del lote empieza con una cabecera de 16 bytes cuyo primer `u32` es el `batchIdx`, seguida de las instancias. El sombreador lee `batches[cabecera.batchIdx]`.
-    - El renderizador guarda en cada lote el último valor escrito. Cada vez que recorre los lotes, para dibujar o para seleccionar, escribe esos 4 bytes con `writeBuffer` solo si el valor cambió.
+    - El renderizador guarda en cada lote el último valor escrito, y escribe esos 4 bytes con `writeBuffer` solo si el valor cambió. Lo hace en un único sitio, `updateGpuSceneTables()`, que ya recorre todos los lotes de todos los modelos, sin descarte por vista, antes de dibujar (`renderFrame`) y antes de seleccionar (`pickOnce`). Así no se repite la comprobación en los bucles opaco, transparente, fantasma y de selección (T-152).
+    - En WGSL, la cabecera es `batchIdx: u32` con relleno de tres `u32` (explícito o implícito), **nunca** `vec3<u32>`. Como `vec3<u32>` se alinea a 16, movería `instances` al byte 32. Con la instancia de §2 (3 `vec4<f32>` de filas, 3 `vec3<f32>` de matriz normal y un `u32` de registro), la instancia ocupa 96 bytes y `instances[0]` empieza en el byte 16 (T-152).
     - `writeBuffer` se ejecuta antes que cualquier `submit` posterior, así que todas las pasadas de un fotograma leen el índice de ese fotograma. Normalmente no se escribe nada: el índice solo cambia al quitar o añadir lotes.
     - Los lotes normales no cambian: siguen recibiendo el lote en `firstInstance`, con una sola instancia.
   - La rejilla de la forma (`shape.box`) va en el mismo `@group(1)`, en un uniforme por forma. Hay un `GPUBindGroup` por par (lote, forma) que el lote usa, y las formas `f32` reciben un uniforme de relleno con el mismo layout.
@@ -249,6 +250,15 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 3. **`MIN_INSTANCE_USES` = 2**, confirmado.
 
 ## 8. Cambios respecto a las revisiones anteriores
+
+### Revisión 4: ACK de Gemini (T-152, 2026-11-19)
+
+Gemini dio **ACK** a la revisión 4, sin hallazgos bloqueantes, y por resueltos todos los anteriores (T-147, T-150 y T-151). Dejó dos notas de implementación, que Claude comprobó en el código y añadió a §2 sin cambiar el diseño:
+
+- la cabecera de `batchIdx` se actualiza solo en `updateGpuSceneTables()` (`WebGpuRenderer.ts:1252` antes de dibujar, `:1473` antes de seleccionar);
+- relleno de la cabecera en WGSL con `u32`, no con `vec3<u32>`.
+
+Dejó también una alternativa sin adoptar: un hueco estable por lote, con lista libre. Evitaría reescribir la cabecera, a cambio de dejar huecos de 48 bytes en `batchGpuBuffer`. No se adopta: la cabecera solo se reescribe cuando cambian los lotes, y la tabla de lotes sigue siendo densa.
 
 ### Revisión 3 → 4 (T-151)
 
