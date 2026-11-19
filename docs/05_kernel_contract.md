@@ -1,6 +1,6 @@
 # 05 — Contrato del Kernel y del Renderizador
 
-**Estado:** v1, revisión 9: la revisión 8 con la cota `level` de cada planta en el árbol espacial (sección 4, T-148; aceptada por Gemini en T-149). La revisión 8 era la revisión 7 con la bandera `Closed` de las mallas cerradas (sección 3, T-118). La revisión 7 era la revisión 6 con la caja de cada lote (`box`, sección 3, T-116). La revisión 6 era la revisión 5, que recogía la revisión de DeepSeek a la revisión 4, con dos aclaraciones de redacción de la sección 6 tras la revisión de Gemini. `CONTRACT_VERSION` sigue en 1 porque ninguna versión se ha publicado aún. La sección 7 lista lo que el código aún no cumple.  
+**Estado:** v2, revisión 10: `CONTRACT_VERSION` 2, con vértices comprimidos (A11) y formas compartidas por instancias (A13) en los lotes (secciones 3 y 6), según `docs/09` revisión 4, aceptada por Gemini en T-152 y aprobada por Nick el 2026-11-19. A11 está construida (T-153); A13 está en la sección 7 como conformidad pendiente. La revisión 9 era la revisión 8 con la cota `level` de cada planta en el árbol espacial (sección 4, T-148; aceptada por Gemini en T-149). La revisión 8 era la revisión 7 con la bandera `Closed` de las mallas cerradas (sección 3, T-118). La revisión 7 era la revisión 6 con la caja de cada lote (`box`, sección 3, T-116). La revisión 6 era la revisión 5, que recogía la revisión de DeepSeek a la revisión 4, con dos aclaraciones de redacción de la sección 6 tras la revisión de Gemini. La versión 1 nunca se publicó; la 2 cambia el formato de los lotes, así que también la caché OPFS (`CACHE_FORMAT` 2). La sección 7 lista lo que el código aún no cumple.  
 **Propósito:** Fuente única de los límites entre kernel, renderizador y aplicación.  
 **Código normativo:** [`src/domain/kernel/`](../src/domain/kernel/), [`DrawingTypes.ts`](../src/domain/drawings/DrawingTypes.ts) y [`ModelRecord.ts`](../src/domain/models/ModelRecord.ts). Si este documento y los tipos discrepan, es un error que debe corregirse.
 
@@ -96,21 +96,26 @@ H = b·(λ·z + OrthogonalHeight)
 
 ## 3. Lotes de geometría
 
-Definidos en `GeometryBatch.ts`.
+Definidos en `GeometryBatch.ts`. Desde la versión 2 del contrato un lote puede viajar comprimido (A11) y dibujar formas compartidas por instancias (A13). La decisión y sus mediciones están en `docs/09` (revisión 4, aceptada por Gemini en T-152 y aprobada por Nick el 2026-11-19).
 
 | Campo | Tipo | Contenido |
 |---|---|---|
 | `modelId` | `ModelId` | Modelo del lote. Un registro identifica `ElementRef(batch.modelId, expressId)`; su `expressId` solo no identifica nada |
 | `sequence` | `u32` | Empieza en 1 en cada flujo y sube de uno en uno |
 | `origin` | `[f64; 3]` | Coordenadas absolutas de modelo. Vértice absoluto = `origin + position` |
-| `box` | `{ min, max }`, cada uno `[f32; 3]` | El menor y el mayor valor de `positions` en cada eje, relativos a `origin` como ellas y exactos. Ceros si no hay vértices. El renderizador no dibuja un lote cuya caja queda entera fuera de la vista |
-| `positions` | `Float32Array` | xyz por vértice, coordenadas locales de lote |
-| `normals` | `Float32Array` | xyz por vértice, de longitud 1 ± 1e-3. Las aristas vivas duplican vértices |
-| `indices` | `Uint32Array` | Triángulos, base cero dentro del lote |
+| `box` | `{ min, max }`, cada uno `[f32; 3]` | Todo lo que dibuja el lote, relativo a `origin`: sus vértices y la caja de cada forma transformada. Sin instancias es exactamente `quantBox`; ceros si el lote no dibuja nada. El renderizador no dibuja un lote cuya caja queda entera fuera de la vista |
+| `vertexFormat` | `'f32' \| 'q16'` | Formato de `positions` y `normals` |
+| `quantBox` | `{ min, max } \| null` | La rejilla de `positions`: el menor y el mayor valor exactos de las posiciones del lote en cada eje, antes de cuantizar, relativos a `origin`. `null` si el lote no tiene vértices propios |
+| `positions` | `Float32Array` (`f32`) o `Uint16Array` (`q16`) | `f32`: xyz por vértice. `q16`: cuatro valores por vértice, x, y, z en la rejilla y el índice del registro del vértice en `meshTable` |
+| `normals` | `Float32Array` (`f32`) o `Int16Array` (`q16`) | `f32`: xyz por vértice, de longitud 1 ± 1e-3. `q16`: dos valores por vértice, codificación octaédrica. Las aristas vivas duplican vértices |
+| `indices` | `Uint32Array` o `Uint16Array` | Triángulos, base cero dentro del lote. De 16 bits solo si el lote tiene como mucho 65.536 vértices; el renderizador los distingue por su tipo |
 | `meshTable` | `Uint32Array` | 7 palabras por registro: `expressId, firstVertex, vertexCount, firstIndex, indexCount, rgba, flags` |
+| `shapes` | `ShapeDef[]` | Formas que el lote usa **por primera vez** en el flujo |
+| `instanceTable` | `Uint32Array` | 4 palabras por instancia: `expressId, shapeId, rgba, flags` |
+| `instanceTransforms` | `Float32Array` | 12 por instancia: matriz 3×4 por columnas, de coordenadas de forma a coordenadas locales de lote |
 
 - `rgba` es `0xRRGGBBAA`, sRGB sin premultiplicar.
-- Un elemento puede tener varios registros, en el mismo lote salvo que supere `MAX_BATCH_RADIUS` y se reparta en piezas (sección 2). El renderizador reúne los registros de un elemento por `expressId`, estén en el lote que estén. Cada índice de un registro apunta dentro de su rango de vértices.
+- Un elemento puede tener varios registros e instancias, en el mismo lote salvo que supere `MAX_BATCH_RADIUS` y se reparta en piezas (sección 2). El renderizador reúne los registros de un elemento por `expressId`, estén en el lote que estén. Cada índice de un registro apunta dentro de su rango de vértices.
 - **Orientación:** los triángulos son antihorarios vistos desde el lado de su normal, y la normal se calcula de ese orden. En un sólido cerrado, ese lado es el exterior. Una malla abierta no garantiza nada, así que el renderizador dibuja las dos caras. Solo de las mallas marcadas `Closed` puede omitir las caras traseras, y no mientras haya un plano de corte, que abre los sólidos.
 - **Banderas**, los bits sin definir valen 0:
 
@@ -121,10 +126,42 @@ Definidos en `GeometryBatch.ts`.
 | 2 | `HiddenByDefault` | Seleccionable, pero empieza oculto. Hoy solo `IfcSpace`; añadir tipos no rompe el contrato, y esos tipos también quedan fuera de los planos (sección 5) |
 | 3 | `Closed` | La malla de la que sale el registro es cerrada y mira hacia fuera: cada lado, contando como uno los vértices en la misma posición, lo comparten exactamente dos de sus triángulos que lo recorren en sentidos opuestos, y cada parte, con sus triángulos unidos por esos lados, encierra un volumen positivo. Vista desde fuera no muestra caras traseras. Las piezas de una malla repartida la conservan. No la lleva una malla con una cavidad, con caras que solo se tocan en uniones en T, con una parte sin volumen (un triángulo con un vértice repetido, dos caras espalda con espalda) o con un triángulo corrupto descartado |
 
-- **`complete.meshCount`** cuenta registros de `meshTable`, no elementos.
+### Vértices `q16` (A11)
+
+- **Posición:** `min + q / 65535 × (max − min)` en cada eje, con la rejilla del lote (`quantBox`) o de la forma (`box`). El kernel redondea al entero más cercano, así que el menor valor de cada eje es `q = 0` y el mayor `q = 65535`; un eje sin extensión vale 0 en todos los vértices.
+- **Cuarta componente:** en un lote, el índice del registro del vértice dentro de `meshTable`; en una forma, 0, porque el registro sale de la instancia. Sustituye al búfer de índices de registro que el renderizador crea para los lotes `f32`. Por eso un lote con más de `MAX_Q16_RECORDS` = 65.535 registros viaja en `f32`.
+- **Normal:** octaédrica en `snorm16x2` (valor / 32767, no menos de −1): `n = (x, y, 1 − |x| − |y|)`; si `n.z < 0`, `n.xy = (1 − |n.yx|) × s` con `s` = +1 o −1 según el signo de cada componente, contando el 0 como positivo; después se normaliza. Nunca `sign()`, que devuelve 0 en 0: un codificador con `sign()` lleva (0, 1/√2, −1/√2) a (0, 1, 0). Error angular por debajo de 0,01°.
+- **Cuándo `q16`:** si el paso `(max − min) / 65535` de todos los ejes es como mucho `MAX_QUANT_STEP` = 1 mm (decisión de Nick, `docs/09` §7). Si no, el lote viaja en `f32` y no se parte.
+- **Error:** cada coordenada se mueve como mucho medio paso de su eje, 0,5 mm en el peor caso; un vértice, como mucho la longitud del vector de medios pasos, √3/2 mm. Solo afecta a lo que se ve: medición, ajuste, planos, detalles y `elementMesh` usan la geometría del kernel en `f64`. Puede haber grietas de hasta 1 mm entre lotes vecinos, nunca dentro de un lote.
+- **Alineación:** un `Uint16Array` de índices de longitud impar ocupa 2 bytes de más sobre un múltiplo de 4. El renderizador WebGPU redondea su búfer a 4 bytes y la caché OPFS rellena cada bloque hasta 4 bytes. Posiciones de 8 bytes y normales de 4 ya están alineadas.
+
+### Formas e instancias (A13)
+
+`ShapeDef`: `{ shapeId, vertexFormat, positions, normals, indices, box, closed }`, en coordenadas de la forma (las del `IfcRepresentationMap`). `box` es su caja exacta y su rejilla en `q16`.
+
+- `shapeId` es único en el flujo y empieza en 1. Una forma se envía una sola vez, en el primer lote que la usa, y el renderizador la guarda por modelo hasta `removeModel`.
+- La traslación de cada matriz es relativa a `batch.origin`, como las posiciones: no hay coordenadas absolutas en `f32` (RSK-01).
+- El determinante de cada matriz es normal y positivo también en `f32` (`det = 1e-40` se rechaza): una copia reflejada o casi singular se expande como geometría normal.
+- Una forma `q16` cumple el paso en el mundo: `(box.max − box.min) × estiramiento / 65535 ≤ MAX_QUANT_STEP` en cada eje, con el estiramiento de la instancia (el mayor módulo de las columnas de su matriz). Una instancia que no lo cumple se expande.
+- Una instancia hereda `Degraded` y `HiddenByDefault` de su elemento. `Closed` sale de la forma.
+- Un lote puede no tener vértices propios: `positions` y `meshTable` vacíos, `quantBox` `null` y solo instancias. Los renderizadores lo suben salvo que no tenga ni registros ni instancias.
+- `complete.meshCount` cuenta registros e instancias.
+- Qué se instancia, cómo se cuentan los usos (`MIN_INSTANCE_USES` = 2) y qué hace el renderizador con las instancias está en `docs/09` §2, que es normativo para A13 hasta que se construya.
+
+### Validación y transporte
+
+- `findBatchError(batch, knownShapes?)` valida este formato en pruebas, con datos simulados y en `scripts/check-kernel.mjs`, nunca por lote en la ruta caliente; los renderizadores solo la exponen en `__gubim_dev__`. `knownShapes` son las formas ya recibidas de ese modelo. Comprueba:
+  - tipos y longitudes de cada arreglo según `vertexFormat`, y los índices de 16 bits solo hasta 65.536 vértices;
+  - `box`, `quantBox` y el `box` de cada forma: finitos y con `min ≤ max`;
+  - `quantBox` presente si y solo si hay vértices; en `f32`, igual al menor y mayor valor de `positions`; en `q16`, exacta sin comparar coma flotante (algún `q = 0` y algún `q = 65535` en cada eje con extensión, todos 0 sin ella) y con paso de 1 mm como mucho;
+  - en `q16`, la cuarta componente de cada vértice igual a su registro, y como mucho 65.535 registros;
+  - sin instancias, `box` igual a `quantBox`; con ellas, `box` contiene `quantBox` y las 8 esquinas de cada forma transformada, con medio paso de holgura en las `q16`;
+  - formas con `shapeId` desde 1 y no repetido, rejilla exacta y cuarta componente 0; instancias con forma conocida, matriz finita y determinante normal y positivo en `f32`;
+  - registros: `expressId` distinto de 0 y cada índice dentro del rango de vértices de su registro.
+
+  El radio máximo lo garantiza el kernel y no se comprueba ahí, porque un elemento `Degraded` demasiado grande para repartirlo puede superarlo.
 - **`complete.bounds`** son coordenadas absolutas de modelo de todo lo que no lleva `HiddenByDefault`. Queda indefinido si no queda nada.
-- `findBatchError` valida este formato en pruebas y con datos simulados, incluidas la longitud de las normales y la caja. El radio máximo lo garantiza el kernel y no se comprueba ahí, porque un elemento `Degraded` demasiado grande para repartirlo puede superarlo.
-- **Los lotes se transfieren, nunca se clonan** (RSK-06). Tras `addBatch`, el renderizador sube los datos a la GPU y no conserva copia en JS (RSK-03).
+- **Los lotes se transfieren, nunca se clonan** (RSK-06): todos sus búferes, formas incluidas. Tras `addBatch`, el renderizador sube los datos a la GPU y no conserva copia en JS (RSK-03).
 - Los lotes son solo para el renderizador. `cad-slicer` trabaja dentro del kernel con la geometría evaluada de `ifc-geometry`, combinando origen y posición en `f64`.
 
 ---
@@ -341,7 +378,7 @@ impl Sheet {
 
 - `start_stream` empieza por el primer elemento. Llamarlo otra vez descarta un flujo sin terminar.
 - `next_batch` devuelve `None` cuando no quedan elementos. `max_triangles` es un tope flexible: un lote se cierra antes de superarlo, pero un elemento, o pieza, mayor viaja solo en su lote y nunca se parte por ese tope. Solo el radio reparte un elemento (sección 2).
-- `BatchView` da `origin()`, `bounds()`, que es `box` como `[minX, minY, minZ, maxX, maxY, maxZ]`, y los `take_*`.
+- `BatchView` da `origin()`, `bounds()`, que es `box` como `[minX, minY, minZ, maxX, maxY, maxZ]`, `quantBox()` en el mismo orden, `vertexFormat()` (`"f32"` o `"q16"`), `indicesAreU16()` y los `take_*`. Cada arreglo tiene un `take` por anchura, y el de la otra anchura devuelve un arreglo vacío: `takePositions` (`f32`) o `takePositionsQ16`, `takeNormals` o `takeNormalsOct`, `takeIndices` o `takeIndicesU16`, y `takeMeshTable`. Así cada uno devuelve su arreglo tipado sin depender de `js-sys`. `src/infrastructure/kernel/batchView.ts` los lee como un `GeometryBatch`. Las formas y las instancias llegan con A13.
 - `finish_stream` se llama una vez tras `None`, libera las cachés y devuelve el JSON del evento `complete`, sin `type`. Sin flujo activo devuelve `meshCount` 0 y sin diagnósticos.
 
 **Corrección a `docs/03` sección 4:** una vista `Float32Array` sobre `wasmMemory.buffer` queda inválida en cuanto la memoria WASM crece, y la memoria de WASM no se puede transferir entre hilos. Por tanto, **ninguna vista sobre la memoria WASM sobrevive a una llamada**, y el recorrido real es:
@@ -356,7 +393,8 @@ Hay exactamente una copia y ninguna serialización. Los datos no geométricos, p
 
 `kernel.worker.ts` y `geometryCache.ts` guardan el flujo evaluado en el sistema de archivos privado del origen (`navigator.storage.getDirectory()`, carpeta `gubim-geometry-cache`) mediante `FileSystemSyncAccessHandle`, sin cambiar `KernelPort`:
 
-- **Identidad:** cada entrada une la clave rápida de apertura (`cacheKey`: longitud del archivo en 8 bytes + primer MiB + último MiB, SHA-256) y la huella del binario WASM (`SHA-256(wasmBytes)`). La cabecera de 96 bytes (`GUBIMGC1`, `CACHE_FORMAT = 1`) guarda además el SHA-256 completo del archivo IFC (`identity.file`, 32 bytes) y el del kernel (`identity.kernel`, 32 bytes), la marca de último uso (`LAST_USED_AT`) y la longitud final (`LENGTH_AT`).
+- **Identidad:** cada entrada une la clave rápida de apertura (`cacheKey`: longitud del archivo en 8 bytes + primer MiB + último MiB, SHA-256) y la huella del binario WASM (`SHA-256(wasmBytes)`). La cabecera de 96 bytes (`GUBIMGC1`, `CACHE_FORMAT = 2`) guarda además el SHA-256 completo del archivo IFC (`identity.file`, 32 bytes) y el del kernel (`identity.kernel`, 32 bytes), la marca de último uso (`LAST_USED_AT`) y la longitud final (`LENGTH_AT`).
+- **Lotes (formato 2):** cada registro `Batch` empieza con una cabecera de 120 bytes: `origin`, `box`, `quantBox` (ceros si es `null`), una palabra de banderas (`q16`, `quantBox` presente, índices de 16 bits), `sequence`, elementos procesados y totales, y las longitudes de `positions`, `normals`, `indices`, `meshTable`, `instanceTable` e `instanceTransforms` y el número de formas. Siguen esos arreglos, cada uno rellenado hasta 4 bytes, y cada forma con su cabecera de 48 bytes (`shapeId`, banderas, `box`, longitudes) y sus tres arreglos. Abrir comprueba que las longitudes casan con el tamaño del registro; leer, que los índices y el registro de cada vértice `q16` quedan dentro del lote.
 - **Escritura en la segunda apertura:** la primera apertura de un archivo solo deja una marca `.seen` y no calcula el SHA-256 completo ni escribe `.gbc`, evitando penalizar los modelos que solo se abren una vez. En la segunda apertura se comprueba la marca, se calcula el SHA-256 completo del archivo y se escribe el `.gbc` (`Summary`, lotes `Batch`, `Complete`, `Tree` y `End`). La longitud total en la cabecera se escribe y vuelca (`flush`) al final: un archivo truncado o interrumpido nunca se da por válido, se descarta y se vuelve a generar desde WASM.
 - **Reproducción y apertura diferida de `Model`:** cuando `CacheReader.open` valida un `.gbc` (magia, versión, longitud exacta, SHA-256 completo del archivo y del kernel), `open` devuelve el `ModelSummary` guardado sin instanciar `Model` en WASM y conserva los bytes IFC en el Worker; `streamGeometry` y `getSpatialTree` se sirven desde el `.gbc`, y `Model.open(sourceBytes)` solo se ejecuta bajo demanda cuando se pide una operación que necesita el modelo vivo (`getElementDetails`, `findElements`, `elementMesh`, `start_drawing`).
 - **Limpieza:** al escribir o abrir la caché se eliminan entradas de otros kernels y marcas huérfanas, y se aplica un tope LRU de 2 GiB por fecha de último uso (`lastUsed`). El diálogo «Acerca de» (`GeometryCacheControl.tsx`) consulta y vacía la carpeta OPFS.
@@ -396,6 +434,7 @@ El código aún no cumple esta revisión en los puntos siguientes.
 | Contrato | Código actual |
 |---|---|
 | `crsComment` | Solo llega al DXF. El SVG no admite comentarios en su lista blanca |
+| Formas e instancias (A13) | El kernel aún no envía `shapes` ni instancias: todos los lotes llevan `shapes` vacío. Los renderizadores todavía no dibujan instancias, y la exportación glTF y `App.tsx` no leen `instanceTable` (`docs/09` §4). `findBatchError` y la caché OPFS ya las validan y guardan |
 
 ---
 
