@@ -9,7 +9,7 @@
     "build": "npm run kernel && tsc && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test:unit": "node --experimental-strip-types test/t138-gltf-test.mjs && node --experimental-strip-types test/t139-orbit-pivot-test.mjs && node --experimental-strip-types test/t146-expand-test.mjs && node --experimental-strip-types test/t148-plan-depth-test.mjs && node --experimental-strip-types test/t153-contract-test.mjs",
+    "test:unit": "node --experimental-strip-types test/t138-gltf-test.mjs && node --experimental-strip-types test/t139-orbit-pivot-test.mjs && node --experimental-strip-types test/t146-expand-test.mjs && node --experimental-strip-types test/t148-plan-depth-test.mjs && node --experimental-strip-types test/t153-contract-test.mjs && node --experimental-strip-types test/t160-minimap-test.mjs",
     "test:drawings": "node --experimental-strip-types scripts/check-drawings.mjs",
     "test:e2e": "node test/e2e/run.mjs",
     "test": "npm run test:unit && npm run test:drawings && npm run test:e2e",
