@@ -99,8 +99,8 @@ jobs:
         run: npx vite build
 
   # Backlog D1: TC-001..008 and the feature checks in headless Chrome (test/e2e/README.md).
-  # The runner has no GPU: WebGL2 runs on SwiftShader. WebGPU is tried on SwiftShader too but does
-  # not block until it is known to work there; the full GPU matrix runs locally.
+  # The runner has no GPU: WebGL2, WebGPU without an adapter and WebGPU all run on SwiftShader
+  # as required steps; the hardware GPU matrix runs locally.
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -143,8 +143,7 @@ jobs:
         env:
           E2E_MODES: gl2,none
 
-      - name: Browser tests, WebGPU on SwiftShader (not blocking yet)
-        continue-on-error: true
+      - name: Browser tests, WebGPU on SwiftShader
         run: npm run test:e2e
         env:
           E2E_MODES: gpu
