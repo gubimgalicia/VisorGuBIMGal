@@ -57,7 +57,10 @@ function* stream(mod, bytes) {
   model.free();
 }
 
-const key = (r) => `${r.rgba}:${r.flags & 0xf}`;
+// Closed (bit 3) is left out of the key: an instance takes it from its shape, and a copy that
+// rounding closes or opens once placed may differ (docs/09 section 2). Those are counted apart.
+const CLOSED = 1 << 3;
+const key = (r) => `${r.rgba}:${r.flags & 0x7}`;
 
 /** Compares two lists of records of one element. Returns null or a description. */
 function compareElement(a, b, worst) {
@@ -70,11 +73,21 @@ function compareElement(a, b, worst) {
     return g;
   };
   const ga = group(a), gb = group(b);
+  const closedOf = (records) => records.filter((r) => r.flags & CLOSED).length;
+  if (closedOf(a) !== closedOf(b)) worst.closedDiffers = (worst.closedDiffers ?? 0) + 1;
   const keys = new Set([...ga.keys(), ...gb.keys()]);
   for (const k of keys) {
-    const ra = ga.get(k) ?? [], rb = gb.get(k) ?? [];
-    const ta = ra.reduce((n, r) => n + r.triangles.length, 0), tb = rb.reduce((n, r) => n + r.triangles.length, 0);
-    if (ta !== tb) return `colour/flags ${k}: ${ta / 9} triangles against ${tb / 9}`;
+    let ra = ga.get(k) ?? [], rb = gb.get(k) ?? [];
+    let ta = ra.reduce((n, r) => n + r.triangles.length, 0), tb = rb.reduce((n, r) => n + r.triangles.length, 0);
+    if (ta !== tb) {
+      // A shape drops a triangle of exactly zero area that rounding gives a sliver of area once
+      // placed (A13): one that draws nothing. Compare again without slivers (SLIVER_HEIGHT).
+      [ra, rb] = [ra.map(withoutSlivers), rb.map(withoutSlivers)];
+      ta = ra.reduce((n, r) => n + r.triangles.length, 0);
+      tb = rb.reduce((n, r) => n + r.triangles.length, 0);
+      if (ta !== tb) return `colour/flags ${k}: ${ta / 9} triangles against ${tb / 9}`;
+      worst.slivers = (worst.slivers ?? 0) + 1;
+    }
     // Each side may be off by its own quantisation error, so both count.
     const tolerance = TOL + Math.max(0, ...ra.map((r) => r.tolerance)) + Math.max(0, ...rb.map((r) => r.tolerance));
     // Per axis too: rounding moves each coordinate by at most half that axis's step (docs/05).
@@ -85,7 +98,7 @@ function compareElement(a, b, worst) {
     const flat = (records) => records.map((r) => ({ t: r.triangles, n: r.normals }));
     const result =
       compareTriangles(flat(ra), flat(rb), tolerance, axisTolerance, false) ??
-      compareTriangles(sorted(ra), sorted(rb), tolerance, axisTolerance, true);
+      compareTriangles(...matched(ra, rb, tolerance), tolerance, axisTolerance, true);
     if (result.error) return `colour/flags ${k}: ${result.error}`;
     worst.position = Math.max(worst.position, result.position);
     worst.degrees = Math.max(worst.degrees, result.degrees);
@@ -93,8 +106,93 @@ function compareElement(a, b, worst) {
   return null;
 }
 
-// Triangles in record order; on a mismatch, again with records and triangles sorted, since a
-// format may group an element's records differently.
+/**
+ * Metres: a triangle thinner than this, its height over its longest side, draws nothing at any
+ * zoom. A shape drops a triangle of exactly zero area that rounding gives a height of about
+ * 1e-11 m once placed; f32 positions relative to a batch origin move heights by up to about
+ * 5e-6 m, well under this. A sliver's normal is noise from its source, so it is not compared.
+ */
+const SLIVER_HEIGHT = 1e-4;
+
+/** Height over the longest side of the triangle at offset i of a flat triangle array. */
+function heightAt(t, i) {
+  const u = [t[i + 3] - t[i], t[i + 4] - t[i + 1], t[i + 5] - t[i + 2]];
+  const v = [t[i + 6] - t[i], t[i + 7] - t[i + 1], t[i + 8] - t[i + 2]];
+  const w = [t[i + 6] - t[i + 3], t[i + 7] - t[i + 4], t[i + 8] - t[i + 5]];
+  const twiceArea = Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
+  const longest = Math.max(Math.hypot(...u), Math.hypot(...v), Math.hypot(...w));
+  return longest > 0 ? twiceArea / longest : 0;
+}
+
+/** A record without its sliver triangles (SLIVER_HEIGHT). */
+function withoutSlivers(record) {
+  const keep = [];
+  const t = record.triangles;
+  for (let i = 0; i < t.length; i += 9) if (heightAt(t, i) >= SLIVER_HEIGHT) keep.push(i);
+  const pick = (array) => {
+    const out = new Float64Array(keep.length * 9);
+    keep.forEach((i, k) => out.set(array.subarray(i, i + 9), k * 9));
+    return out;
+  };
+  return { ...record, triangles: pick(record.triangles), normals: pick(record.normals) };
+}
+
+/**
+ * The triangles of both sides paired by nearest centroid, as two lists in pair order: a format
+ * may group an element's records differently (instances come after records), and sorting by a
+ * rounded centroid pairs back-to-back faces and neighbouring small triangles wrongly. A grid of
+ * cells a few tolerances wide finds candidates; among those within reach, the nearest centroid
+ * wins, then the closest normal. An unpaired triangle is paired with what is left, in order, so
+ * the comparison reports it.
+ */
+function matched(ra, rb, tolerance) {
+  const split = (records) => {
+    const tris = [];
+    for (const r of records) for (let i = 0; i < r.triangles.length; i += 9) tris.push({ t: r.triangles.subarray(i, i + 9), n: r.normals.subarray(i, i + 9) });
+    return tris;
+  };
+  const a = split(ra), b = split(rb);
+  const centroid = (x) => [0, 1, 2].map((k) => (x.t[k] + x.t[3 + k] + x.t[6 + k]) / 3);
+  const cell = Math.max(tolerance * 4, 1e-4);
+  const keyOf = (c) => c.map((v) => Math.floor(v / cell));
+  const grid = new Map();
+  b.forEach((x, i) => {
+    x.c = centroid(x);
+    const k = keyOf(x.c).join(',');
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(i);
+  });
+  const used = new Uint8Array(b.length);
+  const left = [], right = [], unpaired = [];
+  for (const x of a) {
+    const c = centroid(x);
+    const [kx, ky, kz] = keyOf(c);
+    let best = -1, bestDistance = Infinity, bestDot = -Infinity;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      for (const i of grid.get(`${kx + dx},${ky + dy},${kz + dz}`) ?? []) {
+        if (used[i]) continue;
+        const d = Math.hypot(c[0] - b[i].c[0], c[1] - b[i].c[1], c[2] - b[i].c[2]);
+        const dot = x.n[0] * b[i].n[0] + x.n[1] * b[i].n[1] + x.n[2] * b[i].n[2];
+        // Within reach, the closest normal wins: back-to-back faces share a centroid.
+        const reach = d <= 2 * tolerance;
+        const bestReach = bestDistance <= 2 * tolerance;
+        const better = reach ? !bestReach || dot > bestDot + 1e-9 || (Math.abs(dot - bestDot) <= 1e-9 && d < bestDistance) : !bestReach && d < bestDistance;
+        if (better) {
+          best = i; bestDistance = d; bestDot = dot;
+        }
+      }
+    }
+    if (best < 0) { unpaired.push(x); continue; }
+    used[best] = 1;
+    left.push(x);
+    right.push(b[best]);
+  }
+  const rest = b.filter((_, i) => !used[i]);
+  unpaired.forEach((x, i) => { left.push(x); right.push(rest[i] ?? x); });
+  return [left, right];
+}
+
+// Triangles in record order; on a mismatch, again paired by nearest centroid (matched).
 function sorted(records) {
   const tris = [];
   for (const r of records) for (let i = 0; i < r.triangles.length; i += 9) tris.push({ t: r.triangles.subarray(i, i + 9), n: r.normals.subarray(i, i + 9) });
@@ -121,6 +219,9 @@ function compareTriangles(a, b, tolerance, axisTolerance, lastTry) {
       const off = Math.abs(fa.t[i + axis] - fb.t[i + axis]);
       if (off > axisTolerance[axis] && !axisExcess) axisExcess = { axis, off, limit: axisTolerance[axis] };
     }
+    // A sliver's normal is noise from its source triangle: skip it (SLIVER_HEIGHT).
+    const corner = i - (i % 9);
+    if (heightAt(fa.t, corner) < SLIVER_HEIGHT || heightAt(fb.t, corner) < SLIVER_HEIGHT) continue;
     // atan2(|a × b|, a · b): exact for equal vectors, which acos of a dot near 1 is not.
     const [ax, ay, az, bx, by, bz] = [fa.n[i], fa.n[i + 1], fa.n[i + 2], fb.n[i], fb.n[i + 1], fb.n[i + 2]];
     const cross = Math.hypot(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
@@ -205,7 +306,7 @@ for (const file of files) {
     console.log(`DIFF ${name}: ${problems.length} of ${elements + problems.length} elements`);
     for (const p of problems.slice(0, 5)) console.log(`     ${p}`);
   } else {
-    console.log(`SAME ${name.padEnd(48)} ${String(elements).padStart(6)} elements, worst ${(worst.position * 1000).toFixed(4)} mm, ${worst.degrees.toFixed(3)}°`);
+    console.log(`SAME ${name.padEnd(48)} ${String(elements).padStart(6)} elements, worst ${(worst.position * 1000).toFixed(4)} mm, ${worst.degrees.toFixed(3)}°${worst.closedDiffers ? `, Closed differs on ${worst.closedDiffers}` : ''}${worst.slivers ? `, slivers on ${worst.slivers}` : ''}`);
   }
 }
 console.log(`${files.length - skipped - failures} same, ${failures} different, ${skipped} refused by both`);

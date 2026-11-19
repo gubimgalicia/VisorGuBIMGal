@@ -248,6 +248,16 @@ pub struct BatchView {
     batch: wire::WireBatch,
 }
 
+impl BatchView {
+    fn shape(&self, at: u32) -> Option<&wire::WireShape> {
+        self.batch.shapes.get(at as usize)
+    }
+
+    fn shape_mut(&mut self, at: u32) -> Option<&mut wire::WireShape> {
+        self.batch.shapes.get_mut(at as usize)
+    }
+}
+
 #[wasm_bindgen]
 impl BatchView {
     pub fn origin(&self) -> Vec<f64> {
@@ -260,10 +270,107 @@ impl BatchView {
     }
 
     /// `quantBox` in the same layout: the grid of `q16` positions, and in `f32` the least and
-    /// greatest position. Without instances it equals `bounds`.
+    /// greatest position. Without instances it equals `bounds`; `undefined` when the batch has
+    /// only instances.
     #[wasm_bindgen(js_name = quantBox)]
     pub fn quant_box(&self) -> Option<Vec<f32>> {
-        Some([self.batch.min, self.batch.max].concat())
+        self.batch.quant.map(|(min, max)| [min, max].concat())
+    }
+
+    /// Four words per instance: express id, shape id, rgba, flags (A13).
+    #[wasm_bindgen(js_name = takeInstanceTable)]
+    pub fn take_instance_table(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.batch.instance_table)
+    }
+
+    /// Twelve per instance: a 3x4 matrix by columns, shape to batch-local coordinates.
+    #[wasm_bindgen(js_name = takeInstanceTransforms)]
+    pub fn take_instance_transforms(&mut self) -> Vec<f32> {
+        std::mem::take(&mut self.batch.instance_transforms)
+    }
+
+    /// Shapes this batch sends first, read one at a time by index.
+    #[wasm_bindgen(js_name = shapeCount)]
+    pub fn shape_count(&self) -> u32 {
+        self.batch.shapes.len() as u32
+    }
+
+    #[wasm_bindgen(js_name = shapeId)]
+    pub fn shape_id(&self, at: u32) -> u32 {
+        self.shape(at).map_or(0, |shape| shape.shape_id)
+    }
+
+    /// The shape's exact box, and its grid in `q16`: `[minX, minY, minZ, maxX, maxY, maxZ]`.
+    #[wasm_bindgen(js_name = shapeBox)]
+    pub fn shape_box(&self, at: u32) -> Vec<f32> {
+        self.shape(at).map_or_else(Vec::new, |shape| [shape.min, shape.max].concat())
+    }
+
+    #[wasm_bindgen(js_name = shapeClosed)]
+    pub fn shape_closed(&self, at: u32) -> bool {
+        self.shape(at).is_some_and(|shape| shape.closed)
+    }
+
+    /// `"f32"` or `"q16"`.
+    #[wasm_bindgen(js_name = shapeVertexFormat)]
+    pub fn shape_vertex_format(&self, at: u32) -> String {
+        match self.shape(at).map(|shape| &shape.vertices) {
+            Some(wire::Vertices::Q16 { .. }) => "q16".into(),
+            _ => "f32".into(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = takeShapePositions)]
+    pub fn take_shape_positions(&mut self, at: u32) -> Vec<f32> {
+        match self.shape_mut(at).map(|shape| &mut shape.vertices) {
+            Some(wire::Vertices::F32 { positions, .. }) => std::mem::take(positions),
+            _ => Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = takeShapePositionsQ16)]
+    pub fn take_shape_positions_q16(&mut self, at: u32) -> Vec<u16> {
+        match self.shape_mut(at).map(|shape| &mut shape.vertices) {
+            Some(wire::Vertices::Q16 { positions, .. }) => std::mem::take(positions),
+            _ => Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = takeShapeNormals)]
+    pub fn take_shape_normals(&mut self, at: u32) -> Vec<f32> {
+        match self.shape_mut(at).map(|shape| &mut shape.vertices) {
+            Some(wire::Vertices::F32 { normals, .. }) => std::mem::take(normals),
+            _ => Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = takeShapeNormalsOct)]
+    pub fn take_shape_normals_oct(&mut self, at: u32) -> Vec<i16> {
+        match self.shape_mut(at).map(|shape| &mut shape.vertices) {
+            Some(wire::Vertices::Q16 { normals, .. }) => std::mem::take(normals),
+            _ => Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = shapeIndicesAreU16)]
+    pub fn shape_indices_are_u16(&self, at: u32) -> bool {
+        matches!(self.shape(at).map(|shape| &shape.indices), Some(wire::Indices::U16(_)))
+    }
+
+    #[wasm_bindgen(js_name = takeShapeIndices)]
+    pub fn take_shape_indices(&mut self, at: u32) -> Vec<u32> {
+        match self.shape_mut(at).map(|shape| &mut shape.indices) {
+            Some(wire::Indices::U32(indices)) => std::mem::take(indices),
+            _ => Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = takeShapeIndicesU16)]
+    pub fn take_shape_indices_u16(&mut self, at: u32) -> Vec<u16> {
+        match self.shape_mut(at).map(|shape| &mut shape.indices) {
+            Some(wire::Indices::U16(indices)) => std::mem::take(indices),
+            _ => Vec::new(),
+        }
     }
 
     /// `"f32"` or `"q16"`.

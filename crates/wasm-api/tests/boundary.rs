@@ -1,10 +1,10 @@
 //! What crosses the WASM boundary, checked natively over every file we have.
 
-use glam::DVec3;
-use std::collections::BTreeMap;
+use glam::{DVec3, Mat3, Vec3};
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use wasm_api::batches::{Batch, MAX_BATCH_RADIUS};
+use wasm_api::batches::{Batch, MAX_BATCH_RADIUS, ShapeData};
 use wasm_api::loaded::{LoadedModel, OpenError};
 
 const RECORD_WORDS: usize = 7;
@@ -75,6 +75,54 @@ fn check(batch: &Batch) {
             }
         }
     }
+    // A13: four words and twelve floats per instance, a normal positive determinant, and a drawn
+    // box that holds the batch's own box.
+    assert_eq!(batch.instance_table.len() % 4, 0);
+    assert_eq!(batch.instance_transforms.len(), batch.instance_table.len() / 4 * 12);
+    for (row, m) in batch.instance_table.as_chunks::<4>().0.iter().zip(batch.instance_transforms.as_chunks::<12>().0) {
+        assert_ne!(row[0], 0);
+        let det = Mat3::from_cols_slice(&m[..9]).determinant();
+        assert!(det.is_normal() && det > 0.0, "{det}");
+    }
+    if !batch.positions.is_empty() {
+        for axis in 0..3 {
+            assert!(batch.draw_min[axis] <= batch.min[axis] && batch.draw_max[axis] >= batch.max[axis]);
+        }
+    }
+}
+
+/// The batches with every instance drawn as a plain record at the end of its batch, so the
+/// helpers that read records see every copy (A13). Shapes are kept across batches, as a
+/// renderer keeps them.
+fn expanded(batches: &[Batch]) -> Vec<Batch> {
+    let mut shapes: HashMap<u32, ShapeData> = HashMap::new();
+    batches
+        .iter()
+        .map(|batch| {
+            let mut out = batch.clone();
+            for shape in &batch.shapes {
+                shapes.insert(shape.shape_id, shape.clone());
+            }
+            for (row, m) in batch.instance_table.as_chunks::<4>().0.iter().zip(batch.instance_transforms.as_chunks::<12>().0) {
+                let shape = &shapes[&row[1]];
+                let linear = Mat3::from_cols_slice(&m[..9]);
+                let normal_matrix = linear.inverse().transpose();
+                let first_vertex = (out.positions.len() / 3) as u32;
+                let first_index = out.indices.len() as u32;
+                for (p, n) in shape.positions.as_chunks::<3>().0.iter().zip(shape.normals.as_chunks::<3>().0) {
+                    let placed = linear * Vec3::from_array(*p) + Vec3::new(m[9], m[10], m[11]);
+                    out.positions.extend_from_slice(&placed.to_array());
+                    out.normals.extend_from_slice(&(normal_matrix * Vec3::from_array(*n)).normalize().to_array());
+                }
+                out.indices.extend(shape.indices.iter().map(|index| first_vertex + index));
+                let vertex_count = (shape.positions.len() / 3) as u32;
+                out.mesh_table.extend_from_slice(&[row[0], first_vertex, vertex_count, first_index, shape.indices.len() as u32, row[2], row[3]]);
+            }
+            out.instance_table.clear();
+            out.instance_transforms.clear();
+            out
+        })
+        .collect()
 }
 
 #[test]
@@ -87,7 +135,7 @@ fn every_file_produces_valid_batches() {
         let processed = model.processed_elements();
         assert_eq!(processed, model.total_elements(), "{}", path.display());
         let complete = model.finish_stream();
-        let records: usize = batches.iter().map(|batch| batch.mesh_table.len() / RECORD_WORDS).sum();
+        let records: usize = batches.iter().map(|batch| batch.mesh_table.len() / RECORD_WORDS + batch.instance_table.len() / 4).sum();
         assert!(complete.starts_with(&format!(r#"{{"meshCount":{records}"#)), "{complete}");
         println!("{:<36} {:>3} batches {:>4} records", path.file_name().unwrap().display(), batches.len(), records);
     }
@@ -370,12 +418,14 @@ fn a_mapped_shape_is_checked_once_and_its_copies_keep_what_they_are() {
     let (flags_of, _) = stream_of(mapped(cube, sides, plain, ("$", "#72", "0.")));
     assert_eq!(flags_of, [CLOSED, DEGRADED]);
     // Open as written, with a corner 1e-12 m off its neighbour, but closed once placed 1000 km
-    // away, where the two round to one: every copy is checked as placed.
+    // away, where the two round to one. Contract v2 (docs/05 section 3, A13): both copies are
+    // instances of the shape, and an instance takes Closed from its shape, so neither is marked.
+    // That only forgoes back-face culling; it never culls a face that shows.
     let split = format!("{OCTAHEDRON},(4.000000000001,0.,0.)");
     let parted = "(1,3,5),(3,2,5),(2,4,5),(4,1,5),(3,7,6),(2,3,6),(4,2,6),(7,4,6)";
     assert_eq!(stream_of(mapped(&split, parted, plain, ("$", "#72", "$"))).0, [0, 0], "open near the origin");
     let far = ("$", "#73", "$");
-    assert_eq!(stream_of(mapped(&split, parted, far, ("$", "#74", "$"))).0, [CLOSED, CLOSED], "closed far away");
+    assert_eq!(stream_of(mapped(&split, parted, far, ("$", "#74", "$"))).0, [0, 0], "instances take Closed from the shape");
 }
 
 #[test]
@@ -394,7 +444,7 @@ fn pieces_keep_their_element_flags() {
 /// absolute corners the batches give, in f64.
 fn measure(batches: &[Batch], reference: [f64; 3]) -> BTreeMap<u32, (usize, usize, f64, f64)> {
     let mut elements: BTreeMap<u32, (usize, usize, f64, f64)> = BTreeMap::new();
-    for batch in batches {
+    for batch in &expanded(batches) {
         let corner = |index: u32| -> [f64; 3] {
             let at = index as usize * 3;
             std::array::from_fn(|axis| batch.positions[at + axis] as f64 + batch.origin[axis] - reference[axis])
@@ -416,8 +466,15 @@ fn measure(batches: &[Batch], reference: [f64; 3]) -> BTreeMap<u32, (usize, usiz
     elements
 }
 
+/// Each record's flags, instances included, in stream order: elements stream by ascending
+/// express id, and an expanded batch lists its instances last, so sort by express id (stable).
 fn flags(batches: &[Batch]) -> Vec<u32> {
-    batches.iter().flat_map(|batch| batch.mesh_table.as_chunks::<RECORD_WORDS>().0.iter().map(|record| record[6])).collect()
+    let mut records: Vec<(u32, u32)> = expanded(batches)
+        .iter()
+        .flat_map(|batch| batch.mesh_table.as_chunks::<RECORD_WORDS>().0.iter().map(|record| (record[0], record[6])).collect::<Vec<_>>())
+        .collect();
+    records.sort_by_key(|record| record.0);
+    records.into_iter().map(|record| record.1).collect()
 }
 
 #[test]

@@ -10,4 +10,4 @@ mod solids;
 
 pub use csg::{CsgError, intersect, seal, subtract, subtract_all, union};
 pub use mesh::Mesh;
-pub use model::{Diagnostic, ElementGeometry, ElementMesh, ModelEvaluator, UnsupportedSchema};
+pub use model::{Diagnostic, ElementGeometry, ElementMesh, InstanceOf, ModelEvaluator, UnsupportedSchema};

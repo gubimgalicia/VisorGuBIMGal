@@ -6,6 +6,26 @@
 
 const box = (v) => ({ min: [v[0], v[1], v[2]], max: [v[3], v[4], v[5]] });
 
+/** Shapes a v2 view with instances sends first (A13); none from older builds. */
+function takeShapes(view) {
+  if (typeof view.shapeCount !== 'function') return [];
+  const shapes = [];
+  for (let at = 0; at < view.shapeCount(); at++) {
+    const vertexFormat = view.shapeVertexFormat(at);
+    const q16 = vertexFormat === 'q16';
+    shapes.push({
+      shapeId: view.shapeId(at),
+      vertexFormat,
+      positions: q16 ? view.takeShapePositionsQ16(at) : view.takeShapePositions(at),
+      normals: q16 ? view.takeShapeNormalsOct(at) : view.takeShapeNormals(at),
+      indices: view.shapeIndicesAreU16(at) ? view.takeShapeIndicesU16(at) : view.takeShapeIndices(at),
+      box: box(view.shapeBox(at)),
+      closed: view.shapeClosed(at)
+    });
+  }
+  return shapes;
+}
+
 export function takeBatch(view) {
   const v2 = typeof view.vertexFormat === 'function';
   const vertexFormat = v2 ? view.vertexFormat() : 'f32';
@@ -20,9 +40,9 @@ export function takeBatch(view) {
     normals: q16 ? view.takeNormalsOct() : view.takeNormals(),
     indices: v2 && view.indicesAreU16() ? view.takeIndicesU16() : view.takeIndices(),
     meshTable: view.takeMeshTable(),
-    shapes: [],
-    instanceTable: new Uint32Array(0),
-    instanceTransforms: new Float32Array(0)
+    shapes: takeShapes(view),
+    instanceTable: typeof view.takeInstanceTable === 'function' ? view.takeInstanceTable() : new Uint32Array(0),
+    instanceTransforms: typeof view.takeInstanceTransforms === 'function' ? view.takeInstanceTransforms() : new Float32Array(0)
   };
   view.free();
   return batch;

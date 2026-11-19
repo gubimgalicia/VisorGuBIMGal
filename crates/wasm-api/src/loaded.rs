@@ -155,7 +155,7 @@ impl LoadedModel {
     /// Starts from the first element. Evaluator caches last only as long as the stream.
     pub fn start_stream(&mut self) {
         self.stream = ModelEvaluator::new(self.file).ok().map(|evaluator| {
-            let stream = GeometryStream::new(evaluator.element_ids());
+            let stream = GeometryStream::new(evaluator.element_ids()).with_instances(evaluator.instance_uses());
             ActiveStream { evaluator, stream }
         });
     }

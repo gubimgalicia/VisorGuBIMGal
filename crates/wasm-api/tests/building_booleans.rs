@@ -256,8 +256,10 @@ fn building_booleans_streams_colours_materials_and_spatial_tree_with_zero_diagno
 
     let mut records_by_id: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     for batch in &batches {
-        for record in batch.mesh_table.as_chunks::<RECORD_WORDS>().0 {
-            let (express_id, rgba, flags) = (record[0], record[5], record[6]);
+        // Records and, since A13, instances: [express id, shape id, rgba, flags].
+        let records = batch.mesh_table.as_chunks::<RECORD_WORDS>().0.iter().map(|record| (record[0], record[5], record[6]));
+        let instances = batch.instance_table.as_chunks::<4>().0.iter().map(|row| (row[0], row[2], row[3]));
+        for (express_id, rgba, flags) in records.chain(instances) {
             assert_eq!(flags & FLAG_DEGRADED, 0, "#{express_id} degraded");
             assert_ne!(flags & FLAG_CLOSED, 0, "#{express_id} not closed");
             records_by_id.insert(express_id, (rgba, flags));

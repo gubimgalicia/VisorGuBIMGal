@@ -1,4 +1,4 @@
-import type { GeometryBatch, VertexFormat } from '../../domain/kernel/GeometryBatch';
+import type { GeometryBatch, ShapeDef, VertexFormat } from '../../domain/kernel/GeometryBatch';
 import type { ModelId } from '../../domain/models/ModelRecord';
 
 /** What this reads of wasm-bindgen's `BatchView` (`crates/wasm-api/src/lib.rs`). */
@@ -15,6 +15,39 @@ export interface BatchViewLike {
   takeIndices(): Uint32Array;
   takeIndicesU16(): Uint16Array;
   takeMeshTable(): Uint32Array;
+  takeInstanceTable(): Uint32Array;
+  takeInstanceTransforms(): Float32Array;
+  shapeCount(): number;
+  shapeId(at: number): number;
+  shapeBox(at: number): ArrayLike<number>;
+  shapeClosed(at: number): boolean;
+  shapeVertexFormat(at: number): string;
+  takeShapePositions(at: number): Float32Array;
+  takeShapePositionsQ16(at: number): Uint16Array;
+  takeShapeNormals(at: number): Float32Array;
+  takeShapeNormalsOct(at: number): Int16Array;
+  shapeIndicesAreU16(at: number): boolean;
+  takeShapeIndices(at: number): Uint32Array;
+  takeShapeIndicesU16(at: number): Uint16Array;
+}
+
+/** The shapes a view sends first (A13), each array taken in its own width. */
+function readShapes(view: BatchViewLike): ShapeDef[] {
+  const shapes: ShapeDef[] = [];
+  for (let at = 0; at < view.shapeCount(); at++) {
+    const vertexFormat = view.shapeVertexFormat(at) as VertexFormat;
+    const q16 = vertexFormat === 'q16';
+    shapes.push({
+      shapeId: view.shapeId(at),
+      vertexFormat,
+      positions: q16 ? view.takeShapePositionsQ16(at) : view.takeShapePositions(at),
+      normals: q16 ? view.takeShapeNormalsOct(at) : view.takeShapeNormals(at),
+      indices: view.shapeIndicesAreU16(at) ? view.takeShapeIndicesU16(at) : view.takeShapeIndices(at),
+      box: box(view.shapeBox(at)),
+      closed: view.shapeClosed(at)
+    });
+  }
+  return shapes;
 }
 
 const box = (values: ArrayLike<number>) => ({
@@ -57,9 +90,8 @@ export function readBatchView(view: BatchViewLike, modelId: ModelId, sequence: n
     normals: q16 ? view.takeNormalsOct() : view.takeNormals(),
     indices: view.indicesAreU16() ? view.takeIndicesU16() : view.takeIndices(),
     meshTable: view.takeMeshTable(),
-    // A13 adds shapes and instances; the kernel sends none yet.
-    shapes: [],
-    instanceTable: new Uint32Array(0),
-    instanceTransforms: new Float32Array(0)
+    shapes: readShapes(view),
+    instanceTable: view.takeInstanceTable(),
+    instanceTransforms: view.takeInstanceTransforms()
   };
 }

@@ -81,6 +81,21 @@ pub struct ElementMesh {
     /// it closed and outward, as `transformed` turns the winding of a mirroring one, and can only
     /// merge corners, never part them. `None` when not yet checked.
     pub closed: Option<bool>,
+    /// Set when `mesh` is a placed copy of a shape the evaluator keeps (`docs/09` §2, A13), so
+    /// the stream may send the shape once and this mesh as an instance of it. `None` for
+    /// everything else, and once a void has been cut from the element.
+    pub instance: Option<InstanceOf>,
+}
+
+/// A mesh as a placed copy of a shared shape: `mesh = transformed(shape, transform)`.
+#[derive(Debug, Clone)]
+pub struct InstanceOf {
+    /// The leaf representation item the shape comes from: the same key `instance_uses` counts.
+    pub key: u32,
+    /// The shape in its own coordinates, shared by every copy.
+    pub shape: Rc<Mesh>,
+    /// From the shape's coordinates to model coordinates.
+    pub transform: DMat4,
 }
 
 #[derive(Debug, Clone)]
@@ -123,7 +138,7 @@ pub struct ModelEvaluator<'a> {
     placements: HashMap<u32, DMat4>,
     curves: HashMap<u32, Rc<Stationed>>,
     /// Each repeated shape's mesh, and whether it is closed and winds outward, once asked.
-    instances: HashMap<u32, (Mesh, Option<bool>)>,
+    instances: HashMap<u32, (Rc<Mesh>, Option<bool>)>,
     instance_triangles: usize,
     openings: HashMap<u32, Vec<u32>>,
     item_colors: HashMap<u32, u32>,
@@ -884,6 +899,8 @@ impl<'a> ModelEvaluator<'a> {
                 .collect();
             if !cuts.is_empty() {
                 for element in &mut meshes {
+                    // Cut or not, the element no longer is a plain copy of a shape.
+                    element.instance = None;
                     let Some(shape) = closed_shape(&element.mesh) else {
                         self.warn("void-on-open-mesh", "void not cut: mesh is not closed".into());
                         continue;
@@ -921,30 +938,7 @@ impl<'a> ModelEvaluator<'a> {
             Some(id) => self.placement(id, 0),
             None => DMat4::IDENTITY,
         };
-        let Some(shape) = attribute(entity, def, "Representation").and_then(reference) else {
-            return Vec::new();
-        };
-        let Some((shape, shape_def)) = self.lookup(shape) else {
-            return Vec::new();
-        };
-
-        let representations: Vec<u32> = list(attribute(&shape, &shape_def, "Representations"))
-            .iter()
-            .filter_map(reference)
-            .collect();
-        let identifier = |evaluator: &Self, id: u32| -> Option<String> {
-            let (entity, def) = evaluator.lookup(id)?;
-            match attribute(&entity, &def, "RepresentationIdentifier")? {
-                Value::String(text) => Some(text.clone()),
-                _ => None,
-            }
-        };
-        let chosen = ["Body", "Facetation", "Mesh"].iter().find_map(|wanted| {
-            representations
-                .iter()
-                .copied()
-                .find(|id| identifier(self, *id).as_deref() == Some(*wanted))
-        });
+        let chosen = self.chosen_representation(entity, def);
 
         let mut meshes = Vec::new();
         if let Some(representation) = chosen {
@@ -1002,45 +996,154 @@ impl<'a> ModelEvaluator<'a> {
         }
         let local = self.instance_of(id, &entity, &def, depth);
 
-        if let Some((mesh, closed)) = local {
+        if let Some((mesh, closed, shared)) = local {
             // A placement that flattens the shape leaves it no volume, so it is checked again.
             let keeps_volume = transform.determinant().is_normal();
             out.push(ElementMesh {
                 mesh: transformed(mesh, transform),
                 rgba: color,
                 closed: closed.filter(|_| keeps_volume),
+                instance: shared.map(|shape| InstanceOf { key: id, shape, transform }),
             });
         }
     }
 
     /// `solid`, remembered for items under a mapped representation, which models repeat by the
     /// thousand, with whether it is closed, so that is checked once too. An item that raised a
-    /// diagnostic is not kept, so each element reports it.
+    /// diagnostic is not kept, so each element reports it. The third value is the kept shape,
+    /// shared, when there is one.
     fn instance_of(
         &mut self,
         id: u32,
         entity: &Entity,
         def: &EntityDef,
         depth: usize,
-    ) -> Option<(Mesh, Option<bool>)> {
+    ) -> Option<(Mesh, Option<bool>, Option<Rc<Mesh>>)> {
         if depth == 0 {
-            return Some((self.solid(id, entity, def, depth)?, None));
+            return Some((self.solid(id, entity, def, depth)?, None, None));
         }
         // Checked when the shape comes back, so one used once is not checked twice. Only a
         // closed shape's answer is passed on: one that is not may become closed once placed,
         // when rounding merges corners a hair apart, so each placed copy is checked.
         if let Some((mesh, closed)) = self.instances.get_mut(&id) {
             let closed = *closed.get_or_insert_with(|| mesh.is_closed_outward());
-            return Some((mesh.clone(), closed.then_some(true)));
+            return Some(((**mesh).clone(), closed.then_some(true), Some(Rc::clone(mesh))));
         }
         let reported = self.diagnostics.len();
         let mesh = self.solid(id, entity, def, depth)?;
         let kept = self.instance_triangles + mesh.triangles.len();
         if self.diagnostics.len() == reported && kept <= MAX_INSTANCE_TRIANGLES {
             self.instance_triangles = kept;
-            self.instances.insert(id, (mesh.clone(), None));
+            let shared = Rc::new(mesh.clone());
+            self.instances.insert(id, (Rc::clone(&shared), None));
+            return Some((mesh, None, Some(shared)));
         }
-        Some((mesh, None))
+        Some((mesh, None, None))
+    }
+
+    /// Whether a kept shape is closed and winds outward, checked once (`docs/09` §2: `Closed`
+    /// comes from the shape). `None` for a key the evaluator does not keep.
+    pub fn shape_closed(&mut self, key: u32) -> Option<bool> {
+        let (mesh, closed) = self.instances.get_mut(&key)?;
+        Some(*closed.get_or_insert_with(|| mesh.is_closed_outward()))
+    }
+
+    /// How many times the stream will meet each leaf item under a mapped representation
+    /// (`docs/09` §2, rule 5), counted before streaming by walking what `evaluate` walks: the
+    /// products of `element_ids` without voids, the first of their `Body`, `Facetation` and
+    /// `Mesh` representations, and each `IfcMappedItem` down to its map's items, through nested
+    /// mappings, which multiply. Bounded like the evaluator: `MAX_DEPTH` levels, a path set
+    /// against cycles, and each map's leaves counted once and remembered.
+    pub fn instance_uses(&self) -> HashMap<u32, u32> {
+        let mut uses: HashMap<u32, u32> = HashMap::new();
+        let mut memo: HashMap<u32, Rc<Vec<(u32, u32)>>> = HashMap::new();
+        for id in self.element_ids() {
+            if self.openings.contains_key(&id) {
+                continue;
+            }
+            let Some((entity, def)) = self.lookup(id) else { continue };
+            let Some(representation) = self.chosen_representation(&entity, &def) else { continue };
+            for item in self.representation_items(representation) {
+                let Some((item_entity, item_def)) = self.lookup(item) else { continue };
+                if !item_def.is_a("IfcMappedItem") {
+                    continue;
+                }
+                let mut path = Vec::new();
+                for (leaf, count) in self.mapped_leaves(&item_entity, &item_def, &mut memo, &mut path).iter() {
+                    let entry = uses.entry(*leaf).or_insert(0);
+                    *entry = entry.saturating_add(*count);
+                }
+            }
+        }
+        uses
+    }
+
+    /// The leaf items under one mapped item, with how many times each is reached.
+    fn mapped_leaves(
+        &self,
+        entity: &Entity,
+        def: &EntityDef,
+        memo: &mut HashMap<u32, Rc<Vec<(u32, u32)>>>,
+        path: &mut Vec<u32>,
+    ) -> Rc<Vec<(u32, u32)>> {
+        let Some(map) = attribute(entity, def, "MappingSource").and_then(reference) else {
+            return Rc::new(Vec::new());
+        };
+        if let Some(known) = memo.get(&map) {
+            return Rc::clone(known);
+        }
+        if path.len() >= MAX_DEPTH || path.contains(&map) {
+            return Rc::new(Vec::new());
+        }
+        let Some((map_entity, map_def)) = self.lookup(map) else { return Rc::new(Vec::new()) };
+        let Some(representation) = attribute(&map_entity, &map_def, "MappedRepresentation").and_then(reference) else {
+            return Rc::new(Vec::new());
+        };
+        path.push(map);
+        let mut counts: HashMap<u32, u32> = HashMap::new();
+        for item in self.representation_items(representation) {
+            let Some((item_entity, item_def)) = self.lookup(item) else { continue };
+            if item_def.is_a("IfcMappedItem") {
+                for (leaf, count) in self.mapped_leaves(&item_entity, &item_def, memo, path).iter() {
+                    let entry = counts.entry(*leaf).or_insert(0);
+                    *entry = entry.saturating_add(*count);
+                }
+            } else {
+                *counts.entry(item).or_insert(0) += 1;
+            }
+        }
+        path.pop();
+        let mut leaves: Vec<(u32, u32)> = counts.into_iter().collect();
+        leaves.sort_unstable();
+        let leaves = Rc::new(leaves);
+        memo.insert(map, Rc::clone(&leaves));
+        leaves
+    }
+
+    /// The items of a representation, in order.
+    fn representation_items(&self, id: u32) -> Vec<u32> {
+        let Some((entity, def)) = self.lookup(id) else { return Vec::new() };
+        list(attribute(&entity, &def, "Items")).iter().filter_map(reference).collect()
+    }
+
+    /// The representation a product is drawn from: the first of `Body`, `Facetation` and `Mesh`.
+    fn chosen_representation(&self, entity: &Entity, def: &EntityDef) -> Option<u32> {
+        let shape = attribute(entity, def, "Representation").and_then(reference)?;
+        let (shape, shape_def) = self.lookup(shape)?;
+        let representations: Vec<u32> = list(attribute(&shape, &shape_def, "Representations"))
+            .iter()
+            .filter_map(reference)
+            .collect();
+        let identifier = |id: u32| -> Option<String> {
+            let (entity, def) = self.lookup(id)?;
+            match attribute(&entity, &def, "RepresentationIdentifier")? {
+                Value::String(text) => Some(text.clone()),
+                _ => None,
+            }
+        };
+        ["Body", "Facetation", "Mesh"]
+            .iter()
+            .find_map(|wanted| representations.iter().copied().find(|id| identifier(*id).as_deref() == Some(*wanted)))
     }
 
     /// Exporters may style a boolean result or only the solid it started from.

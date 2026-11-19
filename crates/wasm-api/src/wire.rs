@@ -3,7 +3,7 @@
 //! octahedral 16-bit normals, and 16-bit indices where they fit. A batch that does not fit keeps
 //! today's `f32` layout.
 
-use crate::batches::Batch;
+use crate::batches::{Batch, ShapeData};
 
 /// Largest step of the 16-bit grid on any axis, in metres. A coarser batch stays `f32`.
 /// Nick's decision on `docs/09` section 7: 1 mm, so a position is off by 0.5 mm at most.
@@ -35,12 +35,29 @@ pub enum Indices {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WireBatch {
     pub origin: [f64; 3],
-    /// `box`, and the grid of `q16` positions: without instances they are the same box.
+    /// `box`: everything the batch draws, its vertices and its transformed shapes.
     pub min: [f32; 3],
     pub max: [f32; 3],
+    /// `quantBox`: the exact box of the batch's own vertices, and the grid of `q16` ones.
+    /// `None` when it has none, only instances. Without instances it equals `box`.
+    pub quant: Option<([f32; 3], [f32; 3])>,
     pub vertices: Vertices,
     pub indices: Indices,
     pub mesh_table: Vec<u32>,
+    pub shapes: Vec<WireShape>,
+    pub instance_table: Vec<u32>,
+    pub instance_transforms: Vec<f32>,
+}
+
+/// A shape as it crosses to JS (A13): `q16` on the grid of its own box, fourth component 0.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WireShape {
+    pub shape_id: u32,
+    pub min: [f32; 3],
+    pub max: [f32; 3],
+    pub closed: bool,
+    pub vertices: Vertices,
+    pub indices: Indices,
 }
 
 /// The grid step on each axis for a box, in metres.
@@ -116,32 +133,67 @@ fn record_of_vertices(mesh_table: &[u32], vertex_count: usize) -> Vec<u16> {
     records
 }
 
+/// x, y, z on the grid of a box and a fourth value per vertex (a record, or 0 in a shape), and
+/// octahedral normals.
+fn quantised(positions: &[f32], normals: &[f32], min: [f32; 3], max: [f32; 3], fourth: &[u16]) -> Vertices {
+    let vertex_count = positions.len() / 3;
+    let axes: [Axis; 3] = std::array::from_fn(|axis| Axis::new(min[axis], max[axis]));
+    let mut packed = vec![0u16; vertex_count * 4];
+    let corners = positions.as_chunks::<3>().0;
+    for (at, (out, corner)) in packed.as_chunks_mut::<4>().0.iter_mut().zip(corners).enumerate() {
+        let extra = fourth.get(at).copied().unwrap_or(0);
+        *out = [axes[0].quantise(corner[0]), axes[1].quantise(corner[1]), axes[2].quantise(corner[2]), extra];
+    }
+    let mut octahedral = vec![0i16; vertex_count * 2];
+    for (out, normal) in octahedral.as_chunks_mut::<2>().0.iter_mut().zip(normals.as_chunks::<3>().0) {
+        *out = oct_encode(*normal);
+    }
+    Vertices::Q16 { positions: packed, normals: octahedral }
+}
+
+/// 16-bit indices up to 65,536 vertices.
+fn indices_for(indices: Vec<u32>, vertex_count: usize) -> Indices {
+    if vertex_count <= MAX_U16_VERTICES {
+        Indices::U16(indices.iter().map(|index| *index as u16).collect())
+    } else {
+        Indices::U32(indices)
+    }
+}
+
+fn pack_shape(shape: ShapeData) -> WireShape {
+    let vertex_count = shape.positions.len() / 3;
+    let vertices = if shape.q16 {
+        quantised(&shape.positions, &shape.normals, shape.min, shape.max, &[])
+    } else {
+        Vertices::F32 { positions: shape.positions, normals: shape.normals }
+    };
+    WireShape { shape_id: shape.shape_id, min: shape.min, max: shape.max, closed: shape.closed, vertices, indices: indices_for(shape.indices, vertex_count) }
+}
+
 /// Packs a batch: `q16` when it fits (`fits_q16`), `f32` otherwise; 16-bit indices whenever the
-/// batch has at most 65,536 vertices, in either format.
+/// batch has at most 65,536 vertices, in either format. Shapes are packed as their first
+/// instance decided.
 pub fn pack(batch: Batch) -> WireBatch {
     let vertex_count = batch.positions.len() / 3;
+    let quant = (vertex_count > 0).then_some((batch.min, batch.max));
     let vertices = if fits_q16(&batch) {
         let records = record_of_vertices(&batch.mesh_table, vertex_count);
-        let axes: [Axis; 3] = std::array::from_fn(|axis| Axis::new(batch.min[axis], batch.max[axis]));
-        let mut positions = vec![0u16; vertex_count * 4];
-        let corners = batch.positions.as_chunks::<3>().0;
-        for ((out, corner), record) in positions.as_chunks_mut::<4>().0.iter_mut().zip(corners).zip(&records) {
-            *out = [axes[0].quantise(corner[0]), axes[1].quantise(corner[1]), axes[2].quantise(corner[2]), *record];
-        }
-        let mut normals = vec![0i16; vertex_count * 2];
-        for (out, normal) in normals.as_chunks_mut::<2>().0.iter_mut().zip(batch.normals.as_chunks::<3>().0) {
-            *out = oct_encode(*normal);
-        }
-        Vertices::Q16 { positions, normals }
+        quantised(&batch.positions, &batch.normals, batch.min, batch.max, &records)
     } else {
         Vertices::F32 { positions: batch.positions, normals: batch.normals }
     };
-    let indices = if vertex_count <= MAX_U16_VERTICES {
-        Indices::U16(batch.indices.iter().map(|index| *index as u16).collect())
-    } else {
-        Indices::U32(batch.indices)
-    };
-    WireBatch { origin: batch.origin, min: batch.min, max: batch.max, vertices, indices, mesh_table: batch.mesh_table }
+    WireBatch {
+        origin: batch.origin,
+        min: batch.draw_min,
+        max: batch.draw_max,
+        quant,
+        vertices,
+        indices: indices_for(batch.indices, vertex_count),
+        mesh_table: batch.mesh_table,
+        shapes: batch.shapes.into_iter().map(pack_shape).collect(),
+        instance_table: batch.instance_table,
+        instance_transforms: batch.instance_transforms,
+    }
 }
 
 #[cfg(test)]
@@ -220,6 +272,10 @@ mod tests {
             mesh_table,
             min,
             max,
+            draw_min: min,
+            draw_max: max,
+            draws: true,
+            ..Batch::default()
         }
     }
 
