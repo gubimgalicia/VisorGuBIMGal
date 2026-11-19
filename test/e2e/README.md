@@ -40,6 +40,7 @@ Needs Google Chrome and Node 22 or later (global `WebSocket`).
 ## CI
 
 The `browser` job in `.github/workflows/ci.yml` runs `gl2` and `none` on SwiftShader as a required
-step, and `gpu` on SwiftShader as a step that does not block yet. Linux has no references in `ref/`
-until the first run: its screenshots come back as NEW in the `e2e-output` artifact
-(`new-refs/linux-*`), to be checked by eye and committed.
+step, and `gpu` on SwiftShader as a step that does not block yet. The Linux references in
+`ref/linux-*` come from the first green run (CI run 44613444086, 2026-11-19), checked by eye against
+the Windows ones. The job sets `E2E_REQUIRE_REFS=1`, so a missing reference fails. A new screenshot
+lands in the `e2e-output` artifact (`new-refs/linux-*`) on its first run, to be checked and committed.
