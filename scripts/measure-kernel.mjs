@@ -1,6 +1,7 @@
 // One model in one fresh instance, as a Worker holds it. Run npm run kernel first.
 // usage: node scripts/measure-kernel.mjs <file.ifc>
 import { readFileSync, statSync } from 'node:fs';
+import { takeBatch } from './lib/take-batch.mjs';
 
 const pkg = new URL('../src/infrastructure/kernel/pkg/', import.meta.url).href;
 const { initSync, Model } = await import(pkg + 'wasm_api.js');
@@ -36,11 +37,7 @@ const started = performance.now();
 for (;;) {
   const view = model.nextBatch(65536);
   if (!view) break;
-  const positions = view.takePositions();
-  const normals = view.takeNormals();
-  const indices = view.takeIndices();
-  const table = view.takeMeshTable();
-  view.free();
+  const { positions, normals, indices, meshTable: table } = takeBatch(view);
   if (first === null) first = Math.round(performance.now() - started);
   triangles += indices.length / 3;
   gpuBytes += positions.byteLength + normals.byteLength + indices.byteLength + table.byteLength;

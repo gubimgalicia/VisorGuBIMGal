@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findBatchError } from '../src/domain/kernel/GeometryBatch.ts';
+import { takeBatch } from './lib/take-batch.mjs';
 import { initSync, kernelVersion, Model } from '../src/infrastructure/kernel/pkg/wasm_api.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -32,6 +33,8 @@ function details(model, ids) {
 }
 
 let failures = 0;
+let q16Batches = 0;
+let totalBatches = 0;
 for (const file of files) {
   const name = file.split(/[\\/]/).pop();
   const started = performance.now();
@@ -41,24 +44,16 @@ for (const file of files) {
 
   model.startStream();
   const seen = new Set();
+  // Shapes arrive once per stream, in the first batch that uses them (docs/05 section 3).
+  const knownShapes = new Map();
   let batches = 0;
   for (;;) {
     const view = model.nextBatch(65536);
     if (!view) break;
-    const [x, y, z] = view.origin();
-    const [minX, minY, minZ, maxX, maxY, maxZ] = view.bounds();
-    const batch = {
-      modelId: 'check',
-      sequence: ++batches,
-      origin: [x, y, z],
-      box: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
-      positions: view.takePositions(),
-      normals: view.takeNormals(),
-      indices: view.takeIndices(),
-      meshTable: view.takeMeshTable()
-    };
-    view.free();
-    const error = findBatchError(batch);
+    const batch = { modelId: 'check', sequence: ++batches, ...takeBatch(view) };
+    if (batch.vertexFormat === 'q16') q16Batches += 1;
+    const error = findBatchError(batch, knownShapes);
+    for (const shape of batch.shapes) knownShapes.set(shape.shapeId, shape);
     if (error) {
       console.error(`${name}: ${error}`);
       failures += 1;
@@ -66,6 +61,7 @@ for (const file of files) {
     for (let at = 0; at < batch.meshTable.length; at += 7) seen.add(batch.meshTable[at]);
   }
   const complete = JSON.parse(model.finishStream());
+  totalBatches += batches;
   const inspected = details(model, seen);
   model.free();
 
@@ -102,5 +98,6 @@ for (const [bytes, expected] of [
   }
 }
 
+console.log(`${q16Batches} of ${totalBatches} batches in q16`);
 console.log(failures === 0 ? `all ${files.length} files pass` : `${failures} failures`);
 process.exit(failures === 0 ? 0 : 1);

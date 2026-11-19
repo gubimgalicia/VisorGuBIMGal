@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { takeBatch } from '../lib/take-batch.mjs';
 import { drawingRequest } from '../../src/infrastructure/kernel/drawingRequest.ts';
 
 const [pkgDir, workloadFile] = process.argv.slice(2);
@@ -33,11 +34,7 @@ function loadAndStream(bytes) {
     for (;;) {
       const view = model.nextBatch(65536);
       if (!view) break;
-      const indices = view.takeIndices();
-      view.takePositions();
-      view.takeNormals();
-      view.takeMeshTable();
-      view.free();
+      const { indices } = takeBatch(view);
       count('triangles', indices.length / 3);
       count('batches', 1);
     }

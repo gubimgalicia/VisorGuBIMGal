@@ -1,18 +1,20 @@
 // Turns a geometry batch into plain triangles in absolute model coordinates, whatever its format:
-// today's (contract v1: f32 positions and normals, u32 indices, meshTable) or the one proposed in
-// docs/09 (v2: 16-bit positions across the batch or shape box, octahedral i16 normals, u16 or
-// u32 indices, shared shapes and an instance table). For checking that v2 draws what v1 drew.
+// contract v1 (f32 positions and normals, u32 indices, meshTable) or v2 (docs/05 section 3: q16
+// positions as four u16 per vertex, x, y, z on the grid of the batch's quantBox or the shape's box
+// and the record index fourth; octahedral i16 normals; u16 or u32 indices; shared shapes and an
+// instance table). For checking that v2 draws what v1 drew.
 // Pure functions, no kernel and no browser.
 
 export const MESH_RECORD_WORDS = 7;
 export const INSTANCE_WORDS = 4;
 export const TRANSFORM_FLOATS = 12;
 
-/** q16 position: box.min + q / 65535 * (box.max - box.min), per axis. */
-export function decodeQ16(q, min, max, out = new Float64Array(q.length)) {
-  for (let i = 0; i < q.length; i++) {
-    const axis = i % 3;
-    out[i] = min[axis] + (q[i] / 65535) * (max[axis] - min[axis]);
+/** q16 positions, four u16 per vertex: xyz = min + q / 65535 * (max - min). The fourth is skipped. */
+export function decodeQ16(q, min, max, out = new Float64Array((q.length / 4) * 3)) {
+  for (let v = 0; v < q.length / 4; v++) {
+    for (let axis = 0; axis < 3; axis++) {
+      out[3 * v + axis] = min[axis] + (q[4 * v + axis] / 65535) * (max[axis] - min[axis]);
+    }
   }
   return out;
 }
@@ -31,8 +33,11 @@ export function decodeOct(sx, sy) {
   return [x / length, y / length, z / length];
 }
 
+/** A batch's grid is its quantBox (its box in v1); a shape's is its box. */
+const gridOf = (part) => part.quantBox ?? part.box;
+
 function positionsOf(part) {
-  if (part.vertexFormat === 'q16') return decodeQ16(part.positions, part.box.min, part.box.max);
+  if (part.vertexFormat === 'q16') return decodeQ16(part.positions, gridOf(part).min, gridOf(part).max);
   return part.positions;
 }
 
@@ -87,7 +92,7 @@ export function expandBatch(batch, shapes, emit) {
         normals[3 * k + axis] = nor[3 * v + axis];
       }
     }
-    emit({ expressId, rgba, flags, triangles, normals, tolerance: quantError(batch) });
+    emit({ expressId, rgba, flags, triangles, normals, tolerance: quantError(batch), axisTolerance: halfSteps(batch) });
   }
   const instances = batch.instanceTable ?? new Uint32Array(0);
   for (let i = 0; i < instances.length / INSTANCE_WORDS; i++) {
@@ -117,10 +122,17 @@ export function expandBatch(batch, shapes, emit) {
   }
 }
 
-/** The largest position error a batch's format allows: half a 16-bit step, or 0 for f32. */
+/** Half the 16-bit step on each axis, the most rounding moves a coordinate; zeros for f32. */
+export function halfSteps(part) {
+  if (part.vertexFormat !== 'q16') return [0, 0, 0];
+  const grid = gridOf(part);
+  return [0, 1, 2].map((axis) => (grid.max[axis] - grid.min[axis]) / 65535 / 2);
+}
+
+/**
+ * The farthest a q16 vertex may lie from where it was, as a distance: each axis may be off by half
+ * its own step, so up to the length of the half-step vector. 0 for f32.
+ */
 export function quantError(part) {
-  if (part.vertexFormat !== 'q16') return 0;
-  let step = 0;
-  for (let axis = 0; axis < 3; axis++) step = Math.max(step, (part.box.max[axis] - part.box.min[axis]) / 65535);
-  return step / 2;
+  return Math.hypot(...halfSteps(part));
 }

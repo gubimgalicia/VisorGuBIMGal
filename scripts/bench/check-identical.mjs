@@ -9,6 +9,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { takeBatch } from '../lib/take-batch.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -25,10 +26,10 @@ if (process.argv[2] === '--child') {
   for (;;) {
     const view = model.nextBatch(65536);
     if (!view) break;
-    for (const part of [view.takePositions(), view.takeNormals(), view.takeIndices(), view.takeMeshTable(), view.origin()]) {
-      stream.update(new Uint8Array(part.buffer, part.byteOffset, part.byteLength));
-    }
-    view.free();
+    const batch = takeBatch(view);
+    stream.update(batch.vertexFormat);
+    const parts = [batch.positions, batch.normals, batch.indices, batch.meshTable, Float64Array.from(batch.origin)];
+    for (const part of parts) stream.update(new Uint8Array(part.buffer, part.byteOffset, part.byteLength));
   }
   const finished = model.finishStream();
   stream.update(finished);

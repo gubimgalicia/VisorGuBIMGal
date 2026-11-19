@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { takeBatch } from './lib/take-batch.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const HERE = path.dirname(THIS_FILE);
@@ -187,11 +188,7 @@ if (process.argv[2] === '--child') {
     for (;;) {
       const view = model.nextBatch(MAX_TRIANGLES_PER_BATCH);
       if (!view) break;
-      const indices = view.takeIndices();
-      view.takePositions();
-      view.takeNormals();
-      view.takeMeshTable();
-      view.free();
+      const { indices } = takeBatch(view);
       triangles += indices.length / 3;
       batches += 1;
       sampleMemory();

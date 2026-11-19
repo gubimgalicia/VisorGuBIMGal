@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expandBatch } from './expand-batch.mjs';
+import { takeBatch } from '../lib/take-batch.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? Number(args[i + 1]) : fallback; };
@@ -31,25 +32,9 @@ async function load(pkg) {
   return mod;
 }
 
-/** One BatchView as a plain batch. v1 now; v2 by the method names of docs/09 section 4. */
+/** One BatchView as a plain batch, from either kernel API. Shapes and instances come with A13. */
 function readView(view) {
-  const bounds = view.bounds();
-  const batch = {
-    origin: Array.from(view.origin()),
-    box: { min: [bounds[0], bounds[1], bounds[2]], max: [bounds[3], bounds[4], bounds[5]] },
-    vertexFormat: typeof view.vertexFormat === 'function' ? view.vertexFormat() : 'f32',
-    positions: view.takePositions(),
-    normals: view.takeNormals(),
-    indices: view.takeIndices(),
-    meshTable: view.takeMeshTable()
-  };
-  if (typeof view.takeInstanceTable === 'function') {
-    batch.instanceTable = view.takeInstanceTable();
-    batch.instanceTransforms = view.takeInstanceTransforms();
-    batch.shapes = view.takeShapes();
-  }
-  view.free();
-  return batch;
+  return takeBatch(view);
 }
 
 /** Streams a file, yielding { elements: Map<expressId, records[]> } per batch. */
@@ -92,9 +77,15 @@ function compareElement(a, b, worst) {
     if (ta !== tb) return `colour/flags ${k}: ${ta / 9} triangles against ${tb / 9}`;
     // Each side may be off by its own quantisation error, so both count.
     const tolerance = TOL + Math.max(0, ...ra.map((r) => r.tolerance)) + Math.max(0, ...rb.map((r) => r.tolerance));
+    // Per axis too: rounding moves each coordinate by at most half that axis's step (docs/05).
+    // Instances rotate their shape's axes, so they have no per-axis bound and fall back to the distance.
+    const axisOf = (records) => [0, 1, 2].map((a) => Math.max(0, ...records.map((r) => (r.axisTolerance ? r.axisTolerance[a] : r.tolerance))));
+    const [axa, axb] = [axisOf(ra), axisOf(rb)];
+    const axisTolerance = [0, 1, 2].map((a) => TOL + axa[a] + axb[a]);
     const flat = (records) => records.map((r) => ({ t: r.triangles, n: r.normals }));
     const result =
-      compareTriangles(flat(ra), flat(rb), tolerance, false) ?? compareTriangles(sorted(ra), sorted(rb), tolerance, true);
+      compareTriangles(flat(ra), flat(rb), tolerance, axisTolerance, false) ??
+      compareTriangles(sorted(ra), sorted(rb), tolerance, axisTolerance, true);
     if (result.error) return `colour/flags ${k}: ${result.error}`;
     worst.position = Math.max(worst.position, result.position);
     worst.degrees = Math.max(worst.degrees, result.degrees);
@@ -113,7 +104,7 @@ function sorted(records) {
 }
 
 /** null means «try again sorted»; only the last try reports an error. */
-function compareTriangles(a, b, tolerance, lastTry) {
+function compareTriangles(a, b, tolerance, axisTolerance, lastTry) {
   const flatten = (list) => {
     const n = list.reduce((s, x) => s + x.t.length, 0);
     const t = new Float64Array(n), nn = new Float64Array(n);
@@ -122,18 +113,24 @@ function compareTriangles(a, b, tolerance, lastTry) {
     return { t, n: nn };
   };
   const fa = flatten(a), fb = flatten(b);
-  let position = 0, degrees = 0;
+  let position = 0, degrees = 0, axisExcess = null;
   for (let i = 0; i < fa.t.length; i += 3) {
     const d = Math.hypot(fa.t[i] - fb.t[i], fa.t[i + 1] - fb.t[i + 1], fa.t[i + 2] - fb.t[i + 2]);
     position = Math.max(position, d);
+    for (let axis = 0; axis < 3; axis++) {
+      const off = Math.abs(fa.t[i + axis] - fb.t[i + axis]);
+      if (off > axisTolerance[axis] && !axisExcess) axisExcess = { axis, off, limit: axisTolerance[axis] };
+    }
     // atan2(|a × b|, a · b): exact for equal vectors, which acos of a dot near 1 is not.
     const [ax, ay, az, bx, by, bz] = [fa.n[i], fa.n[i + 1], fa.n[i + 2], fb.n[i], fb.n[i + 1], fb.n[i + 2]];
     const cross = Math.hypot(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
     degrees = Math.max(degrees, (Math.atan2(cross, ax * bx + ay * by + az * bz) * 180) / Math.PI);
   }
-  if (position > tolerance || degrees > MAX_DEG) {
+  if (position > tolerance || degrees > MAX_DEG || axisExcess) {
     if (!lastTry) return null;
-    return { error: position > tolerance ? `position off by ${(position * 1000).toFixed(3)} mm (tolerance ${(tolerance * 1000).toFixed(3)} mm)` : `normal off by ${degrees.toFixed(2)} degrees` };
+    if (position > tolerance) return { error: `position off by ${(position * 1000).toFixed(3)} mm (tolerance ${(tolerance * 1000).toFixed(3)} mm)` };
+    if (axisExcess) return { error: `axis ${'xyz'[axisExcess.axis]} off by ${(axisExcess.off * 1000).toFixed(3)} mm (tolerance ${(axisExcess.limit * 1000).toFixed(3)} mm)` };
+    return { error: `normal off by ${degrees.toFixed(2)} degrees` };
   }
   return { position, degrees };
 }
@@ -141,8 +138,31 @@ function compareTriangles(a, b, tolerance, lastTry) {
 const base = await load(basePkg);
 const head = await load(headPkg);
 let failures = 0;
+/** The error opening a file raises, or null when it opens. */
+function openError(mod, bytes) {
+  try {
+    new mod.Model(bytes).free();
+    return null;
+  } catch (error) {
+    return String(error?.message ?? error);
+  }
+}
+
+let skipped = 0;
 for (const file of files) {
   const bytes = readFileSync(file);
+  // A file both builds refuse alike, an unsupported schema say, has nothing to compare.
+  const [refusedA, refusedB] = [openError(base, bytes), openError(head, bytes)];
+  if (refusedA !== null || refusedB !== null) {
+    if (refusedA === refusedB) {
+      skipped++;
+      console.log(`SKIP ${path.basename(file)}: both refuse it: ${refusedA.slice(0, 100)}`);
+    } else {
+      failures++;
+      console.log(`DIFF ${path.basename(file)}: base ${refusedA ?? 'opens'}, new ${refusedB ?? 'opens'}`);
+    }
+    continue;
+  }
   const sa = stream(base, bytes), sb = stream(head, bytes);
   const pending = [new Map(), new Map()];
   const done = [false, false];
@@ -188,4 +208,5 @@ for (const file of files) {
     console.log(`SAME ${name.padEnd(48)} ${String(elements).padStart(6)} elements, worst ${(worst.position * 1000).toFixed(4)} mm, ${worst.degrees.toFixed(3)}°`);
   }
 }
+console.log(`${files.length - skipped - failures} same, ${failures} different, ${skipped} refused by both`);
 process.exit(failures ? 1 : 0);

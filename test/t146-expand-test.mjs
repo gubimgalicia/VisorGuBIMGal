@@ -1,12 +1,15 @@
 // T-146: the v2 batch expander (scripts/bench/expand-batch.mjs) against batches made here by an
-// independent reference encoder from a real v1 batch: 16-bit positions, octahedral normals, and a
-// record turned into a shared shape plus an instance under a rotated, non-uniformly scaled matrix.
+// independent reference encoder and decoder: 16-bit positions (four per vertex, the record index
+// fourth, on the batch's quantBox), octahedral normals, and a record turned into a shared shape plus
+// an instance under a rotated, non-uniformly scaled matrix. Since A11 (T-153) the kernel itself
+// sends q16, so the f32 truth is the kernel's batch read by the reference decoder here.
 // node --experimental-strip-types test/t146-expand-test.mjs
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expandBatch } from '../scripts/bench/expand-batch.mjs';
+import { takeBatch } from '../scripts/lib/take-batch.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = path.join(REPO, 'src/infrastructure/kernel/pkg');
@@ -16,21 +19,29 @@ initSync({ module: readFileSync(path.join(pkg, 'wasm_api_bg.wasm')) });
 let passed = 0;
 const check = (name, fn) => { fn(); passed++; console.log(`PASS ${name}`); };
 
-// ---- One real v1 batch ----
+// ---- One real kernel batch, and its f32 reading by a reference decoder written from docs/05 ----
 const model = new Model(readFileSync(path.join(REPO, 'public/samples/SimpleWall.ifc')));
 model.startStream();
-const view = model.nextBatch(65536);
-const b = view.bounds();
-const v1 = {
-  origin: Array.from(view.origin()),
-  box: { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] },
-  vertexFormat: 'f32',
-  positions: view.takePositions(),
-  normals: view.takeNormals(),
-  indices: view.takeIndices(),
-  meshTable: view.takeMeshTable()
-};
-view.free();
+const kernel = takeBatch(model.nextBatch(65536));
+function referenceDecode(batch) {
+  const vertices = batch.positions.length / 4;
+  const positions = new Float64Array(vertices * 3);
+  const normals = new Float64Array(vertices * 3);
+  const { min, max } = batch.quantBox;
+  for (let v = 0; v < vertices; v++) {
+    for (let a = 0; a < 3; a++) positions[3 * v + a] = min[a] + (batch.positions[4 * v + a] * (max[a] - min[a])) / 65535;
+    let x = Math.max(batch.normals[2 * v] / 32767, -1);
+    let y = Math.max(batch.normals[2 * v + 1] / 32767, -1);
+    const z = 1 - Math.abs(x) - Math.abs(y);
+    if (z < 0) [x, y] = [(1 - Math.abs(y)) * (x >= 0 ? 1 : -1), (1 - Math.abs(x)) * (y >= 0 ? 1 : -1)];
+    const l = Math.hypot(x, y, z);
+    normals.set([x / l, y / l, z / l], 3 * v);
+  }
+  const axis = (a, pick) => pick(...positions.filter((_, i) => i % 3 === a));
+  const box = { min: [0, 1, 2].map((a) => axis(a, Math.min)), max: [0, 1, 2].map((a) => axis(a, Math.max)) };
+  return { ...batch, vertexFormat: 'f32', quantBox: box, box, positions, normals, indices: Uint32Array.from(batch.indices) };
+}
+const v1 = referenceDecode(kernel);
 const collect = (batch, shapes = new Map()) => { const out = []; expandBatch(batch, shapes, (r) => out.push(r)); return out; };
 const truth = collect(v1);
 const maxDiff = (a, b) => a.reduce((m, x, i) => Math.max(m, Math.abs(x - b[i])), 0);
@@ -43,6 +54,17 @@ const angle = (a, b) => {
   return worst;
 };
 
+check('the kernel sends this batch as q16, and it expands as the reference decoder reads it', () => {
+  assert.equal(kernel.vertexFormat, 'q16');
+  assert.ok(kernel.indices instanceof Uint16Array);
+  const got = collect(kernel);
+  assert.equal(got.length, truth.length);
+  got.forEach((r, i) => {
+    assert.ok(maxDiff(r.triangles, truth[i].triangles) < 1e-9, 'record ' + i + ' position');
+    assert.ok(angle(r.normals, truth[i].normals) < 1e-6, 'record ' + i + ' normal');
+  });
+});
+
 check('v1 expansion equals origin + positions read straight from the arrays', () => {
   const r = truth[0];
   const [, , , firstIndex] = v1.meshTable;
@@ -52,13 +74,23 @@ check('v1 expansion equals origin + positions read straight from the arrays', ()
 });
 
 // ---- Reference encoder, written from the definitions in docs/09, not from the decoder ----
-function encodeQ16(positions, min, max) {
-  const q = new Uint16Array(positions.length);
-  for (let i = 0; i < positions.length; i++) {
-    const axis = i % 3, span = max[axis] - min[axis];
-    q[i] = span > 0 ? Math.round(((positions[i] - min[axis]) / span) * 65535) : 0;
+function encodeQ16(positions, min, max, records = null) {
+  const q = new Uint16Array((positions.length / 3) * 4);
+  for (let v = 0; v < positions.length / 3; v++) {
+    for (let axis = 0; axis < 3; axis++) {
+      const span = max[axis] - min[axis];
+      q[4 * v + axis] = span > 0 ? Math.round(((positions[3 * v + axis] - min[axis]) / span) * 65535) : 0;
+    }
+    q[4 * v + 3] = records ? records[v] : 0;
   }
   return q;
+}
+function recordsOf(batch) {
+  const records = new Uint16Array(batch.positions.length / 3);
+  for (let r = 0; r < batch.meshTable.length / 7; r++) {
+    records.fill(r, batch.meshTable[7 * r + 1], batch.meshTable[7 * r + 1] + batch.meshTable[7 * r + 2]);
+  }
+  return records;
 }
 function encodeOct(normals) {
   const out = new Int16Array((normals.length / 3) * 2);
@@ -72,17 +104,18 @@ function encodeOct(normals) {
   }
   return out;
 }
-const halfStep = (box) => Math.max(...[0, 1, 2].map((a) => (box.max[a] - box.min[a]) / 65535)) / 2;
+// Each axis may be off by half its own step, so a vertex by up to the half-step vector's length.
+const halfStep = (box) => Math.hypot(...[0, 1, 2].map((a) => (box.max[a] - box.min[a]) / 65535 / 2));
 
 check('q16 positions and octahedral normals decode within half a step and 0.01 degrees', () => {
-  const v2 = { ...v1, vertexFormat: 'q16', positions: encodeQ16(v1.positions, v1.box.min, v1.box.max), normals: encodeOct(v1.normals) };
+  const v2 = { ...v1, vertexFormat: 'q16', positions: encodeQ16(v1.positions, v1.box.min, v1.box.max, recordsOf(v1)), normals: encodeOct(v1.normals) };
   const got = collect(v2);
   assert.equal(got.length, truth.length);
   const bound = halfStep(v1.box);
   got.forEach((r, i) => {
     assert.ok(maxDiff(r.triangles, truth[i].triangles) <= bound * 1.0001, `record ${i} position`);
     assert.ok(angle(r.normals, truth[i].normals) < 0.01, `record ${i} normal ${angle(r.normals, truth[i].normals)}`);
-    assert.ok(Math.abs(r.tolerance - bound) < 1e-12, 'tolerance is half a step');
+    assert.ok(Math.abs(r.tolerance - bound) < 1e-12, 'tolerance is the half-step vector');
   });
 });
 
@@ -173,4 +206,4 @@ check('a mirrored instance, an unknown shape and a shape sent twice are refused'
   assert.throws(() => collect(batch, shapes), /sent twice/);
 });
 
-console.log(`\nt146-expand-test: ${passed}/5 pass`);
+console.log(`\nt146-expand-test: ${passed}/6 pass`);
