@@ -3,7 +3,9 @@ import {
   MESH_RECORD_WORDS,
   MeshField,
   findBatchError,
-  type GeometryBatch
+  vertexCountOf,
+  type GeometryBatch,
+  type VertexFormat
 } from '../../domain/kernel/GeometryBatch';
 import type {
   CameraPose,
@@ -49,13 +51,35 @@ interface GpuBatchEntry {
   /** The first of the opaque indices, which belong to closed meshes: see `groupIndices`. */
   closedIndexCount: number;
   transparentIndexCount: number;
+  /** q16 vertices decode on the GPU; f32 ones read a per-vertex record index buffer. */
+  vertexFormat: VertexFormat;
+  /** The grid of q16 positions, relative to origin; unused in f32. */
+  quantMin: Vec3;
+  quantMax: Vec3;
+  indexFormat: GPUIndexFormat;
   positionBuffer: GPUBuffer;
   normalBuffer: GPUBuffer;
-  recordIndexBuffer: GPUBuffer;
+  /** Only f32 batches: a q16 position carries its record index. */
+  recordIndexBuffer: GPUBuffer | null;
   opaqueIndexBuffer: GPUBuffer | null;
   transparentIndexBuffer: GPUBuffer | null;
   gpuBytes: number;
 }
+
+/** The pipelines of one vertex format. */
+interface PipelineSet {
+  opaque: GPURenderPipeline;
+  /** Opaque, culling back faces: closed meshes. */
+  closed: GPURenderPipeline;
+  transparent: GPURenderPipeline;
+  ghost: GPURenderPipeline;
+  pick: GPURenderPipeline;
+  closedPick: GPURenderPipeline;
+}
+
+/** Bytes of one BatchGpuData in the shader: offset, meta, quantMin and quantMax. */
+const BATCH_GPU_BYTES = 48;
+const BATCH_GPU_WORDS = BATCH_GPU_BYTES / 4;
 
 interface ModelEntry extends DisplayState {
   modelId: ModelId;
@@ -105,12 +129,7 @@ export class WebGpuRenderer implements RendererPort {
 
   private bindGroupLayout: GPUBindGroupLayout | null = null;
   private sceneBindGroup: GPUBindGroup | null = null;
-  private opaquePipeline: GPURenderPipeline | null = null;
-  private transparentPipeline: GPURenderPipeline | null = null;
-  private ghostPipeline: GPURenderPipeline | null = null;
-  private pickPipeline: GPURenderPipeline | null = null;
-  private closedPipeline: GPURenderPipeline | null = null;
-  private closedPickPipeline: GPURenderPipeline | null = null;
+  private pipelines: Record<VertexFormat, PipelineSet> | null = null;
 
   private sceneUniformBuffer: GPUBuffer | null = null;
   private batchGpuBuffer: GPUBuffer | null = null;
@@ -129,7 +148,7 @@ export class WebGpuRenderer implements RendererPort {
   private readonly sceneUniformData = new Float32Array(32 + SECTION_FLOATS);
   private sectionPlanes: SectionPlane[] = [];
 
-  private batchCpuBuffer = new ArrayBuffer(64 * 16);
+  private batchCpuBuffer = new ArrayBuffer(64 * BATCH_GPU_BYTES);
   private batchF32 = new Float32Array(this.batchCpuBuffer);
   private batchU32 = new Uint32Array(this.batchCpuBuffer);
 
@@ -300,7 +319,7 @@ export class WebGpuRenderer implements RendererPort {
       bindGroupLayouts: [this.bindGroupLayout]
     });
 
-    const vertexBuffers: GPUVertexBufferLayout[] = [
+    const f32Buffers: GPUVertexBufferLayout[] = [
       {
         arrayStride: 12,
         stepMode: 'vertex',
@@ -317,15 +336,32 @@ export class WebGpuRenderer implements RendererPort {
         attributes: [{ format: 'uint32', offset: 0, shaderLocation: 2 }]
       }
     ];
+    // q16: x, y, z and the record index as four u16; the normal as two snorm16.
+    const q16Buffers: GPUVertexBufferLayout[] = [
+      {
+        arrayStride: 8,
+        stepMode: 'vertex',
+        attributes: [{ format: 'uint16x4', offset: 0, shaderLocation: 0 }]
+      },
+      {
+        arrayStride: 4,
+        stepMode: 'vertex',
+        attributes: [{ format: 'snorm16x2', offset: 0, shaderLocation: 1 }]
+      }
+    ];
+    const layouts = { f32: { buffers: f32Buffers, suffix: '' }, q16: { buffers: q16Buffers, suffix: '_q16' } };
+    const sets = {} as Record<VertexFormat, PipelineSet>;
+    for (const format of ['f32', 'q16'] as const) {
+      const { buffers: vertexBuffers, suffix } = layouts[format];
 
     // Closed meshes draw without their back faces, which never show from outside them.
     const opaquePipeline = (label: string, cullMode: 'none' | 'back'): GPURenderPipeline =>
       device.createRenderPipeline({
-        label,
+        label: label + suffix,
         layout: pipelineLayout,
         vertex: {
           module: shaderModule,
-          entryPoint: 'vs_main',
+          entryPoint: 'vs_main' + suffix,
           buffers: vertexBuffers
         },
         fragment: {
@@ -343,17 +379,15 @@ export class WebGpuRenderer implements RendererPort {
           depthCompare: 'greater'
         }
       });
-    this.opaquePipeline = opaquePipeline('gubim-opaque-pipeline', 'none');
-    this.closedPipeline = opaquePipeline('gubim-closed-pipeline', 'back');
 
     // Transparent elements and ghosts blend over the opaque pass without writing depth.
     const blendedPipeline = (label: string, vertexEntryPoint: string): GPURenderPipeline =>
       device.createRenderPipeline({
-        label,
+        label: label + suffix,
         layout: pipelineLayout,
         vertex: {
           module: shaderModule,
-          entryPoint: vertexEntryPoint,
+          entryPoint: vertexEntryPoint + suffix,
           buffers: vertexBuffers
         },
         fragment: {
@@ -387,17 +421,15 @@ export class WebGpuRenderer implements RendererPort {
           depthCompare: 'greater'
         }
       });
-    this.transparentPipeline = blendedPipeline('gubim-transparent-pipeline', 'vs_main');
-    this.ghostPipeline = blendedPipeline('gubim-ghost-pipeline', 'vs_ghost');
 
     // Picking culls what drawing culls, so a click finds what shows.
     const pickPipeline = (label: string, cullMode: 'none' | 'back'): GPURenderPipeline =>
       device.createRenderPipeline({
-        label,
+        label: label + suffix,
         layout: pipelineLayout,
         vertex: {
           module: shaderModule,
-          entryPoint: 'vs_pick',
+          entryPoint: 'vs_pick' + suffix,
           buffers: vertexBuffers
         },
         fragment: {
@@ -415,8 +447,16 @@ export class WebGpuRenderer implements RendererPort {
           depthCompare: 'greater'
         }
       });
-    this.pickPipeline = pickPipeline('gubim-pick-pipeline', 'none');
-    this.closedPickPipeline = pickPipeline('gubim-closed-pick-pipeline', 'back');
+      sets[format] = {
+        opaque: opaquePipeline('gubim-opaque-pipeline', 'none'),
+        closed: opaquePipeline('gubim-closed-pipeline', 'back'),
+        transparent: blendedPipeline('gubim-transparent-pipeline', 'vs_main'),
+        ghost: blendedPipeline('gubim-ghost-pipeline', 'vs_ghost'),
+        pick: pickPipeline('gubim-pick-pipeline', 'none'),
+        closedPick: pickPipeline('gubim-closed-pick-pipeline', 'back')
+      };
+    }
+    this.pipelines = sets;
 
     this.sceneUniformBuffer = device.createBuffer({
       label: 'gubim-scene-uniforms',
@@ -427,7 +467,7 @@ export class WebGpuRenderer implements RendererPort {
     this.batchGpuCapacity = 64;
     this.batchGpuBuffer = device.createBuffer({
       label: 'gubim-batch-buffer',
-      size: this.batchGpuCapacity * 16,
+      size: this.batchGpuCapacity * BATCH_GPU_BYTES,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
@@ -633,14 +673,16 @@ export class WebGpuRenderer implements RendererPort {
     const model = this.getOrCreateModel(batch.modelId);
     const { positions, normals, indices, meshTable, origin } = batch;
 
-    const vertexCount = positions.length / 3;
+    const q16 = batch.vertexFormat === 'q16';
+    const vertexCount = vertexCountOf(batch.vertexFormat, positions);
     const recordCount = meshTable.length / MESH_RECORD_WORDS;
     if (vertexCount === 0 || indices.length === 0 || recordCount === 0) {
       return;
     }
 
     const recordOffsetInModel = model.recordWords.length / 4;
-    const localRecordIndexArray = new Uint32Array(vertexCount);
+    // f32 vertices need their record index beside them; q16 ones carry it.
+    const localRecordIndexArray = q16 ? null : new Uint32Array(vertexCount);
 
     const ox = origin[0];
     const oy = origin[1];
@@ -654,7 +696,7 @@ export class WebGpuRenderer implements RendererPort {
       const rgba = meshTable[base + MeshField.rgba] >>> 0;
       const rawFlags = meshTable[base + MeshField.flags] >>> 0;
 
-      localRecordIndexArray.fill(r, firstVertex, firstVertex + vCount);
+      localRecordIndexArray?.fill(r, firstVertex, firstVertex + vCount);
 
       const isSelected =
         this.selectedRef !== null &&
@@ -705,41 +747,51 @@ export class WebGpuRenderer implements RendererPort {
       normals.byteLength
     );
 
-    const recIdxByteLen = Math.max(4, localRecordIndexArray.byteLength);
-    const recordIndexBuffer = this.device.createBuffer({
-      size: recIdxByteLen,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-    });
-    this.device.queue.writeBuffer(
-      recordIndexBuffer,
-      0,
-      localRecordIndexArray.buffer,
-      localRecordIndexArray.byteOffset,
-      localRecordIndexArray.byteLength
-    );
+    let recordIndexBuffer: GPUBuffer | null = null;
+    if (localRecordIndexArray) {
+      recordIndexBuffer = this.device.createBuffer({
+        size: Math.max(4, localRecordIndexArray.byteLength),
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+      });
+      this.device.queue.writeBuffer(
+        recordIndexBuffer,
+        0,
+        localRecordIndexArray.buffer,
+        localRecordIndexArray.byteOffset,
+        localRecordIndexArray.byteLength
+      );
+    }
 
     const groups = groupIndices(indices, meshTable);
-    const indexBuffer = (values: Uint32Array): GPUBuffer | null => {
+    const indexFormat: GPUIndexFormat = indices instanceof Uint16Array ? 'uint16' : 'uint32';
+    const indexBuffer = (values: Uint32Array | Uint16Array): GPUBuffer | null => {
       if (values.length === 0 || !this.device) return null;
+      // writeBuffer moves whole 4-byte words: an odd count of 16-bit indices gets one more.
+      const source = values.byteLength % 4 === 0 ? values : padToWord(values);
       const buffer = this.device.createBuffer({
-        size: values.byteLength,
+        size: source.byteLength,
         usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
       });
-      this.device.queue.writeBuffer(buffer, 0, values.buffer, values.byteOffset, values.byteLength);
+      this.device.queue.writeBuffer(buffer, 0, source.buffer, source.byteOffset, source.byteLength);
       return buffer;
     };
     const opaqueIndexBuffer = indexBuffer(groups.opaque);
     const transparentIndexBuffer = indexBuffer(groups.transparent);
     const indexGpuBytes = (opaqueIndexBuffer?.size ?? 0) + (transparentIndexBuffer?.size ?? 0);
 
-    const gpuBytes = positionBuffer.size + normalBuffer.size + recordIndexBuffer.size + indexGpuBytes;
+    const gpuBytes = positionBuffer.size + normalBuffer.size + (recordIndexBuffer?.size ?? 0) + indexGpuBytes;
 
     const { min, max } = batch.box;
+    const grid = batch.quantBox ?? batch.box;
     model.batches.push({
       origin: [ox, oy, oz],
       min: [ox + min[0], oy + min[1], oz + min[2]],
       max: [ox + max[0], oy + max[1], oz + max[2]],
       inView: true,
+      vertexFormat: batch.vertexFormat,
+      quantMin: [grid.min[0], grid.min[1], grid.min[2]],
+      quantMax: [grid.max[0], grid.max[1], grid.max[2]],
+      indexFormat,
       recordOffsetInModel,
       recordCount,
       opaqueIndexCount: groups.opaque.length,
@@ -803,7 +855,7 @@ export class WebGpuRenderer implements RendererPort {
     for (const b of model.batches) {
       b.positionBuffer.destroy();
       b.normalBuffer.destroy();
-      b.recordIndexBuffer.destroy();
+      b.recordIndexBuffer?.destroy();
       b.opaqueIndexBuffer?.destroy();
       b.transparentIndexBuffer?.destroy();
     }
@@ -834,10 +886,10 @@ export class WebGpuRenderer implements RendererPort {
       this.batchGpuCapacity = 64;
       this.batchGpuBuffer = this.device.createBuffer({
         label: 'gubim-batch-buffer',
-        size: this.batchGpuCapacity * 16,
+        size: this.batchGpuCapacity * BATCH_GPU_BYTES,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
       });
-      this.batchCpuBuffer = new ArrayBuffer(64 * 16);
+      this.batchCpuBuffer = new ArrayBuffer(64 * BATCH_GPU_BYTES);
       this.batchF32 = new Float32Array(this.batchCpuBuffer);
       this.batchU32 = new Uint32Array(this.batchCpuBuffer);
       rebind = true;
@@ -1198,10 +1250,10 @@ export class WebGpuRenderer implements RendererPort {
       this.batchGpuCapacity = nextCap;
       this.batchGpuBuffer = this.device.createBuffer({
         label: 'gubim-batch-buffer',
-        size: this.batchGpuCapacity * 16,
+        size: this.batchGpuCapacity * BATCH_GPU_BYTES,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
       });
-      this.batchCpuBuffer = new ArrayBuffer(this.batchGpuCapacity * 16);
+      this.batchCpuBuffer = new ArrayBuffer(this.batchGpuCapacity * BATCH_GPU_BYTES);
       this.batchF32 = new Float32Array(this.batchCpuBuffer);
       this.batchU32 = new Uint32Array(this.batchCpuBuffer);
       this.recreateBindGroup();
@@ -1217,7 +1269,7 @@ export class WebGpuRenderer implements RendererPort {
       const modelRecBase = model.recordBaseOffset;
 
       for (const batch of model.batches) {
-        const base = bIdx * 4;
+        const base = bIdx * BATCH_GPU_WORDS;
         // Subtract in f64 on CPU, then store as f32
         this.batchF32[base] = batch.origin[0] - eyeX;
         this.batchF32[base + 1] = batch.origin[1] - eyeY;
@@ -1225,11 +1277,18 @@ export class WebGpuRenderer implements RendererPort {
 
         const recordBase = (modelRecBase + batch.recordOffsetInModel) & 0x7fffffff;
         this.batchU32[base + 3] = (recordBase | visMask) >>> 0;
+        // quantMin at word 4 and quantMax at word 8: a vec3 aligns to 16 bytes.
+        this.batchF32[base + 4] = batch.quantMin[0];
+        this.batchF32[base + 5] = batch.quantMin[1];
+        this.batchF32[base + 6] = batch.quantMin[2];
+        this.batchF32[base + 8] = batch.quantMax[0];
+        this.batchF32[base + 9] = batch.quantMax[1];
+        this.batchF32[base + 10] = batch.quantMax[2];
         bIdx++;
       }
     }
 
-    this.device.queue.writeBuffer(this.batchGpuBuffer, 0, this.batchCpuBuffer, 0, totalBatches * 16);
+    this.device.queue.writeBuffer(this.batchGpuBuffer, 0, this.batchCpuBuffer, 0, totalBatches * BATCH_GPU_BYTES);
     return totalBatches;
   }
 
@@ -1238,9 +1297,7 @@ export class WebGpuRenderer implements RendererPort {
       this.isDestroyed ||
       !this.device ||
       !this.context ||
-      !this.opaquePipeline ||
-      !this.closedPipeline ||
-      !this.transparentPipeline ||
+      !this.pipelines ||
       !this.sceneBindGroup ||
       !this.depthTextureView
     ) {
@@ -1248,6 +1305,7 @@ export class WebGpuRenderer implements RendererPort {
     }
 
     const t0 = performance.now();
+    const pipelines = this.pipelines;
     this.uploadQueuedBatches();
     this.updateGpuSceneTables();
     this.drawnBatches = markBatchesInView(this.models.values(), this.camera.frustum(), this.camera.getEye());
@@ -1293,10 +1351,9 @@ export class WebGpuRenderer implements RendererPort {
           hasTransparent = true;
         }
         if (batch.opaqueIndexCount > 0 && batch.opaqueIndexBuffer) {
-          pass.setVertexBuffer(0, batch.positionBuffer);
-          pass.setVertexBuffer(1, batch.normalBuffer);
-          pass.setVertexBuffer(2, batch.recordIndexBuffer);
-          this.drawOpaque(pass, batch, batchIdx, this.closedPipeline, this.opaquePipeline);
+          const set = pipelines[batch.vertexFormat];
+          setVertexBuffers(pass, batch);
+          this.drawOpaque(pass, batch, batchIdx, set.closed, set.opaque);
         }
         batchIdx++;
       }
@@ -1304,7 +1361,6 @@ export class WebGpuRenderer implements RendererPort {
 
     // Pass 2: Transparent geometry
     if (hasTransparent) {
-      pass.setPipeline(this.transparentPipeline);
       batchIdx = 0;
       for (const model of this.models.values()) {
         if (!model.visible) {
@@ -1313,10 +1369,9 @@ export class WebGpuRenderer implements RendererPort {
         }
         for (const batch of model.batches) {
           if (batch.inView && batch.transparentIndexCount > 0 && batch.transparentIndexBuffer) {
-            pass.setVertexBuffer(0, batch.positionBuffer);
-            pass.setVertexBuffer(1, batch.normalBuffer);
-            pass.setVertexBuffer(2, batch.recordIndexBuffer);
-            pass.setIndexBuffer(batch.transparentIndexBuffer, 'uint32');
+            pass.setPipeline(pipelines[batch.vertexFormat].transparent);
+            setVertexBuffers(pass, batch);
+            pass.setIndexBuffer(batch.transparentIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.transparentIndexCount, 1, 0, 0, batchIdx);
           }
           batchIdx++;
@@ -1325,8 +1380,7 @@ export class WebGpuRenderer implements RendererPort {
     }
 
     // Pass 3: Ghosts, faint over everything else, whether their element is opaque or not
-    if (this.ghostPipeline && this.mayHaveGhosts()) {
-      pass.setPipeline(this.ghostPipeline);
+    if (this.mayHaveGhosts()) {
       batchIdx = 0;
       for (const model of this.models.values()) {
         if (!model.visible) {
@@ -1338,15 +1392,14 @@ export class WebGpuRenderer implements RendererPort {
             batchIdx++;
             continue;
           }
-          pass.setVertexBuffer(0, batch.positionBuffer);
-          pass.setVertexBuffer(1, batch.normalBuffer);
-          pass.setVertexBuffer(2, batch.recordIndexBuffer);
+          pass.setPipeline(pipelines[batch.vertexFormat].ghost);
+          setVertexBuffers(pass, batch);
           if (batch.opaqueIndexCount > 0 && batch.opaqueIndexBuffer) {
-            pass.setIndexBuffer(batch.opaqueIndexBuffer, 'uint32');
+            pass.setIndexBuffer(batch.opaqueIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.opaqueIndexCount, 1, 0, 0, batchIdx);
           }
           if (batch.transparentIndexCount > 0 && batch.transparentIndexBuffer) {
-            pass.setIndexBuffer(batch.transparentIndexBuffer, 'uint32');
+            pass.setIndexBuffer(batch.transparentIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.transparentIndexCount, 1, 0, 0, batchIdx);
           }
           batchIdx++;
@@ -1376,7 +1429,7 @@ export class WebGpuRenderer implements RendererPort {
   ): void {
     if (batch.opaqueIndexCount === 0 || !batch.opaqueIndexBuffer) return;
     const culled = this.sectionPlanes.length === 0 ? batch.closedIndexCount : 0;
-    pass.setIndexBuffer(batch.opaqueIndexBuffer, 'uint32');
+    pass.setIndexBuffer(batch.opaqueIndexBuffer, batch.indexFormat);
     if (culled > 0) {
       pass.setPipeline(closed);
       pass.drawIndexed(culled, 1, 0, 0, batchIdx);
@@ -1451,8 +1504,7 @@ export class WebGpuRenderer implements RendererPort {
       this.isPicking ||
       !this.device ||
       !this.canvas ||
-      !this.pickPipeline ||
-      !this.closedPickPipeline ||
+      !this.pipelines ||
       !this.sceneBindGroup ||
       !this.idTexture ||
       !this.idTextureView ||
@@ -1469,6 +1521,7 @@ export class WebGpuRenderer implements RendererPort {
     const py = Math.max(0, Math.min(this.canvas.height - 1, Math.floor(cssY * scaleY)));
 
     this.isPicking = true;
+    const pipelines = this.pipelines;
     try {
       this.updateGpuSceneTables();
 
@@ -1510,13 +1563,12 @@ export class WebGpuRenderer implements RendererPort {
             continue;
           }
           this.pickedBatches++;
-          pass.setVertexBuffer(0, batch.positionBuffer);
-          pass.setVertexBuffer(1, batch.normalBuffer);
-          pass.setVertexBuffer(2, batch.recordIndexBuffer);
-          this.drawOpaque(pass, batch, batchIdx, this.closedPickPipeline, this.pickPipeline);
+          const set = pipelines[batch.vertexFormat];
+          setVertexBuffers(pass, batch);
+          this.drawOpaque(pass, batch, batchIdx, set.closedPick, set.pick);
           if (batch.transparentIndexCount > 0 && batch.transparentIndexBuffer) {
-            pass.setPipeline(this.pickPipeline);
-            pass.setIndexBuffer(batch.transparentIndexBuffer, 'uint32');
+            pass.setPipeline(set.pick);
+            pass.setIndexBuffer(batch.transparentIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.transparentIndexCount, 1, 0, 0, batchIdx);
           }
           batchIdx++;
@@ -1596,7 +1648,7 @@ export class WebGpuRenderer implements RendererPort {
       batchCount += model.batches.length;
       recordCount += model.recordWords.length / 4;
       for (const b of model.batches) {
-        liveGpuBuffers += 3; // position, normal, recordIndex
+        liveGpuBuffers += b.recordIndexBuffer ? 3 : 2; // position, normal, and in f32 the record index
         if (b.opaqueIndexBuffer) liveGpuBuffers++;
         if (b.transparentIndexBuffer) liveGpuBuffers++;
         allocatedGpuBytes += b.gpuBytes;
@@ -1641,7 +1693,7 @@ export class WebGpuRenderer implements RendererPort {
       for (const b of model.batches) {
         b.positionBuffer.destroy();
         b.normalBuffer.destroy();
-        b.recordIndexBuffer.destroy();
+        b.recordIndexBuffer?.destroy();
         b.opaqueIndexBuffer?.destroy();
         b.transparentIndexBuffer?.destroy();
       }
@@ -1688,12 +1740,7 @@ export class WebGpuRenderer implements RendererPort {
 
     this.bindGroupLayout = null;
     this.sceneBindGroup = null;
-    this.opaquePipeline = null;
-    this.transparentPipeline = null;
-    this.ghostPipeline = null;
-    this.pickPipeline = null;
-    this.closedPipeline = null;
-    this.closedPickPipeline = null;
+    this.pipelines = null;
   }
 
   destroy(): void {
@@ -1707,4 +1754,18 @@ export class WebGpuRenderer implements RendererPort {
     this.models.clear();
     this.numToModelId.clear();
   }
+}
+
+/** Binds a batch's vertex buffers for its format: q16 has no record index buffer. */
+function setVertexBuffers(pass: GPURenderPassEncoder, batch: GpuBatchEntry): void {
+  pass.setVertexBuffer(0, batch.positionBuffer);
+  pass.setVertexBuffer(1, batch.normalBuffer);
+  if (batch.recordIndexBuffer) pass.setVertexBuffer(2, batch.recordIndexBuffer);
+}
+
+/** A copy of 16-bit indices one longer, so their bytes fill whole 4-byte words. */
+function padToWord(values: Uint32Array | Uint16Array): Uint16Array {
+  const padded = new Uint16Array(values.length + 1);
+  padded.set(values);
+  return padded;
 }

@@ -7,6 +7,7 @@ import type {
   ModelSummary
 } from '../../domain/kernel/KernelPort';
 import type { StreamStep, WorkerRequest, WorkerResponse } from './protocol';
+import { batchTransfer, readBatchView } from './batchView';
 import init, { allocationFailed, Model, Sheet } from './pkg/wasm_api';
 import {
   CACHE_FORMAT,
@@ -255,10 +256,9 @@ function replayStep(modelId: ModelId, cache: NonNullable<typeof replay>): { valu
     };
   }
   const batch = { ...step.batch, modelId };
-  const { positions, normals, indices, meshTable } = batch;
   return {
     value: { batch, processedElements: step.processedElements, totalElements: step.totalElements },
-    transfer: [positions.buffer, normals.buffer, indices.buffer, meshTable.buffer] as Transferable[]
+    transfer: batchTransfer(batch)
   };
 }
 
@@ -295,19 +295,8 @@ function readBatch(modelId: ModelId, model: Model): GeometryBatch | null {
   const view = model.nextBatch(MAX_TRIANGLES_PER_BATCH);
   if (!view) return null;
   try {
-    const [x, y, z] = view.origin();
-    const [minX, minY, minZ, maxX, maxY, maxZ] = view.bounds();
     sequence += 1;
-    return {
-      modelId,
-      sequence,
-      origin: [x, y, z],
-      box: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
-      positions: view.takePositions(),
-      normals: view.takeNormals(),
-      indices: view.takeIndices(),
-      meshTable: view.takeMeshTable()
-    };
+    return readBatchView(view, modelId, sequence);
   } finally {
     view.free();
   }
@@ -318,14 +307,10 @@ function nextBatch(): { value: StreamStep; transfer: Transferable[] } {
   const { modelId, model } = current();
   const batch = readBatch(modelId, model);
   if (batch) {
-    const { positions, normals, indices, meshTable } = batch;
     const value = { batch, processedElements: model.processedElements(), totalElements: model.totalElements() };
     // Before the transfer, which leaves the arrays empty here.
     toCache((cache) => cache.writer.batch(batch, value.processedElements, value.totalElements));
-    return {
-      value,
-      transfer: [positions.buffer, normals.buffer, indices.buffer, meshTable.buffer] as Transferable[]
-    };
+    return { value, transfer: batchTransfer(batch) };
   }
   const json = model.finishStream();
   const complete = JSON.parse(json);

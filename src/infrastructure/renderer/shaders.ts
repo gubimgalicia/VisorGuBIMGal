@@ -6,11 +6,14 @@ struct SceneUniforms {
   sections: array<vec4<f32>, 6>,
 };
 
+// 48 bytes. quantMin and quantMax are the grid of a q16 batch's positions (docs/05 section 3).
 struct BatchGpuData {
   offsetX: f32,
   offsetY: f32,
   offsetZ: f32,
   packedMeta: u32,
+  quantMin: vec3<f32>,
+  quantMax: vec3<f32>,
 };
 
 struct RecordGpuData {
@@ -118,6 +121,40 @@ fn vs_ghost(
   return shade(pos, normal, localRecordIdx, batchIdx, true);
 }
 
+// q16 batches: x, y, z on the batch's grid with the record index fourth, and an octahedral
+// normal read as snorm16x2. No sign(): sign(0) is 0, and the fold needs +1 or -1.
+fn q16Position(q: vec4<u32>, batchIdx: u32) -> vec3<f32> {
+  let batch = batches[batchIdx];
+  return batch.quantMin + vec3<f32>(q.xyz) / 65535.0 * (batch.quantMax - batch.quantMin);
+}
+
+fn octNormal(e: vec2<f32>) -> vec3<f32> {
+  var n = vec3<f32>(e.x, e.y, 1.0 - abs(e.x) - abs(e.y));
+  if (n.z < 0.0) {
+    let signs = vec2<f32>(select(-1.0, 1.0, n.x >= 0.0), select(-1.0, 1.0, n.y >= 0.0));
+    n = vec3<f32>((vec2<f32>(1.0) - abs(n.yx)) * signs, n.z);
+  }
+  return normalize(n);
+}
+
+@vertex
+fn vs_main_q16(
+  @location(0) q: vec4<u32>,
+  @location(1) oct: vec2<f32>,
+  @builtin(instance_index) batchIdx: u32
+) -> ColorVaryings {
+  return shade(q16Position(q, batchIdx), octNormal(oct), q.w, batchIdx, false);
+}
+
+@vertex
+fn vs_ghost_q16(
+  @location(0) q: vec4<u32>,
+  @location(1) oct: vec2<f32>,
+  @builtin(instance_index) batchIdx: u32
+) -> ColorVaryings {
+  return shade(q16Position(q, batchIdx), octNormal(oct), q.w, batchIdx, true);
+}
+
 @fragment
 fn fs_main(in: ColorVaryings) -> @location(0) vec4<f32> {
   if (sectioned(in.relPos)) {
@@ -151,6 +188,19 @@ fn vs_pick(
   @location(2) localRecordIdx: u32,
   @builtin(instance_index) batchIdx: u32
 ) -> PickVaryings {
+  return pickVertex(pos, localRecordIdx, batchIdx);
+}
+
+@vertex
+fn vs_pick_q16(
+  @location(0) q: vec4<u32>,
+  @location(1) _oct: vec2<f32>,
+  @builtin(instance_index) batchIdx: u32
+) -> PickVaryings {
+  return pickVertex(q16Position(q, batchIdx), q.w, batchIdx);
+}
+
+fn pickVertex(pos: vec3<f32>, localRecordIdx: u32, batchIdx: u32) -> PickVaryings {
   var out: PickVaryings;
   let batch = batches[batchIdx];
   let modelVisible = (batch.packedMeta & 0x80000000u) != 0u;

@@ -16,7 +16,7 @@ type GPUCompareFunction =
   | 'not-equal'
   | 'greater-equal'
   | 'always';
-type GPUVertexFormat = 'float32x3' | 'uint32';
+type GPUVertexFormat = 'float32x3' | 'uint32' | 'uint16x4' | 'snorm16x2';
 type GPUIndexFormat = 'uint16' | 'uint32';
 
 declare const GPUBufferUsage: {

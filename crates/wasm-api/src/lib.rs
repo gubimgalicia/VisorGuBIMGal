@@ -4,6 +4,7 @@ pub mod batches;
 pub mod drawing;
 mod encode;
 mod json;
+pub mod wire;
 pub mod loaded;
 pub mod shape;
 
@@ -157,7 +158,7 @@ impl Model {
     pub fn next_batch(&mut self, max_triangles: u32) -> Option<BatchView> {
         self.inner
             .next_batch(max_triangles as usize)
-            .map(|batch| BatchView { batch })
+            .map(|batch| BatchView { batch: wire::pack(batch) })
     }
 
     #[wasm_bindgen(js_name = processedElements)]
@@ -240,9 +241,11 @@ impl Sheet {
 }
 
 /// Each `take` copies one array out of WASM memory into a buffer JS owns, ready to transfer.
+/// Positions, normals and indices come in one of two widths (contract v2, `docs/05` section 3):
+/// the `take` of the other width returns an empty array.
 #[wasm_bindgen]
 pub struct BatchView {
-    batch: batches::Batch,
+    batch: wire::WireBatch,
 }
 
 #[wasm_bindgen]
@@ -251,24 +254,83 @@ impl BatchView {
         self.batch.origin.to_vec()
     }
 
-    /// `[minX, minY, minZ, maxX, maxY, maxZ]` of the positions, relative to the origin.
+    /// `box` as `[minX, minY, minZ, maxX, maxY, maxZ]`, relative to the origin.
     pub fn bounds(&self) -> Vec<f32> {
         [self.batch.min, self.batch.max].concat()
     }
 
-    #[wasm_bindgen(js_name = takePositions)]
-    pub fn take_positions(&mut self) -> Vec<f32> {
-        std::mem::take(&mut self.batch.positions)
+    /// `quantBox` in the same layout: the grid of `q16` positions, and in `f32` the least and
+    /// greatest position. Without instances it equals `bounds`.
+    #[wasm_bindgen(js_name = quantBox)]
+    pub fn quant_box(&self) -> Option<Vec<f32>> {
+        Some([self.batch.min, self.batch.max].concat())
     }
 
+    /// `"f32"` or `"q16"`.
+    #[wasm_bindgen(js_name = vertexFormat)]
+    pub fn vertex_format(&self) -> String {
+        match self.batch.vertices {
+            wire::Vertices::F32 { .. } => "f32".into(),
+            wire::Vertices::Q16 { .. } => "q16".into(),
+        }
+    }
+
+    /// `f32`: xyz per vertex.
+    #[wasm_bindgen(js_name = takePositions)]
+    pub fn take_positions(&mut self) -> Vec<f32> {
+        match &mut self.batch.vertices {
+            wire::Vertices::F32 { positions, .. } => std::mem::take(positions),
+            wire::Vertices::Q16 { .. } => Vec::new(),
+        }
+    }
+
+    /// `q16`: x, y, z on the grid and the record index, per vertex.
+    #[wasm_bindgen(js_name = takePositionsQ16)]
+    pub fn take_positions_q16(&mut self) -> Vec<u16> {
+        match &mut self.batch.vertices {
+            wire::Vertices::Q16 { positions, .. } => std::mem::take(positions),
+            wire::Vertices::F32 { .. } => Vec::new(),
+        }
+    }
+
+    /// `f32`: xyz per vertex.
     #[wasm_bindgen(js_name = takeNormals)]
     pub fn take_normals(&mut self) -> Vec<f32> {
-        std::mem::take(&mut self.batch.normals)
+        match &mut self.batch.vertices {
+            wire::Vertices::F32 { normals, .. } => std::mem::take(normals),
+            wire::Vertices::Q16 { .. } => Vec::new(),
+        }
+    }
+
+    /// `q16`: two octahedral components per vertex.
+    #[wasm_bindgen(js_name = takeNormalsOct)]
+    pub fn take_normals_oct(&mut self) -> Vec<i16> {
+        match &mut self.batch.vertices {
+            wire::Vertices::Q16 { normals, .. } => std::mem::take(normals),
+            wire::Vertices::F32 { .. } => Vec::new(),
+        }
+    }
+
+    /// Whether the indices are 16-bit: `takeIndicesU16` then holds them.
+    #[wasm_bindgen(js_name = indicesAreU16)]
+    pub fn indices_are_u16(&self) -> bool {
+        matches!(self.batch.indices, wire::Indices::U16(_))
     }
 
     #[wasm_bindgen(js_name = takeIndices)]
     pub fn take_indices(&mut self) -> Vec<u32> {
-        std::mem::take(&mut self.batch.indices)
+        match &mut self.batch.indices {
+            wire::Indices::U32(indices) => std::mem::take(indices),
+            wire::Indices::U16(_) => Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = takeIndicesU16)]
+    pub fn take_indices_u16(&mut self) -> Vec<u16> {
+        match &mut self.batch.indices {
+            wire::Indices::U16(indices) => std::mem::take(indices),
+            wire::Indices::U32(_) => Vec::new(),
+        }
     }
 
     #[wasm_bindgen(js_name = takeMeshTable)]
