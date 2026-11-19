@@ -942,4 +942,115 @@ mod tests {
         let hidden: f64 = spans.iter().map(|(start, end)| (end - start) * 20.0).sum();
         assert!((hidden - 0.0005).abs() < 1e-8, "hidden {hidden} m of the 0.5 mm under the sliver");
     }
+
+    // External models in `test/models` (or `GUBIM_MODELS_DIR`) are fetched by `node scripts/fetch-models.mjs`.
+    #[test]
+    #[ignore]
+    fn review_t149_real_models_bvh_vs_oracle() {
+        use std::fs;
+        use std::path::{Path, PathBuf};
+
+        fn collect_ifc(dir: &Path, out: &mut Vec<PathBuf>) {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        collect_ifc(&path, out);
+                    } else if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("ifc")) {
+                        out.push(path);
+                    }
+                }
+            }
+        }
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let models_dir =
+            std::env::var_os("GUBIM_MODELS_DIR").map_or_else(|| root.join("test/models"), PathBuf::from);
+        let mut files = Vec::new();
+        for dir in [root.join("test/fixtures"), root.join("public/samples"), models_dir] {
+            collect_ifc(&dir, &mut files);
+        }
+        files.sort();
+
+        let mut checked_files = 0usize;
+        let mut total_edges = 0usize;
+        for path in &files {
+            if fs::metadata(path).map(|m| m.len()).unwrap_or(u64::MAX) > 3_000_000 {
+                continue;
+            }
+            let Ok(bytes) = fs::read(path) else { continue };
+            let Ok(index) = step_parser::index(&bytes) else { continue };
+            let Ok(mut eval) = ifc_geometry::ModelEvaluator::new(&index) else { continue };
+            let mut meshes = Vec::new();
+            let (mut low, mut high) = (DVec3::INFINITY, DVec3::NEG_INFINITY);
+            for id in eval.element_ids() {
+                if let Some(el) = eval.evaluate(id) {
+                    for item in el.meshes {
+                        for &pt in &item.mesh.positions {
+                            if pt.is_finite() {
+                                low = low.min(pt);
+                                high = high.max(pt);
+                            }
+                        }
+                        meshes.push(item.mesh);
+                    }
+                }
+            }
+            if meshes.is_empty() || !low.is_finite() {
+                continue;
+            }
+            let total_tris: usize = meshes.iter().map(|m| m.triangles.len()).sum();
+            if total_tris > 40_000 {
+                continue;
+            }
+            let mid_z = (low.z + high.z) * 0.5 + (high.z - low.z) * 0.0137;
+            let frame = Frame::of(crate::cut::Cut::Plan { z: mid_z }).unwrap();
+            let mut occluders = Occluders::new(total_tris);
+            for mesh in &meshes {
+                add_occluders(mesh, &frame, None, &mut occluders);
+            }
+            occluders.finish();
+            checked_files += 1;
+
+            for mesh in &meshes {
+                let (edges, _, _) = feature_edges(mesh, frame.look);
+                for (from, to) in edges {
+                    let (depth_from, depth_to) = (frame.depth(from), frame.depth(to));
+                    if !depth_from.is_finite() || !depth_to.is_finite() {
+                        continue;
+                    }
+                    let run = depth_to - depth_from;
+                    let (mut start, mut end) = (0.0_f64, 1.0_f64);
+                    if run.abs() <= f64::MIN_POSITIVE {
+                        if depth_from < 0.0 {
+                            continue;
+                        }
+                    } else {
+                        let zero = -depth_from / run;
+                        if run > 0.0 {
+                            start = start.max(zero);
+                        } else {
+                            end = end.min(zero);
+                        }
+                    }
+                    if end - start <= 1e-9 {
+                        continue;
+                    }
+                    let a = from.lerp(to, start);
+                    let b = from.lerp(to, end);
+                    let (pa, pb) = (frame.project(a), frame.project(b));
+                    if pa.distance(pb) <= SEGMENT_EPSILON {
+                        continue;
+                    }
+                    let e = edge(pa, pb, frame.depth(a), frame.depth(b));
+                    occluders.tests_left = MAX_OCCLUSION_TESTS;
+                    let bvh = occluders.hidden_spans(&e).unwrap();
+                    let expected = oracle(&occluders, &e);
+                    assert_eq!(bvh, expected, "BVH disagrees with brute-force oracle in {}", path.display());
+                    total_edges += 1;
+                }
+            }
+        }
+        assert!(checked_files > 0 && total_edges > 0);
+    }
 }
