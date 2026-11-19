@@ -16,7 +16,7 @@
 | [`05_kernel_contract.md`](./05_kernel_contract.md) | Contrato entre kernel, renderizador y aplicación: coordenadas, lotes binarios, identidad, planos 2D y límite WASM. | Antes de tocar cualquier código a ambos lados de ese límite. |
 | [`06_mejoras.md`](./06_mejoras.md) | Lista de optimizaciones y nuevas funciones, con evidencia en el código y orden de trabajo. | Al terminar el visor básico, o al elegir la siguiente mejora. |
 | [`08_model_survey.md`](./08_model_survey.md) | Estudio de calidad, diagnósticos, rendimiento, memoria y repetición de `IfcMappedItem` del kernel sobre los 285 modelos públicos de buildingSMART. | Al priorizar mejoras del kernel, analizar compatibilidad IFC o evaluar el impacto de instanciado GPU (A13). |
-| [`09_propuesta_instancias_compresion.md`](./09_propuesta_instancias_compresion.md) | Propuesta de cambio de contrato para A13 (instancias en GPU) y A11 (vértices comprimidos), con las mediciones que la justifican. Pendiente de acks. | Antes de tocar `GeometryBatch` o los renderizadores por A11 o A13. |
+| [`09_propuesta_instancias_compresion.md`](./09_propuesta_instancias_compresion.md) | Propuesta de cambio de contrato para A13 (instancias en GPU) y A11 (vértices comprimidos), con las mediciones que la justifican. Revisión 4: pendiente del ack final de Gemini y de la aprobación de Nick. | Antes de tocar `GeometryBatch` o los renderizadores por A11 o A13. |
 
 ---
 

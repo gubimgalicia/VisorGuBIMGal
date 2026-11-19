@@ -1,6 +1,6 @@
 # 09 — Propuesta: instancias en GPU (A13) y compresión de vértices (A11)
 
-**Estado:** propuesta, revisión 3 (2026-11-15), de Claude. Las revisiones 1 y 2 recogieron de Gemini sendos ACK WITH CHANGES: ocho hallazgos en T-147 y cuatro en T-150. Esta revisión incorpora los doce; la sección 8 dice dónde queda cada uno. Nick ya decidió las preguntas de §7. Cambia el contrato (`docs/05` secciones 3 y 6, `GeometryBatch.ts`, `CONTRACT_VERSION`), así que necesita el ack de Gemini a esta revisión y la aprobación de Nick antes de construir nada (R4). Cuando se apruebe, el texto normativo pasa a `docs/05` y este archivo queda como registro de la decisión.
+**Estado:** propuesta, revisión 4 (2026-11-19), de Claude. Las revisiones 1, 2 y 3 recogieron de Gemini sendos ACK WITH CHANGES: ocho hallazgos en T-147, cuatro en T-150, y un hallazgo más cuatro notas menores en T-151. Esta revisión incorpora todo; la sección 8 dice dónde queda cada punto. Nick ya decidió las preguntas de §7. Cambia el contrato (`docs/05` secciones 3 y 6, `GeometryBatch.ts`, `CONTRACT_VERSION`), así que necesita el ack final de Gemini a esta revisión y la aprobación de Nick antes de construir nada (R4). Cuando se apruebe, el texto normativo pasa a `docs/05` y este archivo queda como registro de la decisión.
 
 ## 1. Qué se midió
 
@@ -84,12 +84,17 @@ Hoy `Closed` se evalúa en cada copia ya colocada. Si el redondeo en `f64` de un
 - **Dos cajas con dos funciones.** `box` sigue siendo la caja de todo lo que dibuja el lote: sus vértices y las cajas de sus formas transformadas. La usan el descarte por vista (A6) y el encuadre. `quantBox` es solo la rejilla de `positions`, así que unas pocas instancias dispersas por la planta no agrandan el paso de cuantización. En un lote sin instancias las dos cajas coinciden.
 - Un lote puede no tener registros normales (`positions` y `meshTable` vacíos) y solo instancias. Los dos renderizadores lo suben salvo que `recordCount === 0 && instanceCount === 0`. Hoy lo descartan si `vertexCount === 0`, y perderían en silencio los lotes de solo instancias de la fontanería de la clínica o de bSDD.
 - `meshCount` en `complete` cuenta registros e instancias.
-- **`findBatchError(batch, knownShapes?)`.** Una forma llega en el primer lote que la usa, y los siguientes solo la nombran, así que un lote suelto no basta para validarlas. La función gana un segundo argumento opcional, `knownShapes: ReadonlyMap<number, ShapeDef>`, con las formas ya recibidas de ese modelo. Los renderizadores y `scripts/check-kernel.mjs` lo llevan por modelo y lo pasan; sin él, solo se validan las formas definidas en el propio lote. Valida además:
+- **`findBatchError(batch, knownShapes?)`.** Una forma llega en el primer lote que la usa, y los siguientes solo la nombran, así que un lote suelto no basta para validarlas. La función gana un segundo argumento opcional, `knownShapes: ReadonlyMap<number, ShapeDef>`, con las formas ya recibidas de ese modelo. Sin él, solo se validan las formas definidas en el propio lote.
+  - **Quién la llama.** `scripts/check-kernel.mjs` lleva `knownShapes` por modelo y lo pasa. Los renderizadores **no** la llaman al subir un lote: es una función para pruebas y datos simulados, fuera de la ruta caliente (`GeometryBatch.ts:67`), y solo la exponen en `__gubim_dev__`, en modo desarrollo. Siguen así. Las pruebas de navegador que la usan pasan el `knownShapes` del modelo, que el renderizador ya guarda para dibujar.
+
+  Valida además:
   - `shapeId` definido en el lote o en `knownShapes`, y no definido dos veces;
   - matrices finitas con determinante normal y positivo, también en `f32`: `det = 1e-40` es normal en `f64` y subnormal en `f32`, y se rechaza;
   - longitudes de tabla;
   - `positions` vacío solo si hay instancias, y entonces `quantBox` es `null`;
+  - `box`, `quantBox` y el `box` de cada forma: seis números finitos y `min ≤ max` en cada eje;
   - `quantBox` exacta sin comparar coma flotante: en `q16`, en cada eje con extensión, algún vértice tiene `q = 0` y alguno `q = 65535`; con extensión cero, todos tienen `q = 0`. En `f32`, `quantBox` es el mínimo y máximo de `positions`, como hoy la caja;
+  - `shape.box` de cada forma definida en el lote, con la misma regla sobre los `positions` de la forma: entera en `q16`, mínimo y máximo en `f32`;
   - `box` que contiene `quantBox` (si no es `null`) y las 8 esquinas de cada `shape.box` transformada, con medio paso de holgura en las de `q16`.
 
   Hoy exige que `box` sea exactamente la caja de `positions`. Esa regla pasa a `quantBox`, y `box` conserva la igualdad solo si el lote no tiene instancias. En un lote de solo instancias, `box` es la caja de sus formas transformadas y no tiene por qué contener `batch.origin`.
@@ -104,13 +109,20 @@ Hoy `Closed` se evalúa en cada copia ya colocada. Si el redondeo en `f64` de un
 - **Cuatro variantes de sombreador de vértices.** A11 cambia también los lotes normales: en `q16` la posición es `uint16x4` con el registro dentro, la normal `snorm16x2` y no hay `recordIndexBuffer`. Cada uno de `vs_main`, `vs_ghost` y `vs_pick` existe así en cuatro variantes: normal `f32` (la de hoy), normal `q16`, instanciada `f32` e instanciada `q16`. Las `q16` reciben la rejilla: `quantBox` en un lote normal, `shape.box` en una forma.
 - **WebGPU.** Hoy `vs_main`, `vs_ghost` y `vs_pick` leen el índice de lote en `@builtin(instance_index)`, con `firstInstance = batchIdx` e `instanceCount = 1`. En un dibujo instanciado ese índice cambia con cada instancia.
   - Los lotes normales `q16` siguen leyendo el lote así. `BatchGpuData` crece de 16 a 48 bytes para llevar `quantBox.min` y `quantBox.max`.
-  - Los datos por instancia (matriz, matriz normal, índice de registro y de lote) van en un búfer de almacenamiento por lote, en un `@group(1)` propio de los pipelines instanciados, con su `GPUPipelineLayout`. Se indexa con `instance_index` desde `firstInstance` = inicio del rango. Los pipelines normales no cambian de layout.
-  - La rejilla de la forma (`shape.box`) va en el mismo `@group(1)`, en un uniforme por forma.
+  - Los datos por instancia (matriz, matriz normal e índice de registro) van en un búfer de almacenamiento por lote, en un `@group(1)` propio de los pipelines instanciados, con su `GPUPipelineLayout`. Ese layout comparte el `GPUBindGroupLayout` de `@group(0)`, así que `@group(0)` no cambia entre lotes normales e instanciados. Se indexa con `instance_index` desde `firstInstance` = inicio del rango. Los pipelines normales no cambian de layout.
+  - **El índice de lote no va en la instancia.** `batchIdx` es la posición plana del lote en `batches[]` recorriendo todos los modelos, y se recalcula en cada fotograma (`WebGpuRenderer.ts:1279-1352`). Cambia cuando se quita un modelo y cuando los lotes de dos modelos llegan intercalados al cargar. Si se grabara en cada instancia al subir el lote, las instancias de otro modelo leerían el desplazamiento de cámara y el `recordBase` de otro lote, o se saldrían del búfer.
+    - Por eso el búfer de instancias del lote empieza con una cabecera de 16 bytes cuyo primer `u32` es el `batchIdx`, seguida de las instancias. El sombreador lee `batches[cabecera.batchIdx]`.
+    - El renderizador guarda en cada lote el último valor escrito. Cada vez que recorre los lotes, para dibujar o para seleccionar, escribe esos 4 bytes con `writeBuffer` solo si el valor cambió.
+    - `writeBuffer` se ejecuta antes que cualquier `submit` posterior, así que todas las pasadas de un fotograma leen el índice de ese fotograma. Normalmente no se escribe nada: el índice solo cambia al quitar o añadir lotes.
+    - Los lotes normales no cambian: siguen recibiendo el lote en `firstInstance`, con una sola instancia.
+  - La rejilla de la forma (`shape.box`) va en el mismo `@group(1)`, en un uniforme por forma. Hay un `GPUBindGroup` por par (lote, forma) que el lote usa, y las formas `f32` reciben un uniforme de relleno con el mismo layout.
+  - En un lote de solo instancias, `quantMin` y `quantMax` de su `BatchGpuData` quedan sin uso.
 - **WebGL2.** No hay `drawElementsInstancedBaseInstance` en WebGL 2.0 estándar, y el renderizador usa hoy un VAO global con los atributos 0 a 2 siempre activos.
   - Un lote normal `q16` usa su propio VAO, sin el atributo 2: la posición entera (`vertexAttribIPointer`, `UNSIGNED_SHORT`, 4 componentes) ya trae el registro, y no queda ningún atributo apuntando a un búfer de registro inexistente o destruido. `quantBox` va en uniformes.
   - El dibujo instanciado usa también su propio VAO.
   - Los atributos por instancia llevan `vertexAttribDivisor(loc, 1)` y un desplazamiento en bytes por cada rango (lote, forma, pasada): son la matriz en 3 `vec4`, la matriz normal en 3 `vec3` y el índice de registro, 7 posiciones de atributo. Con la posición y la normal son 9, por debajo del mínimo de 16 de WebGL2. Los de coma flotante usan `vertexAttribPointer`; el índice de registro, que es `uint`, usa `vertexAttribIPointer`.
   - Como cada VAO es aparte, al volver a los lotes normales no queda ningún divisor puesto.
+- **Matriz por filas en la GPU.** `instanceTransforms` viaja por columnas (4 columnas de 3 números) y eso no cambia: así la leen `expand-batch.mjs` y `check-equivalent.mjs`. Sin embargo, 3 atributos `vec4` necesitan las filas. El renderizador ya recorre cada instancia en la CPU al subir el lote, para calcular su matriz normal. En ese mismo recorrido traspone la matriz: la fila `i` es `(c0[i], c1[i], c2[i], c3[i])`, y la posición es `dot(fila_i, vec4(p, 1))`. Lo hace en los dos motores, para que WebGPU y WebGL2 lean la misma disposición.
 - **Índices de 16 bits en el dibujo.** Hoy todo supone `u32`: `setIndexBuffer(…, 'uint32')` en WebGPU, y en WebGL2 `drawOpaque`, que dibuja con `gl.UNSIGNED_INT` y desplaza `culled * 4` bytes, e `indexGroups.ts`, que reparte los índices en grupos opacos y transparentes. Con un `Uint16Array` pasan a `'uint16'`, a `gl.UNSIGNED_SHORT` y a `culled * 2`, e `indexGroups.ts` produce grupos del mismo tipo que recibe.
 - **Normales.** Usan la inversa traspuesta de cada matriz, calculada en la CPU al subir el lote. El sombreador de vértices normaliza la normal transformada, `normalize(normalMat * shapeNormal)`, **antes** de sacar `worldUpZ` y la normal de vista. Una instancia que pasa de mm a m tiene escala 0,001, y sin normalizar la normal saldría de longitud 1000: `worldUpZ` se saturaría y la interpolación entre vértices se deformaría.
 - Selección, colores por propiedad, BCF, ocultar, aislar, fantasma y planos de corte trabajan por registro: la tabla de registros del lote reserva un índice por instancia después de los registros normales, y el pase de selección escribe ese índice.
@@ -162,13 +174,17 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 4. **Renderizadores** WebGPU y WebGL2:
    - formas por modelo, con su registro `knownShapes`, y lotes de solo instancias;
    - instancias agrupadas por forma y transparencia;
-   - las cuatro variantes de sombreador de §2; en WebGPU, `BatchGpuData` de 48 bytes y un `@group(1)` con su layout para los instanciados; en WebGL2, VAO aparte para lotes `q16` y para instancias, con `vertexAttribIPointer` en los atributos enteros;
+   - las cuatro variantes de sombreador de §2; en WebGPU, `BatchGpuData` de 48 bytes y un `@group(1)` con su layout para los instanciados, con la cabecera de `batchIdx` reescrita solo cuando cambia;
+   - matriz por instancia traspuesta a filas al subir el lote, en los dos motores; en WebGL2, VAO aparte para lotes `q16` y para instancias, con `vertexAttribIPointer` en los atributos enteros;
    - decodificación en el sombreador, sin `sign()`, y normales normalizadas;
    - sin `recordIndexBuffer` en los lotes `q16`;
    - índices de 16 bits: `'uint16'` en WebGPU, `UNSIGNED_SHORT` y `culled * 2` en `drawOpaque`, grupos del mismo tipo en `indexGroups.ts`, y búferes redondeados a 4 bytes;
    - descarte por vista con `box`.
 5. **Exportación a glTF y `App.tsx`**: `extractBatchElementMeta` y `batchMetaMap` leen también `instanceTable`.
-6. **Caché OPFS** (`geometryCache.ts`): `CACHE_FORMAT` 1 → 2, con bloques alineados a 4 bytes. La cabecera guarda `quantBox` además de `box`, porque decodificar `q16` necesita la rejilla y no la caja. Las entradas antiguas se descartan solas, porque cambia la huella del kernel.
+6. **Caché OPFS** (`geometryCache.ts`): `CACHE_FORMAT` 1 → 2, con bloques alineados a 4 bytes, y las formas y las dos tablas de instancias como bloques propios.
+   - La cabecera del lote (hoy `BATCH_HEAD` = 80 bytes, con `origin` y `box`) guarda también `quantBox`, porque decodificar `q16` necesita la rejilla y no la caja.
+   - Lleva además una palabra de banderas: `vertexFormat`, si el lote tiene `quantBox` (sin esa marca, un lote de solo instancias con `quantBox === null` no se distinguiría de una caja en cero), y si sus índices son de 16 bits.
+   - Las entradas antiguas se descartan solas, porque cambia la huella del kernel.
 7. **Herramientas que leen lotes:**
    - `scripts/check-kernel.mjs` lleva `knownShapes` por modelo y se lo pasa a `findBatchError`;
    - `scripts/bench/expand-batch.mjs` decodifica las posiciones de un lote `q16` con `quantBox`, no con `box`. Hoy usa `box`, que en la revisión 1 era la misma caja.
@@ -186,7 +202,8 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
   - una matriz con `det = 1e-40` se rechaza y su pieza se expande;
   - una forma cuyo paso por el estiramiento de la primera instancia pasa de 1 mm viaja en `f32`, y una instancia posterior que lo pase se expande;
   - `shapeId` desconocido sin `knownShapes`, y aceptado con él;
-  - `quantBox` con un eje sin `q = 65535`, rechazada;
+  - `quantBox` con un eje sin `q = 65535`, rechazada; lo mismo con el `box` de una forma `q16`;
+  - una caja con un `NaN` o con `min > max` en un eje, rechazada;
   - un lote de solo instancias con `box` que no contiene su origen, aceptado;
   - el codificador octaédrico con (0, 1/√2, −1/√2) y (1/√2, 0, −1/√2).
 - **Planos (D3):** los 28 casos, idénticos byte a byte, porque los planos no usan lotes.
@@ -196,8 +213,13 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
   - en un lote mixto, dos instancias de la misma forma: seleccionar, colorear por propiedad y ocultar una no afecta a la otra ni a los registros normales. Esto mata el índice de registro desplazado en uno, que `check-equivalent.mjs` no puede ver;
   - una instancia con escala 0,001 se ilumina igual que su copia expandida. Esto mata la normal sin normalizar, que solo existe en el sombreador;
   - en WebGPU, subir un lote con índices `Uint16Array` de longitud impar;
-  - en WebGL2, un lote normal dibujado justo después de uno instanciado sale igual que sin él.
-- **Caché:** ida y vuelta por OPFS de un lote con índices `Uint16Array` de longitud impar.
+  - en WebGL2, un lote normal dibujado justo después de uno instanciado sale igual que sin él;
+  - **modelos que cambian de posición en `batches[]`:**
+    - se cargan A y B, ambos con instancias, y se quita A: las instancias de B se siguen dibujando en su sitio, y seleccionarlas devuelve sus elementos;
+    - lo mismo con los lotes de A y B llegando intercalados.
+
+    Esto mata el `batchIdx` grabado en la instancia, que con un solo modelo no se nota.
+- **Caché:** ida y vuelta por OPFS de un lote con índices `Uint16Array` de longitud impar, y de un lote de solo instancias (`quantBox === null`).
 - **Rendimiento (D2):** banco con los modelos reales: memoria máxima y tiempo de carga. En el navegador, con el método de T-144: tiempo de GPU por fotograma en la fontanería de la clínica y en el modelo de 60.000 muros, antes y después, en los dos motores.
 - **Mutantes**, cada uno con una prueba que lo mate:
   - determinante negativo aceptado, o casi singular aceptado;
@@ -206,6 +228,8 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
   - `sign()` en el codificador octaédrico (en el decodificador de la GPU es equivalente, como explica §3);
   - paso de cuantización mal redondeado, o sin el estiramiento de la instancia;
   - índice de registro de una instancia desplazado en uno;
+  - `batchIdx` escrito una sola vez al subir el lote, sin reescribirlo cuando cambia;
+  - bandera de `quantBox` nula perdida en la caché;
   - lote de solo instancias descartado;
   - glTF sin `instanceTable`;
   - divisor de WebGL2 sin restaurar;
@@ -225,6 +249,18 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 3. **`MIN_INSTANCE_USES` = 2**, confirmado.
 
 ## 8. Cambios respecto a las revisiones anteriores
+
+### Revisión 3 → 4 (T-151)
+
+Gemini dio por resueltos los hallazgos 1, 3 y 4 de T-150 y el 2 solo en parte, y por resueltos el 3 y el 7 de T-147, con el 5 aún en parte. Su único hallazgo nuevo cierra los que quedaban en parte (T-150 #2 y T-147 #5). Las notas menores también se recogen. Claude comprobó el hallazgo en el código: `batchIdx` se recalcula en cada fotograma en `WebGpuRenderer.ts:1279-1352`.
+
+| # | Hallazgo o nota de Gemini | Dónde queda |
+|---|---|---|
+| 1 | `batchIdx` grabado en el búfer de instancias queda obsoleto al quitar un modelo o al intercalar lotes | §2, WebGPU: cabecera por lote con `batchIdx`, reescrita solo cuando cambia; §4.4; §5: dos pruebas de navegador y un mutante |
+| a | Comprobación entera también para `shape.box` en `q16`, y cajas finitas con `min ≤ max` | §2, `findBatchError`; §5, unidades |
+| b | La cabecera v2 de OPFS necesita una bandera para `quantBox === null` | §4.6: palabra de banderas; §5: ida y vuelta de un lote de solo instancias y un mutante |
+| c | WebGL2 necesita trasponer `instanceTransforms` para leerla como 3 `vec4` | §2, «Matriz por filas en la GPU»: se traspone al subir el lote en los dos motores; el contrato sigue por columnas |
+| d | Los renderizadores no llaman a `findBatchError` en la ruta caliente; solo la exponen en `__gubim_dev__` | §2, «Quién la llama»: sigue así |
 
 ### Revisión 2 → 3 (T-150)
 
