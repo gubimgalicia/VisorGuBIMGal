@@ -5,6 +5,7 @@
 //! [`Diagnostic`] and the rest of the drawing carries on.
 
 mod cut;
+mod dimension;
 mod dxf;
 mod fixed;
 mod geom;
@@ -15,6 +16,7 @@ mod svg;
 mod text;
 
 pub use cut::{Axis, Cut, Frame, Look};
+pub use dimension::OverallDimensions;
 pub use dxf::{DxfOptions, to_dxf, to_dxf_with};
 pub use geom::{Loop, Segment};
 pub use hatch::HatchStyle;
@@ -99,10 +101,17 @@ pub struct Drawing {
     pub layers: Vec<Layer>,
     /// Labels for `IfcSpace` elements cut by a plan. Empty for non-plans or when none were passed.
     pub spaces: Vec<SpaceLabel>,
+    /// Optional overall bounding-box dimensions on two sides of the plan.
+    pub dimensions: Option<OverallDimensions>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl Drawing {
+    /// Computes overall bounding-box dimensions from the drawing's geometry layers.
+    pub fn compute_overall_dimensions(&mut self) {
+        self.dimensions = dimension::compute_overall(&self.layers);
+    }
+
     /// The same drawing in other units, for an export in millimetres.
     pub fn scaled(&self, factor: f64) -> Self {
         let segments = |list: &[Segment]| -> Vec<Segment> {
@@ -119,6 +128,10 @@ impl Drawing {
         }
         for label in &mut scaled.spaces {
             label.position *= factor;
+        }
+        if let Some(dims) = &mut scaled.dimensions {
+            dims.min *= factor;
+            dims.max *= factor;
         }
         scaled
     }
@@ -207,6 +220,7 @@ pub fn draw_with_spaces(
             depth: None,
             layers: Vec::new(),
             spaces: Vec::new(),
+            dimensions: None,
             diagnostics: diagnostics.entries,
         };
     };
@@ -317,6 +331,7 @@ pub fn draw_with_spaces(
         depth,
         layers: layers.into_values().collect(),
         spaces,
+        dimensions: None,
         diagnostics: diagnostics.entries,
     }
 }

@@ -29,6 +29,8 @@ export interface DrawingOptions {
   includeHatching: boolean;
   /** Plan cuts only: write each cut IfcSpace's name and area (m²) inside its outline. */
   includeSpaceLabels?: boolean;
+  /** Overall bounding-box dimensions on two sides of the drawing. */
+  includeDimensions?: boolean;
 }
 
 export interface DrawingExportConfig {

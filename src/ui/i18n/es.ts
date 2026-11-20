@@ -285,6 +285,7 @@ export const es = {
     includeHidden: 'Incluir líneas ocultas (trazos discontinuos)',
     includeHatching: 'Generar sombreados / tramas de materiales',
     includeSpaceLabels: 'Incluir rótulos de espacios (nombre y área)',
+    includeDimensions: 'Incluir cotas generales',
     generating: 'Generando plano...',
     generate: 'Generar plano 2D',
     previewHeading: 'VISTA PREVIA 2D',

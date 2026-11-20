@@ -12,7 +12,7 @@ const ELEMENTS: [&str; 9] = [
     "svg", "g", "path", "line", "polyline", "polygon", "circle", "text", "tspan",
 ];
 
-const ATTRIBUTES: [&str; 13] = [
+const ATTRIBUTES: [&str; 17] = [
     "xmlns",
     "width",
     "height",
@@ -26,6 +26,10 @@ const ATTRIBUTES: [&str; 13] = [
     "d",
     "x",
     "y",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
 ];
 
 /// Every element name the document opens.
@@ -196,6 +200,24 @@ fn space_labels_render_whitelisted_svg_with_escaped_name_and_area() {
     let svg = to_svg(&drawing);
     assert!(svg.contains(">Sala &lt;A&gt; &amp; B<"), "{svg}");
     assert!(svg.contains(">69.56 m²<"), "{svg}");
+    for name in elements(&svg) {
+        assert!(ELEMENTS.contains(&name.as_str()), "{name} is not whitelisted");
+    }
+    for name in attributes(&svg) {
+        assert!(ATTRIBUTES.contains(&name.as_str()), "attribute {name} is not whitelisted");
+    }
+}
+
+#[test]
+fn overall_dimensions_render_whitelisted_lines_and_bounding_box_text() {
+    let walls = [DrawingMesh::new(1, 1, "Muros", cuboid(v(0.0, 0.0, 0.0), v(10.0, 8.0, 3.0)))];
+    let mut drawing = draw(&walls, &DrawingOptions::cut_only(Cut::Plan { z: 1.5 }));
+    drawing.compute_overall_dimensions();
+    assert!(drawing.dimensions.is_some());
+    let svg = to_svg(&drawing);
+    assert!(svg.contains("<line "), "expected <line> elements for dimensions: {svg}");
+    assert!(svg.contains(">10.00 m<"), "expected width 10.00 m: {svg}");
+    assert!(svg.contains(">8.00 m<"), "expected height 8.00 m: {svg}");
     for name in elements(&svg) {
         assert!(ELEMENTS.contains(&name.as_str()), "{name} is not whitelisted");
     }

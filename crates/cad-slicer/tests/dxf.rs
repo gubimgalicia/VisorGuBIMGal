@@ -252,3 +252,21 @@ fn space_labels_write_dxf_text_entities_in_cp1252() {
     assert_eq!(text_entities, 2, "name and area TEXT entities");
     assert!(parsed.iter().any(|(c, v)| *c == 2 && v == "SPACES"));
 }
+
+#[test]
+fn overall_dimensions_write_dxf_blocks_and_dimension_entities() {
+    let walls = [DrawingMesh::new(1, 1, "Muros", cuboid(v(0.0, 0.0, 0.0), v(10.0, 8.0, 3.0)))];
+    let mut drawing = draw(&walls, &DrawingOptions::cut_only(Cut::Plan { z: 1.5 }));
+    drawing.compute_overall_dimensions();
+    let bytes = to_dxf(&drawing);
+    assert!(bytes.is_ascii(), "dimension DXF should be pure ASCII");
+    let parsed = groups(&bytes);
+    assert!(parsed.iter().any(|(c, v)| *c == 2 && v == "DIMENSIONS"), "missing DIMENSIONS layer");
+    assert!(parsed.iter().any(|(c, v)| *c == 2 && v == "BLOCKS"), "missing BLOCKS section");
+    assert!(parsed.iter().any(|(c, v)| *c == 2 && v == "*D0"), "missing *D0 block");
+    assert!(parsed.iter().any(|(c, v)| *c == 2 && v == "*D1"), "missing *D1 block");
+    let dim_entities = parsed.iter().filter(|(c, v)| *c == 0 && v == "DIMENSION").count();
+    assert_eq!(dim_entities, 2, "expected 2 DIMENSION entities (width + height)");
+    assert!(parsed.iter().any(|(c, v)| *c == 1 && v == "10.00 m"), "missing 10.00 m dim text");
+    assert!(parsed.iter().any(|(c, v)| *c == 1 && v == "8.00 m"), "missing 8.00 m dim text");
+}

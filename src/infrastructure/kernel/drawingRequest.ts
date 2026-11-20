@@ -13,7 +13,8 @@ export function drawingRequest(options: DrawingOptions, localToMap?: readonly nu
   const { cut } = options;
   const flags =
     (options.includeHatching ? 1 : 0) |
-    (options.includeSpaceLabels ? 2 : 0);
+    (options.includeSpaceLabels ? 2 : 0) |
+    (options.includeDimensions ? 4 : 0);
   const tail = [
     wireDepth(cut.depth),
     options.includeProjection ? 1 : 0,

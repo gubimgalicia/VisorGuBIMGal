@@ -27,6 +27,7 @@ pub struct DrawingRequest {
     pub options: DrawingOptions,
     pub include_hidden: bool,
     pub include_space_labels: bool,
+    pub include_dimensions: bool,
     /// Frame coordinates from model metres, for a `map` frame.
     pub transform: Option<DMat4>,
 }
@@ -79,6 +80,7 @@ impl DrawingRequest {
             options,
             include_hidden: rest[3] != 0.0,
             include_space_labels: (flags & 2) != 0,
+            include_dimensions: (flags & 4) != 0,
             transform,
         })
     }
@@ -439,6 +441,9 @@ impl SheetStore {
         let mut spaces = std::mem::take(&mut self.spaces);
         spaces.sort_by_key(|space| (space.model_id, space.element_id));
         let mut drawing = draw_with_spaces(&meshes, &spaces, &self.request.options);
+        if self.request.include_dimensions {
+            drawing.compute_overall_dimensions();
+        }
         drop(meshes);
         drop(spaces);
         if !self.request.include_hidden {

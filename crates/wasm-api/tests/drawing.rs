@@ -495,3 +495,36 @@ fn plan_space_labels_emit_building_booleans_space_from_outline_and_duplex_from_q
         assert!(svg.contains(">17.94 m²<"), "missing quantity area 17.94 m² in Duplex plan");
     }
 }
+
+#[test]
+fn plan_overall_dimensions_match_building_booleans_bounding_box() {
+    // building-booleans.ifc footprint is 10.00 x 8.00 m.
+    // flags = 6 -> include_space_labels (2) + include_dimensions (4).
+    let words = vec![0.0, 1.5, -1.0, NO_DEPTH, 0.0, 6.0, 0.0];
+    let mut bb = model("test/fixtures/authored/building-booleans.ifc");
+    let mut sheet = SheetStore::new(request(&words));
+    for chunk in chunks(&mut bb, &words, 65536) {
+        sheet.add_chunk(0, &chunk);
+    }
+    assert_eq!(sheet.generate(), "[]");
+    let svg = String::from_utf8(
+        sheet
+            .export(&ExportOptions {
+                svg: true,
+                scale: 1.0,
+                show_hidden: false,
+                show_hatching: false,
+                comment: None,
+            })
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(svg.contains(">10.00 m<"), "missing 10.00 m in SVG: {svg}");
+    assert!(svg.contains(">8.00 m<"), "missing 8.00 m in SVG: {svg}");
+    assert!(svg.contains(">guBIM space 1<"), "missing space label alongside dimensions");
+
+    let dxf_text = String::from_utf8_lossy(&dxf(&sheet)).into_owned();
+    assert!(dxf_text.contains("DIMENSION\r\n"), "missing DIMENSION entity in DXF");
+    assert!(dxf_text.contains("10.00 m\r\n"), "missing 10.00 m in DXF");
+    assert!(dxf_text.contains("8.00 m\r\n"), "missing 8.00 m in DXF");
+}
