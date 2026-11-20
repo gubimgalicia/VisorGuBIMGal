@@ -26,6 +26,16 @@ export function pixelWindow(x: number, y: number, width: number, height: number)
   };
 }
 
+/** The view window of a rectangle of pixels, top-left at (x, y), w by h. */
+export function rectWindow(x: number, y: number, w: number, h: number, width: number, height: number): ViewWindow {
+  return {
+    left: (2 * x) / width - 1,
+    right: (2 * (x + w)) / width - 1,
+    bottom: 1 - (2 * (y + h)) / height,
+    top: 1 - (2 * y) / height
+  };
+}
+
 /**
  * Room left around a box, in metres. The GPU adds `origin − eye` and a position in f32, which
  * rounds by some 6e-8 of the distance to the eye; this is far more, and still under 1 mm per

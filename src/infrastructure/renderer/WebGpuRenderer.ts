@@ -26,7 +26,7 @@ import type { Ray, Vec3 } from '../../domain/measure/geometry';
 import { Camera, resolveOrbitPivot, type SurfacePickSample } from './Camera';
 import { attachCanvasInput } from './canvasInput';
 import { canvasPoint, canvasRay } from './canvasView';
-import { boxMayShow, markBatchesInView, pixelWindow } from './frustum';
+import { boxMayShow, markBatchesInView, rectWindow } from './frustum';
 import { groupIndices } from './indexGroups';
 import { RENDERER_WGSL } from './shaders';
 import { SECTION_FLOATS, keptSectionPlanes, writeSectionPlanes } from './sectionPlanes';
@@ -1688,10 +1688,16 @@ export class WebGpuRenderer implements RendererPort {
    * Returns the picked ElementRef { modelId, expressId } (or null on background) together with
    * the Reverse-Z surface depth sample.
    */
-  private async pickOnce(
+  /**
+   * Picks at a CSS point and at points offset from it, in one pass over the rectangle that holds
+   * them all, read back with one mapped copy (A15). One result per offset, in order.
+   */
+  private async pickRect(
     cssX: number,
-    cssY: number
-  ): Promise<{ ref: ElementRef | null; sample: SurfacePickSample }> {
+    cssY: number,
+    offsets: ReadonlyArray<readonly [number, number]>
+  ): Promise<Array<{ ref: ElementRef | null; sample: SurfacePickSample }>> {
+    const none = () => offsets.map(() => ({ ref: null, sample: { hit: null } as SurfacePickSample }));
     if (
       this.isDestroyed ||
       this.isPicking ||
@@ -1704,14 +1710,34 @@ export class WebGpuRenderer implements RendererPort {
       !this.depthTextureView ||
       !this.pickReadBuffer
     ) {
-      return { ref: null, sample: { hit: null } };
+      return none();
     }
 
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
     const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
-    const px = Math.max(0, Math.min(this.canvas.width - 1, Math.floor(cssX * scaleX)));
-    const py = Math.max(0, Math.min(this.canvas.height - 1, Math.floor(cssY * scaleY)));
+    const canvasWidth = this.canvas.width;
+    const canvasHeight = this.canvas.height;
+    const probes = offsets.map(([dx, dy]) => ({
+      x: Math.max(0, Math.min(canvasWidth - 1, Math.floor((cssX + dx) * scaleX))),
+      y: Math.max(0, Math.min(canvasHeight - 1, Math.floor((cssY + dy) * scaleY)))
+    }));
+    const rx = Math.min(...probes.map((p) => p.x));
+    const ry = Math.min(...probes.map((p) => p.y));
+    const w = Math.max(...probes.map((p) => p.x)) - rx + 1;
+    const h = Math.max(...probes.map((p) => p.y)) - ry + 1;
+    // copyTextureToBuffer needs rows a multiple of 256 bytes apart; a texel is 16.
+    const bytesPerRow = Math.ceil((w * 16) / 256) * 256;
+    if (this.device && this.pickReadBuffer && this.pickReadBuffer.size < bytesPerRow * h) {
+      this.pickReadBuffer.destroy();
+      this.pickReadBuffer = this.device.createBuffer({
+        label: 'gubim-pick-read-buffer',
+        size: bytesPerRow * h,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      });
+    }
+    const readBuffer = this.pickReadBuffer;
+    if (!readBuffer) return none();
 
     this.isPicking = true;
     const pipelines = this.pipelines;
@@ -1737,11 +1763,11 @@ export class WebGpuRenderer implements RendererPort {
         }
       });
 
-      pass.setScissorRect(px, py, 1, 1);
+      pass.setScissorRect(rx, ry, w, h);
       pass.setBindGroup(0, this.sceneBindGroup);
 
       // Only batches whose box reaches the pixel can draw in it.
-      const pixelView = this.camera.frustum(pixelWindow(px, py, this.canvas.width, this.canvas.height));
+      const pixelView = this.camera.frustum(rectWindow(rx, ry, w, h, canvasWidth, canvasHeight));
       const eye = this.camera.getEye();
       this.pickedBatches = 0;
       let batchIdx = 0;
@@ -1772,35 +1798,54 @@ export class WebGpuRenderer implements RendererPort {
       pass.end();
 
       encoder.copyTextureToBuffer(
-        { texture: this.idTexture, origin: { x: px, y: py, z: 0 } },
-        { buffer: this.pickReadBuffer, offset: 0, bytesPerRow: 256 },
-        { width: 1, height: 1, depthOrArrayLayers: 1 }
+        { texture: this.idTexture, origin: { x: rx, y: ry, z: 0 } },
+        { buffer: readBuffer, offset: 0, bytesPerRow },
+        { width: w, height: h, depthOrArrayLayers: 1 }
       );
 
       this.device.queue.submit([encoder.finish()]);
 
-      await this.pickReadBuffer.mapAsync(GPUMapMode.READ, 0, 16);
-      const mapped = this.pickReadBuffer.getMappedRange(0, 16);
+      const size = bytesPerRow * h;
+      await readBuffer.mapAsync(GPUMapMode.READ, 0, size);
+      const mapped = readBuffer.getMappedRange(0, size).slice(0);
+      readBuffer.unmap();
       const u32 = new Uint32Array(mapped);
-      const modelNum = u32[0];
-      const expressId = u32[1];
-      const depth = new Float32Array(mapped)[2];
-      this.pickReadBuffer.unmap();
+      const f32 = new Float32Array(mapped);
 
-      if (modelNum === 0 || expressId === 0) {
-        return { ref: null, sample: { hit: false } };
-      }
-
-      const modelId = this.numToModelId.get(modelNum);
-      if (!modelId) return { ref: null, sample: { hit: false } };
-
-      return { ref: { modelId, expressId }, sample: { hit: true, depth } };
+      return probes.map((probe) => {
+        const at = ((probe.y - ry) * bytesPerRow) / 4 + (probe.x - rx) * 4;
+        const modelNum = u32[at];
+        const expressId = u32[at + 1];
+        if (modelNum === 0 || expressId === 0) return { ref: null, sample: { hit: false } as SurfacePickSample };
+        const modelId = this.numToModelId.get(modelNum);
+        if (!modelId) return { ref: null, sample: { hit: false } as SurfacePickSample };
+        return { ref: { modelId, expressId }, sample: { hit: true, depth: f32[at + 2] } as SurfacePickSample };
+      });
     } catch (err) {
       console.warn('Pick error:', err);
-      return { ref: null, sample: { hit: null } };
+      return none();
     } finally {
       this.isPicking = false;
     }
+  }
+
+  private async pickOnce(cssX: number, cssY: number): Promise<{ ref: ElementRef | null; sample: SurfacePickSample }> {
+    return (await this.pickRect(cssX, cssY, [[0, 0]]))[0];
+  }
+
+  /** The first offset, in order, whose pixel shows an element, from one pick pass (A15). */
+  pickFirst(
+    cssX: number,
+    cssY: number,
+    offsets: ReadonlyArray<readonly [number, number]>
+  ): Promise<{ ref: ElementRef; offset: readonly [number, number] } | null> {
+    const result = this.pickQueue.then(async () => {
+      const hits = await this.pickRect(cssX, cssY, offsets);
+      const at = hits.findIndex((hit) => hit.ref !== null);
+      return at < 0 ? null : { ref: hits[at].ref as ElementRef, offset: offsets[at] };
+    });
+    this.pickQueue = result.catch(() => null);
+    return result;
   }
 
   /** Used by dev-only harness tests to orbit/inspect camera and GPU resource metrics. */

@@ -27,7 +27,7 @@ import type { Ray, Vec3 } from '../../domain/measure/geometry';
 import { Camera, resolveOrbitPivot, type SurfacePickSample } from './Camera';
 import { attachCanvasInput } from './canvasInput';
 import { canvasPoint, canvasRay } from './canvasView';
-import { boxMayShow, markBatchesInView, pixelWindow } from './frustum';
+import { boxMayShow, markBatchesInView, rectWindow } from './frustum';
 import { chooseDepthMode, withDepthMode, type DepthMode } from './glDepth';
 import { waitForSync } from './glSync';
 import { groupIndices } from './indexGroups';
@@ -1676,12 +1676,12 @@ export class WebGl2Renderer implements RendererPort {
 
   /** One at a time, in order: each waits for the last to read back. */
   pick(cssX: number, cssY: number): Promise<ElementRef | null> {
-    const result = this.pickQueue.then(() => this.pickOnce(cssX, cssY).ref);
+    const result = this.pickQueue.then(async () => (await this.pickOnce(cssX, cssY)).ref);
     this.pickQueue = result.catch(() => null);
     return result;
   }
 
-  private pickOrbitPivot(cssX: number, cssY: number): Vec3 | null {
+  private async pickOrbitPivot(cssX: number, cssY: number): Promise<Vec3 | null> {
     if (!this.canvas || !this.gl) return null;
     const rect = this.canvas.getBoundingClientRect();
     const width = this.canvas.clientWidth || rect.width;
@@ -1689,7 +1689,9 @@ export class WebGl2Renderer implements RendererPort {
     if (!width || !height) return null;
     const ndcX = (2 * cssX) / width - 1;
     const ndcY = 1 - (2 * cssY) / height;
-    const hit = this.pickOnce(cssX, cssY);
+    const queued = this.pickQueue.then(() => this.pickOnce(cssX, cssY));
+    this.pickQueue = queued.catch(() => null);
+    const hit = await queued;
     return resolveOrbitPivot(
       this.camera,
       ndcX,
@@ -1874,10 +1876,17 @@ export class WebGl2Renderer implements RendererPort {
     }
   }
 
-  private pickOnce(
+  /**
+   * Picks at a CSS point and at points offset from it, in one pass over the rectangle that holds
+   * them all (A15). The pixels come back through a pixel pack buffer and a fence, so the main
+   * thread does not wait for the GPU. One result per offset, in order.
+   */
+  private async pickRect(
     cssX: number,
-    cssY: number
-  ): { ref: ElementRef | null; sample: SurfacePickSample } {
+    cssY: number,
+    offsets: ReadonlyArray<readonly [number, number]>
+  ): Promise<Array<{ ref: ElementRef | null; sample: SurfacePickSample }>> {
+    const none = () => offsets.map(() => ({ ref: null, sample: { hit: null } as SurfacePickSample }));
     if (
       this.isDestroyed ||
       this.isPicking ||
@@ -1886,15 +1895,24 @@ export class WebGl2Renderer implements RendererPort {
       !this.pickProgram ||
       !this.pickFramebuffer
     ) {
-      return { ref: null, sample: { hit: null } };
+      return none();
     }
 
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
     const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
-    const px = Math.max(0, Math.min(this.canvas.width - 1, Math.floor(cssX * scaleX)));
-    const py = Math.max(0, Math.min(this.canvas.height - 1, Math.floor(cssY * scaleY)));
-    const glPy = this.canvas.height - 1 - py;
+    const canvasWidth = this.canvas.width;
+    const canvasHeight = this.canvas.height;
+    const probes = offsets.map(([dx, dy]) => ({
+      x: Math.max(0, Math.min(canvasWidth - 1, Math.floor((cssX + dx) * scaleX))),
+      y: Math.max(0, Math.min(canvasHeight - 1, Math.floor((cssY + dy) * scaleY)))
+    }));
+    const rx = Math.min(...probes.map((p) => p.x));
+    const ry = Math.min(...probes.map((p) => p.y));
+    const w = Math.max(...probes.map((p) => p.x)) - rx + 1;
+    const h = Math.max(...probes.map((p) => p.y)) - ry + 1;
+    // GL rows count from the bottom.
+    const glRy = canvasHeight - ry - h;
 
     this.isPicking = true;
     try {
@@ -1905,7 +1923,7 @@ export class WebGl2Renderer implements RendererPort {
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
       gl.enable(gl.SCISSOR_TEST);
-      gl.scissor(px, glPy, 1, 1);
+      gl.scissor(rx, glRy, w, h);
 
       // Clearing obeys the depth mask, which the transparent pass leaves off.
       gl.depthMask(true);
@@ -1923,7 +1941,7 @@ export class WebGl2Renderer implements RendererPort {
 
       const eye = this.camera.getEye();
       // Only batches whose box reaches the pixel can draw in it.
-      const pixelView = this.camera.frustum(pixelWindow(px, py, this.canvas.width, this.canvas.height));
+      const pixelView = this.camera.frustum(rectWindow(rx, ry, w, h, canvasWidth, canvasHeight));
       this.pickedBatches = 0;
 
       for (const model of this.models.values()) {
@@ -1945,30 +1963,63 @@ export class WebGl2Renderer implements RendererPort {
       }
       gl.bindVertexArray(null);
 
-      const pixel = new Uint32Array(4);
-      gl.readPixels(px, glPy, 1, 1, gl.RGBA_INTEGER, gl.UNSIGNED_INT, pixel);
-
+      // Into a pixel pack buffer: readPixels returns at once, and a fence says when it is done.
+      // A new small buffer each time: reusing one makes Chrome drop its read-back copy.
+      const pack = gl.createBuffer();
+      if (!pack) return none();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pack);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, w * h * 16, gl.STREAM_READ);
+      gl.readPixels(rx, glRy, w, h, gl.RGBA_INTEGER, gl.UNSIGNED_INT, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
       gl.disable(gl.SCISSOR_TEST);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-      const modelNum = pixel[0];
-      const expressId = pixel[1];
-      const depth = new Float32Array(pixel.buffer)[2];
-
-      if (modelNum === 0 || expressId === 0) {
-        return { ref: null, sample: { hit: false } };
+      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      const ready = !!sync && (await waitForSync(gl, sync, 2000)) && this.gl === gl;
+      const pixels = new Uint32Array(w * h * 4);
+      if (ready) {
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pack);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, pixels);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
       }
+      gl.deleteBuffer(pack);
+      if (!ready) return none();
+      const depths = new Float32Array(pixels.buffer);
 
-      const modelId = this.numToModelId.get(modelNum);
-      if (!modelId) return { ref: null, sample: { hit: false } };
-
-      return { ref: { modelId, expressId }, sample: { hit: true, depth } };
+      return probes.map((probe) => {
+        const at = ((canvasHeight - 1 - probe.y - glRy) * w + (probe.x - rx)) * 4;
+        const modelNum = pixels[at];
+        const expressId = pixels[at + 1];
+        if (modelNum === 0 || expressId === 0) return { ref: null, sample: { hit: false } as SurfacePickSample };
+        const modelId = this.numToModelId.get(modelNum);
+        if (!modelId) return { ref: null, sample: { hit: false } as SurfacePickSample };
+        return { ref: { modelId, expressId }, sample: { hit: true, depth: depths[at + 2] } as SurfacePickSample };
+      });
     } catch (err) {
       console.warn('Pick error in WebGL2:', err);
-      return { ref: null, sample: { hit: null } };
+      return none();
     } finally {
       this.isPicking = false;
     }
+  }
+
+  private async pickOnce(cssX: number, cssY: number): Promise<{ ref: ElementRef | null; sample: SurfacePickSample }> {
+    return (await this.pickRect(cssX, cssY, [[0, 0]]))[0];
+  }
+
+  /** The first offset, in order, whose pixel shows an element, from one pick pass (A15). */
+  pickFirst(
+    cssX: number,
+    cssY: number,
+    offsets: ReadonlyArray<readonly [number, number]>
+  ): Promise<{ ref: ElementRef; offset: readonly [number, number] } | null> {
+    const result = this.pickQueue.then(async () => {
+      const hits = await this.pickRect(cssX, cssY, offsets);
+      const at = hits.findIndex((hit) => hit.ref !== null);
+      return at < 0 ? null : { ref: hits[at].ref as ElementRef, offset: offsets[at] };
+    });
+    this.pickQueue = result.catch(() => null);
+    return result;
   }
 
   orbitCamera(dx: number, dy: number): void {
@@ -2080,6 +2131,7 @@ export class WebGl2Renderer implements RendererPort {
         this.gl.deleteFramebuffer(this.pickFramebuffer);
         this.pickFramebuffer = null;
       }
+
       if (this.pickColorTexture) {
         this.gl.deleteTexture(this.pickColorTexture);
         this.pickColorTexture = null;

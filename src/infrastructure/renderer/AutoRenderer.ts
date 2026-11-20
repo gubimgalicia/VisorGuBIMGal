@@ -298,6 +298,14 @@ export class AutoRenderer implements RendererPort {
     return this.activeRenderer ? this.activeRenderer.pick(x, y) : Promise.resolve(null);
   }
 
+  pickFirst(
+    x: number,
+    y: number,
+    offsets: ReadonlyArray<readonly [number, number]>
+  ): Promise<{ ref: ElementRef; offset: readonly [number, number] } | null> {
+    return this.activeRenderer?.pickFirst ? this.activeRenderer.pickFirst(x, y, offsets) : Promise.resolve(null);
+  }
+
   rayAt(x: number, y: number): Ray | null {
     return this.activeRenderer?.rayAt(x, y) ?? null;
   }

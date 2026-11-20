@@ -190,9 +190,14 @@ export class MeasureController {
 
   private async resolve(x: number, y: number): Promise<Snap | null> {
     let ref: ElementRef | null = null;
-    for (const [dx, dy] of PROBES) {
-      ref = await this.renderer.pick(x + dx, y + dy);
-      if (ref) break;
+    if (this.renderer.pickFirst) {
+      // One pick pass for every probe (A15).
+      ref = (await this.renderer.pickFirst(x, y, PROBES))?.ref ?? null;
+    } else {
+      for (const [dx, dy] of PROBES) {
+        ref = await this.renderer.pick(x + dx, y + dy);
+        if (ref) break;
+      }
     }
     if (!ref) return null;
     const mesh = await this.mesh(ref);

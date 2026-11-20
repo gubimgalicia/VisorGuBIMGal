@@ -189,12 +189,22 @@ export default function App() {
       let ref: ElementRef | null = null;
       let hitX = x;
       let hitY = y;
-      for (const [dx, dy] of probes) {
-        ref = await renderer.pick(x + dx, y + dy);
-        if (ref) {
-          hitX = x + dx;
-          hitY = y + dy;
-          break;
+      if (renderer.pickFirst) {
+        // One pick pass for every probe (A15).
+        const first = await renderer.pickFirst(x, y, probes);
+        if (first) {
+          ref = first.ref;
+          hitX = x + first.offset[0];
+          hitY = y + first.offset[1];
+        }
+      } else {
+        for (const [dx, dy] of probes) {
+          ref = await renderer.pick(x + dx, y + dy);
+          if (ref) {
+            hitX = x + dx;
+            hitY = y + dy;
+            break;
+          }
         }
       }
       const ray = renderer.rayAt(hitX, hitY) ?? renderer.rayAt(x, y);

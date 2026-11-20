@@ -1,5 +1,6 @@
 // What backlog A15 and A16 could save on WebGL2, measured in the real app (docs/06, Prio. 4).
-//   A15: a pick blocks the main thread in a synchronous 1-pixel readPixels. Measured per pick,
+//   A15: how long a pick blocks the main thread (before A15, a synchronous 1-pixel readPixels;
+//        since, the pass and a readPixels into a pack buffer) and how long its answer takes. Per pick,
 //        with the GPU idle and right after a frame was submitted (hovering while the view redraws).
 //   A16: per-batch uniforms (offset, record base, model visibility, q16 grid). Calls per frame,
 //        the cost of one call, and the frame's CPU time and GPU time (timer query) for scale.
@@ -95,19 +96,22 @@ const MEASURE = String.raw`(async () => {
   const points = [];
   for (let fy = 0.2; fy < 0.85; fy += 0.13) for (let fx = 0.2; fx < 0.85; fx += 0.13) points.push([c.width * fx, c.height * fy]);
   const pickRun = async (afterFrame) => {
-    const total = [], read = [];
+    const total = [], read = [], latency = [];
     let hits = 0;
     for (const [x, y] of points) {
       await frame();
       if (afterFrame) R.renderFrame(); else gl.finish();
       readMs = 0;
       const s = performance.now();
-      const hit = R.pickOnce(x, y);
+      // Since A15 pickOnce is asynchronous: time the part that blocks, then the wait for the answer.
+      const pending = R.pickOnce(x, y);
       total.push(performance.now() - s);
       read.push(readMs);
+      const hit = await pending;
+      latency.push(performance.now() - s);
       if (hit.ref) hits++;
     }
-    return { pick: stats(total), readPixels: stats(read), hits };
+    return { pick: stats(total), readPixels: stats(read), answer: stats(latency), hits };
   };
   const idle = await pickRun(false);
   const busy = await pickRun(true);

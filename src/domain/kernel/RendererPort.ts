@@ -119,6 +119,15 @@ export interface RendererPort {
    * section cuts away are passed through. Null over the background or before initialize.
    */
   pick(x: number, y: number): Promise<ElementRef | null>;
+  /**
+   * The first of several points near (x, y), in the order given, that shows an element, read
+   * from one pick pass (A15). Optional: without it, callers pick point by point.
+   */
+  pickFirst?(
+    x: number,
+    y: number,
+    offsets: ReadonlyArray<readonly [number, number]>
+  ): Promise<{ ref: ElementRef; offset: readonly [number, number] } | null>;
   /** The ray from the eye through a canvas position, in absolute model coordinates. */
   rayAt(x: number, y: number): Ray | null;
   /** Where an absolute point shows on the canvas; null behind the eye or before initialize. */
