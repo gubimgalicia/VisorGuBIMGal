@@ -144,6 +144,35 @@ pub fn to_svg_with(drawing: &Drawing, options: &SvgOptions) -> String {
         out.push_str("</g>\n");
     }
 
+    if !drawing.spaces.is_empty() {
+        let space_font = (span / 55.0).clamp(0.05, 0.45);
+        out.push_str(&format!(
+            "<g fill=\"#334155\" stroke=\"none\" font-size=\"{}\">\n",
+            number(space_font)
+        ));
+        for space in &drawing.spaces {
+            let Some(pos) = place(space.position) else {
+                continue;
+            };
+            let area_text = format!("{:.2} m²", space.area_m2);
+            let name_half = space.name.chars().count() as f64 * space_font * 0.27;
+            let area_half = area_text.chars().count() as f64 * space_font * 0.27;
+            out.push_str(&format!(
+                "<text x=\"{}\" y=\"{}\">{}</text>\n",
+                number((pos.x - name_half).max(margin)),
+                number(pos.y - space_font * 0.2),
+                xml_text(&space.name)
+            ));
+            out.push_str(&format!(
+                "<text x=\"{}\" y=\"{}\">{}</text>\n",
+                number((pos.x - area_half).max(margin)),
+                number(pos.y + space_font * 1.05),
+                xml_text(&area_text)
+            ));
+        }
+        out.push_str("</g>\n");
+    }
+
     out.push_str("</svg>\n");
     out
 }
@@ -224,6 +253,9 @@ fn bounds(drawing: &Drawing) -> (DVec2, DVec2) {
             take(segment.a);
             take(segment.b);
         }
+    }
+    for space in &drawing.spaces {
+        take(space.position);
     }
     if low.x > high.x {
         (DVec2::ZERO, DVec2::ZERO)

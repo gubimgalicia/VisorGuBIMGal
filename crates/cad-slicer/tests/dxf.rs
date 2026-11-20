@@ -2,7 +2,10 @@
 
 mod common;
 
-use cad_slicer::{Cut, DrawingMesh, DrawingOptions, HatchStyle, draw, to_dxf, to_dxf_with, DxfOptions};
+use cad_slicer::{
+    Cut, DrawingMesh, DrawingOptions, DxfOptions, HatchStyle, SpaceInput, draw, draw_with_spaces,
+    to_dxf, to_dxf_with,
+};
 use common::{cuboid, v};
 
 /// Splits the file into (group code, value) pairs. Panics unless every line ends in CRLF.
@@ -225,4 +228,27 @@ fn hatch_lines_are_written_as_entities() {
     .filter(|(code, value)| *code == 0 && value == "LINE")
     .count();
     assert_eq!(all - without, 3, "three hatch lines were expected");
+}
+
+#[test]
+fn space_labels_write_dxf_text_entities_in_cp1252() {
+    let walls = [DrawingMesh::new(1, 1, "Muros", cuboid(v(0.0, 0.0, 0.0), v(10.0, 8.0, 3.0)))];
+    let spaces = [SpaceInput {
+        model_id: 1,
+        element_id: 42,
+        name: "Salón 1".into(),
+        quantity_area_m2: None,
+        mesh: cuboid(v(0.3, 0.3, 0.0), v(9.7, 7.7, 3.0)),
+    }];
+    let drawing = draw_with_spaces(&walls, &spaces, &DrawingOptions::cut_only(Cut::Plan { z: 1.5 }));
+    let bytes = to_dxf(&drawing);
+    // 'ó' (0xF3) and '²' (0xB2) are CP1252 single bytes, never UTF-8 sequences.
+    assert!(!bytes.windows(2).any(|w| w == [0xC2, 0xB2]), "UTF-8 ² leaked into CP1252 DXF");
+    assert!(bytes.windows(4).any(|w| w == b"69.5"), "expected 69.56 m²");
+    assert!(bytes.contains(&0xB2), "CP1252 ² byte expected");
+    assert!(bytes.contains(&0xF3), "CP1252 ó byte expected");
+    let parsed = groups(&bytes);
+    let text_entities = parsed.iter().filter(|(c, v)| *c == 0 && v == "TEXT").count();
+    assert_eq!(text_entities, 2, "name and area TEXT entities");
+    assert!(parsed.iter().any(|(c, v)| *c == 2 && v == "SPACES"));
 }

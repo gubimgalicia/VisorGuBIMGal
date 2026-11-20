@@ -10,6 +10,7 @@ mod fixed;
 mod geom;
 mod hatch;
 mod project;
+mod space;
 mod svg;
 mod text;
 
@@ -17,6 +18,7 @@ pub use cut::{Axis, Cut, Frame, Look};
 pub use dxf::{DxfOptions, to_dxf, to_dxf_with};
 pub use geom::{Loop, Segment};
 pub use hatch::HatchStyle;
+pub use space::{AreaSource, SpaceInput, SpaceLabel};
 pub use svg::{SvgOptions, to_svg, to_svg_with};
 
 use ifc_geometry::Mesh;
@@ -95,6 +97,8 @@ pub struct Drawing {
     /// The projection depth the drawing was generated with, after validation.
     pub depth: Option<f64>,
     pub layers: Vec<Layer>,
+    /// Labels for `IfcSpace` elements cut by a plan. Empty for non-plans or when none were passed.
+    pub spaces: Vec<SpaceLabel>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -112,6 +116,9 @@ impl Drawing {
             layer.visible = segments(&layer.visible);
             layer.hidden = segments(&layer.hidden);
             layer.hatch = segments(&layer.hatch);
+        }
+        for label in &mut scaled.spaces {
+            label.position *= factor;
         }
         scaled
     }
@@ -183,6 +190,15 @@ fn note_projection(
 }
 
 pub fn draw(meshes: &[DrawingMesh], options: &DrawingOptions) -> Drawing {
+    draw_with_spaces(meshes, &[], options)
+}
+
+/// Like [`draw`], plus optional `IfcSpace` inputs whose name and area are labelled on plan cuts.
+pub fn draw_with_spaces(
+    meshes: &[DrawingMesh],
+    space_inputs: &[SpaceInput],
+    options: &DrawingOptions,
+) -> Drawing {
     let mut diagnostics = Diagnostics::new();
     let Some(frame) = Frame::of(options.cut) else {
         diagnostics.add(0, 0, "bad-cut", "the cut position is not finite".into());
@@ -190,6 +206,7 @@ pub fn draw(meshes: &[DrawingMesh], options: &DrawingOptions) -> Drawing {
             frame: Frame::of(Cut::Plan { z: 0.0 }).expect("an identity frame is finite"),
             depth: None,
             layers: Vec::new(),
+            spaces: Vec::new(),
             diagnostics: diagnostics.entries,
         };
     };
@@ -288,11 +305,18 @@ pub fn draw(meshes: &[DrawingMesh], options: &DrawingOptions) -> Drawing {
         }
     }
 
+    let spaces = if matches!(options.cut, Cut::Plan { .. }) && !space_inputs.is_empty() {
+        space::extract_space_labels(space_inputs, &frame)
+    } else {
+        Vec::new()
+    };
+
     // A layer nothing reached is still a layer: the caller asked for it.
     Drawing {
         frame,
         depth,
         layers: layers.into_values().collect(),
+        spaces,
         diagnostics: diagnostics.entries,
     }
 }

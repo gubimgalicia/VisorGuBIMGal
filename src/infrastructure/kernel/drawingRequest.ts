@@ -11,10 +11,13 @@ function wireDepth(depth: number | undefined): number {
 /** The flat numbers of `DrawingRequest::decode`. Models also get their `localToMap`. */
 export function drawingRequest(options: DrawingOptions, localToMap?: readonly number[]): number[] {
   const { cut } = options;
+  const flags =
+    (options.includeHatching ? 1 : 0) |
+    (options.includeSpaceLabels ? 2 : 0);
   const tail = [
     wireDepth(cut.depth),
     options.includeProjection ? 1 : 0,
-    options.includeHatching ? 1 : 0,
+    flags,
     options.includeProjection && options.includeHiddenLines ? 1 : 0,
     ...(localToMap ?? [])
   ];

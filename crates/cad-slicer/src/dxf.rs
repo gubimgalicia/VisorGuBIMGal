@@ -55,12 +55,14 @@ pub fn to_dxf_with(drawing: &Drawing, options: &DxfOptions) -> Vec<u8> {
         });
     }
 
+    let space_layer = (!drawing.spaces.is_empty()).then(|| names.assign("SPACES"));
+
     let mut out = Writer::default();
     if let Some(comment) = &options.comment {
         out.text(999, comment);
     }
     out.header(drawing);
-    out.layer_table(&layers);
+    out.layer_table(&layers, space_layer.as_deref());
     out.section("ENTITIES");
     for planned in &layers {
         let name_bytes = dxf_bytes(&planned.name, MAX_VALUE);
@@ -82,6 +84,22 @@ pub fn to_dxf_with(drawing: &Drawing, options: &DxfOptions) -> Vec<u8> {
             for segment in &planned.layer.hidden {
                 out.line_bytes(&hidden_bytes, segment.a, segment.b);
             }
+        }
+    }
+    if let Some(space_layer) = &space_layer {
+        let (low, high) = bounds(drawing);
+        let span = (high.0 - low.0).max(high.1 - low.1).max(1.0);
+        let text_height = (span / 60.0).clamp(span * 0.005, span * 0.03);
+        let layer_bytes = dxf_bytes(space_layer, MAX_VALUE);
+        for space in &drawing.spaces {
+            if !space.position.is_finite() {
+                continue;
+            }
+            let name_pos = glam::DVec2::new(space.position.x, space.position.y + text_height * 0.65);
+            let area_pos = glam::DVec2::new(space.position.x, space.position.y - text_height * 0.65);
+            let area_text = format!("{:.2} m²", space.area_m2);
+            out.centered_text(&layer_bytes, name_pos, text_height, &space.name);
+            out.centered_text(&layer_bytes, area_pos, text_height, &area_text);
         }
     }
     out.end_section();
@@ -176,20 +194,24 @@ impl Writer {
         }
     }
 
-    fn layer_table(&mut self, layers: &[Planned]) {
+    fn layer_table(&mut self, layers: &[Planned], space_layer: Option<&str>) {
         self.section("TABLES");
         self.linetype_table();
         self.group(0, b"TABLE");
         self.text(2, "LAYER");
-        // A hidden layer is an entry of the table too, so the count covers both kinds.
-        let entries =
-            layers.len() + layers.iter().filter(|planned| planned.hidden.is_some()).count();
+        // A hidden layer is an entry of the table too, so the count covers every kind.
+        let entries = layers.len()
+            + layers.iter().filter(|planned| planned.hidden.is_some()).count()
+            + usize::from(space_layer.is_some());
         self.integer(70, entries as i64);
         for planned in layers {
             self.layer_entry(&planned.name, 7, "CONTINUOUS");
             if let Some(hidden) = &planned.hidden {
                 self.layer_entry(hidden, 8, "DASHED");
             }
+        }
+        if let Some(space_layer) = space_layer {
+            self.layer_entry(space_layer, 3, "CONTINUOUS");
         }
         self.group(0, b"ENDTAB");
         self.end_section();
@@ -214,6 +236,24 @@ impl Writer {
         push_format_number(&mut self.bytes, to.x);
         self.bytes.extend_from_slice(b"\r\n21\r\n");
         push_format_number(&mut self.bytes, to.y);
+        self.bytes.extend_from_slice(b"\r\n31\r\n0.000000\r\n");
+    }
+
+    fn centered_text(&mut self, layer: &[u8], pos: glam::DVec2, height: f64, value: &str) {
+        self.bytes.extend_from_slice(b"0\r\nTEXT\r\n8\r\n");
+        self.bytes.extend_from_slice(layer);
+        self.bytes.extend_from_slice(b"\r\n10\r\n");
+        push_format_number(&mut self.bytes, pos.x);
+        self.bytes.extend_from_slice(b"\r\n20\r\n");
+        push_format_number(&mut self.bytes, pos.y);
+        self.bytes.extend_from_slice(b"\r\n30\r\n0.000000\r\n40\r\n");
+        push_format_number(&mut self.bytes, height);
+        self.bytes.extend_from_slice(b"\r\n1\r\n");
+        self.bytes.extend_from_slice(&dxf_bytes(value, MAX_VALUE));
+        self.bytes.extend_from_slice(b"\r\n72\r\n1\r\n11\r\n");
+        push_format_number(&mut self.bytes, pos.x);
+        self.bytes.extend_from_slice(b"\r\n21\r\n");
+        push_format_number(&mut self.bytes, pos.y);
         self.bytes.extend_from_slice(b"\r\n31\r\n0.000000\r\n");
     }
 }
@@ -251,6 +291,9 @@ fn bounds(drawing: &Drawing) -> ((f64, f64), (f64, f64)) {
             take(segment.a);
             take(segment.b);
         }
+    }
+    for space in &drawing.spaces {
+        take(space.position);
     }
     if low.0 > high.0 {
         ((0.0, 0.0), (0.0, 0.0))

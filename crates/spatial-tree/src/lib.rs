@@ -175,6 +175,13 @@ pub struct Hatching {
     pub offset: f64,
 }
 
+/// Name and optional explicit area quantity (in m²) of an `IfcSpace` for 2D plan labels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceInfo {
+    pub name: String,
+    pub quantity_area_m2: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeObjectRef {
     pub express_id: u32,
@@ -1114,6 +1121,132 @@ impl<'a> ModelData<'a> {
             })
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| type_name.to_string())
+    }
+
+    /// Square metres per unit for an `AREAUNIT` entity (`IfcSIUnit` squares the SI prefix).
+    fn area_unit_scale(&self, id: u32, depth: usize) -> Option<f64> {
+        if depth >= 8 {
+            return None;
+        }
+        let (entity, def) = self.lookup(id)?;
+        if def.is_a("IfcSIUnit") {
+            let linear = match text(attribute(&entity, &def, "Prefix")).as_deref() {
+                Some("EXA") => 1e18,
+                Some("PETA") => 1e15,
+                Some("TERA") => 1e12,
+                Some("GIGA") => 1e9,
+                Some("MEGA") => 1e6,
+                Some("KILO") => 1e3,
+                Some("HECTO") => 1e2,
+                Some("DECA") => 1e1,
+                Some("DECI") => 1e-1,
+                Some("CENTI") => 1e-2,
+                Some("MILLI") => 1e-3,
+                Some("MICRO") => 1e-6,
+                Some("NANO") => 1e-9,
+                _ => 1.0,
+            };
+            return Some(linear * linear);
+        }
+        if def.is_a("IfcConversionBasedUnit") {
+            let measure_id = reference(attribute(&entity, &def, "ConversionFactor"))?;
+            let (measure, measure_def) = self.lookup(measure_id)?;
+            let value = number(attribute(&measure, &measure_def, "ValueComponent"))?;
+            let base_id = reference(attribute(&measure, &measure_def, "UnitComponent"))?;
+            let base = self.area_unit_scale(base_id, depth + 1)?;
+            let scale = value * base;
+            return (scale.is_finite() && scale > 0.0).then_some(scale);
+        }
+        None
+    }
+
+    /// Square metres per project `AREAUNIT` (defaults to 1.0 m² when undeclared).
+    fn project_area_scale(&self) -> f64 {
+        let Some(project_id) = self.file.ids_by_type("IFCPROJECT").next() else {
+            return 1.0;
+        };
+        let Some((project, def)) = self.lookup(project_id) else {
+            return 1.0;
+        };
+        let Some((assignment, assignment_def)) =
+            reference(attribute(&project, &def, "UnitsInContext")).and_then(|id| self.lookup(id))
+        else {
+            return 1.0;
+        };
+        for unit in refs(attribute(&assignment, &assignment_def, "Units")) {
+            let Some((entity, unit_def)) = self.lookup(unit) else { continue };
+            if text(attribute(&entity, &unit_def, "UnitType")).as_deref() == Some("AREAUNIT")
+                && let Some(scale) = self.area_unit_scale(unit, 0)
+            {
+                return scale;
+            }
+        }
+        1.0
+    }
+
+    /// Name and optional explicit `IfcQuantityArea` (converted to m²) of an `IfcSpace`.
+    pub fn space_info(&self, id: u32) -> SpaceInfo {
+        let name = self
+            .lookup(id)
+            .map(|(entity, def)| {
+                let short = text(attribute(&entity, &def, "Name"))
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+                let long = text(attribute(&entity, &def, "LongName"))
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+                match (short, long) {
+                    (Some(s), Some(l)) if !s.eq_ignore_ascii_case(&l) => format!("{s} {l}"),
+                    (Some(s), _) => s,
+                    (None, Some(l)) => l,
+                    (None, None) => format!("IfcSpace #{id}"),
+                }
+            })
+            .unwrap_or_else(|| format!("IfcSpace #{id}"));
+
+        let project_area = self.project_area_scale();
+        let (own_sets, type_sets) = self.property_set_ids(id);
+        let mut best: Option<(u8, f64)> = None;
+        for set_id in own_sets.into_iter().chain(type_sets) {
+            let Some((set_entity, set_def)) = self.lookup(set_id) else { continue };
+            if !set_def.is_a("IfcElementQuantity") {
+                continue;
+            }
+            for q_id in refs(attribute(&set_entity, &set_def, "Quantities")) {
+                let Some((q_entity, q_def)) = self.lookup(q_id) else { continue };
+                if !q_def.is_a("IfcQuantityArea") {
+                    continue;
+                }
+                let Some(raw) = number(attribute(&q_entity, &q_def, "AreaValue")) else {
+                    continue;
+                };
+                if !raw.is_finite() || raw <= 0.0 {
+                    continue;
+                }
+                let scale = reference(attribute(&q_entity, &q_def, "Unit"))
+                    .and_then(|unit_id| self.area_unit_scale(unit_id, 0))
+                    .unwrap_or(project_area);
+                let area_m2 = raw * scale;
+                if !area_m2.is_finite() || area_m2 <= 0.0 {
+                    continue;
+                }
+                let q_name = text(attribute(&q_entity, &q_def, "Name")).unwrap_or_default();
+                let rank = if q_name.eq_ignore_ascii_case("NetFloorArea") {
+                    0
+                } else if q_name.eq_ignore_ascii_case("GrossFloorArea") {
+                    1
+                } else if q_name.to_ascii_lowercase().contains("area") {
+                    2
+                } else {
+                    3
+                };
+                if best.is_none_or(|(best_rank, _)| rank < best_rank) {
+                    best = Some((rank, area_m2));
+                }
+            }
+        }
+
+        SpaceInfo { name, quantity_area_m2: best.map(|(_, area)| area) }
     }
 
     /// The hatch rows of the element's material, as the layer finds it: the element's assignment

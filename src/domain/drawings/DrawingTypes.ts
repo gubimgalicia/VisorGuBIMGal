@@ -27,6 +27,8 @@ export interface DrawingOptions {
   includeProjection: boolean;     // Visible and hidden lines, which come from one pass
   includeHiddenLines: boolean;    // Requires includeProjection
   includeHatching: boolean;
+  /** Plan cuts only: write each cut IfcSpace's name and area (m²) inside its outline. */
+  includeSpaceLabels?: boolean;
 }
 
 export interface DrawingExportConfig {

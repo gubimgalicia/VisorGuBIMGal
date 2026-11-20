@@ -104,6 +104,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
   const [bottomStr, setBottomStr] = useState<string>('');
   const [includeHidden, setIncludeHidden] = useState<boolean>(true);
   const [includeHatching, setIncludeHatching] = useState<boolean>(true);
+  const [includeSpaceLabels, setIncludeSpaceLabels] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [previewSvg, setPreviewSvg] = useState<string | null>(null);
@@ -246,7 +247,8 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
         frame: { kind: 'project' },
         includeProjection: true,
         includeHiddenLines: includeHidden,
-        includeHatching
+        includeHatching,
+        ...(cutPreset === 'plan' && includeSpaceLabels ? { includeSpaceLabels: true } : {})
       };
 
       generated = await kernel.generateDrawing(modelIds, options, (stage, pct) => {
@@ -672,6 +674,17 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
           />
           <span>{t('sectionDxf.includeHatching')}</span>
         </label>
+        {cutPreset === 'plan' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#cbd5e1' }}>
+            <input
+              type="checkbox"
+              className="dxf-space-labels"
+              checked={includeSpaceLabels}
+              onChange={(e) => setIncludeSpaceLabels(e.target.checked)}
+            />
+            <span>{t('sectionDxf.includeSpaceLabels')}</span>
+          </label>
+        )}
       </div>
 
       <button
