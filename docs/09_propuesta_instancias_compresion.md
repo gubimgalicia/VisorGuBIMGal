@@ -274,6 +274,7 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
   - Con instancias el fotograma procesa 9,0 millones de vértices, frente a 8,2 sin ellas: solo un 9 % más.
   - Cambiar `inverse` por tres productos vectoriales no cambia el tiempo (27,3 ms), así que el cálculo del sombreador no es el cuello de botella.
   - Quedan como sospechosos los 1066 dibujos instanciados (unas 6,5 copias cada uno) y la lectura de un segundo flujo de atributos. Distinguirlos requiere un perfilador de GPU o una GPU dedicada.
+- **La misma propuesta 1 en WebGPU** (64 bytes, normales por cofactores en WGSL) no cambia el fotograma: fontanería 33,6 frente a 34,7 ms y Esplanades 19,2 frente a 17,8 ms, dentro del ruido. Allí el coste está en otro sitio, así que se descartó y WebGPU sigue con 96 bytes.
 - **Mandos en el código** (`crates/wasm-api/src/batches.rs`): `MIN_INSTANCE_TRIANGLES` (0) y `MIN_BATCH_INSTANCES` (1). Con esos valores la salida es idéntica byte a byte a la de la revisión 4 (`check-identical`, ahora también con formas e instancias).
 - Decide Nick, tras la revisión de Gemini.
 
