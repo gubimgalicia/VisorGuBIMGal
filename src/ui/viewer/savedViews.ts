@@ -2,6 +2,7 @@ import type { CameraPose, CameraProjection } from '../../domain/kernel/RendererP
 import type { ElementRef, ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import { withoutModel, type DisplayRule, type DisplayTarget } from './displayRule';
 import type { SectionState } from './section';
+import { t } from '../i18n';
 
 export interface SavedView {
   id: string;
@@ -110,7 +111,7 @@ export function captureSavedView(input: CaptureSavedViewInput): SavedView {
   const trimmed = input.name.trim();
   return {
     id: input.id,
-    name: trimmed.length > 0 ? trimmed : `Vista ${input.index}`,
+    name: trimmed.length > 0 ? trimmed : t('savedViews.defaultName', { index: input.index }),
     camera: cloneCamera(input.camera),
     hiddenModelIds: input.models.filter((m) => !m.visible).map((m) => m.id),
     displayRule: cloneDisplayRule(input.displayRule),

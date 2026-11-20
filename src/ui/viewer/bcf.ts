@@ -1,5 +1,6 @@
 import { readZip, writeZip, type ZipEntry } from './zipArchive';
 import { child, children, childText, leaf, parseXml, writeXml, type XmlNode, type XmlOut } from './xmlTree';
+import { t } from '../i18n';
 
 /**
  * BCF issues (buildingSMART BCF-XML): a project's topics with their comments and viewpoints, read
@@ -271,16 +272,18 @@ export async function readBcf(bytes: Uint8Array): Promise<BcfProject> {
     try {
       return xmlOf(found);
     } catch (error) {
-      throw new BcfError(`${what} (${name}) no es XML válido: ${(error as Error).message}`);
+      throw new BcfError(t('bcf.invalidXml', { what, name, message: (error as Error).message }));
     }
   };
 
-  const versionNode = xml('bcf.version', 'La versión');
+  const versionNode = xml('bcf.version', t('bcf.xmlVersionLabel'));
   const version = versionNode?.attrs.VersionId?.trim();
-  if (!version) throw new BcfError('No es un archivo BCF: falta bcf.version.');
-  if (version !== '3.0' && version !== '2.1') throw new BcfError(`Versión de BCF no admitida: ${version}. Se leen 2.1 y 3.0.`);
+  if (!version) throw new BcfError(t('bcf.missingVersion'));
+  if (version !== '3.0' && version !== '2.1') {
+    throw new BcfError(t('bcf.unsupportedVersion', { version }));
+  }
 
-  const extensionsNode = xml('extensions.xml', 'Las extensiones');
+  const extensionsNode = xml('extensions.xml', t('bcf.xmlExtensionsLabel'));
   const extensions: BcfExtensions = {
     topicTypes: list(extensionsNode, 'TopicTypes', 'TopicType'),
     topicStatuses: list(extensionsNode, 'TopicStatuses', 'TopicStatus'),
@@ -291,7 +294,7 @@ export async function readBcf(bytes: Uint8Array): Promise<BcfProject> {
     stages: list(extensionsNode, 'Stages', 'Stage')
   };
 
-  const projectNode = child(xml('project.bcfp', 'El proyecto'), 'Project');
+  const projectNode = child(xml('project.bcfp', t('bcf.xmlProjectLabel')), 'Project');
   const project = projectNode?.attrs.ProjectId
     ? { projectId: projectNode.attrs.ProjectId, name: childText(projectNode, 'Name') }
     : undefined;
@@ -301,9 +304,9 @@ export async function readBcf(bytes: Uint8Array): Promise<BcfProject> {
     .filter((name) => /^[^/]+\/markup\.bcf$/i.test(name))
     .map((name) => name.slice(0, name.indexOf('/')));
   for (const folder of folders) {
-    const markup = xml(`${folder}/markup.bcf`, 'Un tema');
+    const markup = xml(`${folder}/markup.bcf`, t('bcf.xmlTopicLabel'));
     const topic = child(markup, 'Topic');
-    if (!markup || !topic) throw new BcfError(`El tema ${folder} no tiene Topic.`);
+    if (!markup || !topic) throw new BcfError(t('bcf.missingTopicElement', { folder }));
     const guid = (topic.attrs.Guid ?? folder).toLowerCase();
 
     // 3.0 keeps comments and viewpoints in the topic; 2.1 beside it.
@@ -316,7 +319,7 @@ export async function readBcf(bytes: Uint8Array): Promise<BcfProject> {
     for (const entry of viewpointNodes) {
       const viewpointGuid = (entry.attrs.Guid ?? '').toLowerCase();
       const file = childText(entry, 'Viewpoint');
-      const info = file ? xml(`${folder}/${file}`, 'Un punto de vista') : undefined;
+      const info = file ? xml(`${folder}/${file}`, t('bcf.xmlViewpointLabel')) : undefined;
       if (!viewpointGuid || !info) continue;
       const snapshotName = childText(entry, 'Snapshot');
       const snapshotBytes = snapshotName ? take(`${folder}/${snapshotName}`) : undefined;

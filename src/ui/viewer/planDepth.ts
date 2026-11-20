@@ -1,4 +1,5 @@
 import type { SpatialNode, SpatialTree } from '../../domain/kernel/KernelPort';
+import { t } from '../i18n';
 
 /** Depth used when no storey lies under the cut. Metres. */
 export const FALLBACK_PLAN_DEPTH = 3;
@@ -44,12 +45,14 @@ export interface PlanRange {
 
 /** A plan's view range from its top (the cut) and its bottom. */
 export function planRange(top: number, bottom: PlanBottom, trees: ReadonlyArray<SpatialTree | null | undefined>): PlanRange {
-  if (!Number.isFinite(top)) return { bottom: null, storey: null, error: 'La cota del corte no es un número.' };
+  if (!Number.isFinite(top)) return { bottom: null, storey: null, error: t('sectionDxf.planDepthErrorTopNaN') };
   if (bottom.kind === 'none') return { bottom: null, storey: null, error: null };
   if (bottom.kind === 'height') {
-    if (!Number.isFinite(bottom.height)) return { bottom: null, storey: null, error: 'La cota del fondo no es un número.' };
+    if (!Number.isFinite(bottom.height)) {
+      return { bottom: null, storey: null, error: t('sectionDxf.planDepthErrorBottomNaN') };
+    }
     if (bottom.height >= top) {
-      return { bottom: bottom.height, storey: null, error: 'El fondo tiene que quedar por debajo del corte.' };
+      return { bottom: bottom.height, storey: null, error: t('sectionDxf.planDepthErrorBottomAboveTop') };
     }
     return { depth: top - bottom.height, bottom: bottom.height, storey: null, error: null };
   }

@@ -1,13 +1,16 @@
 import type { ElementQuery, KernelPort, SpatialNode, SpatialTree } from '../../domain/kernel/KernelPort';
 import type { ModelId } from '../../domain/models/ModelRecord';
+import { t } from '../i18n';
 
-export const SEARCH_FIELDS: ReadonlyArray<{ field: ElementQuery['field']; label: string }> = [
-  { field: 'any', label: 'Todo' },
-  { field: 'name', label: 'Nombre' },
-  { field: 'class', label: 'Clase IFC' },
-  { field: 'globalId', label: 'GlobalId' },
-  { field: 'property', label: 'Valor de propiedad' }
-];
+export function getSearchFields(): ReadonlyArray<{ field: ElementQuery['field']; label: string }> {
+  return [
+    { field: 'any', label: t('search.fields.any') },
+    { field: 'name', label: t('search.fields.name') },
+    { field: 'class', label: t('search.fields.class') },
+    { field: 'globalId', label: t('search.fields.globalId') },
+    { field: 'property', label: t('search.fields.property') }
+  ];
+}
 
 export interface ElementLabel {
   type: string;
@@ -31,10 +34,10 @@ export function elementLabels(tree: SpatialTree | undefined): Map<number, Elemen
 
 /** The query as the display bar names it. */
 export function describeQuery(query: ElementQuery): string {
-  const field = SEARCH_FIELDS.find((item) => item.field === query.field)?.label ?? query.field;
+  const field = getSearchFields().find((item) => item.field === query.field)?.label ?? query.field;
   const name = query.field === 'property' ? query.propertyName?.trim() : undefined;
   const text = query.text.trim();
-  return `Búsqueda ${field}: «${name ? `${name} = ` : ''}${text || '*'}»`;
+  return t('search.describeQuery', { field, query: `${name ? `${name} = ` : ''}${text || '*'}` });
 }
 
 /** Whether the query can find anything at all, by the rules of ElementQuery. */

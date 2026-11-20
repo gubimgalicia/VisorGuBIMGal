@@ -1,13 +1,16 @@
 import { angleAt, distanceBetween, polygonArea, type Vec3 } from '../../domain/measure/geometry';
+import { formatFixed, formatLength, t } from '../i18n';
 
 export type MeasureKind = 'distance' | 'height' | 'area' | 'angle';
 
-export const MEASURE_KINDS: readonly { kind: MeasureKind; label: string; hint: string }[] = [
-  { kind: 'distance', label: 'Distancia', hint: 'Marca dos puntos.' },
-  { kind: 'height', label: 'Desnivel', hint: 'Marca dos puntos: el segundo se compara con el primero.' },
-  { kind: 'area', label: 'Área', hint: 'Marca el contorno y ciérralo en el primer punto o con Intro.' },
-  { kind: 'angle', label: 'Ángulo', hint: 'Marca un punto, el vértice y otro punto.' }
-];
+export function getMeasureKinds(): readonly { kind: MeasureKind; label: string; hint: string }[] {
+  return [
+    { kind: 'distance', label: t('measure.kinds.distanceLabel'), hint: t('measure.kinds.distanceHint') },
+    { kind: 'height', label: t('measure.kinds.heightLabel'), hint: t('measure.kinds.heightHint') },
+    { kind: 'area', label: t('measure.kinds.areaLabel'), hint: t('measure.kinds.areaHint') },
+    { kind: 'angle', label: t('measure.kinds.angleLabel'), hint: t('measure.kinds.angleHint') }
+  ];
+}
 
 /** Points in absolute model coordinates, in the order they were marked. */
 export interface Measurement {
@@ -40,8 +43,8 @@ export function closeArea(draft: Measurement): Measurement | null {
   return canClose(draft) ? { ...draft, points: [...draft.points] } : null;
 }
 
-const metres = (value: number) => `${value.toFixed(3)} m`;
-const signed = (value: number) => `${value >= 0 ? '+' : '-'}${metres(Math.abs(value))}`;
+const metres = (value: number) => formatLength(value, 3);
+const signed = (value: number) => formatLength(value, 3, { signed: true });
 
 /** What the measurement reads, and the figures behind it. Empty while points are missing. */
 export function measurementText(measurement: Measurement): { value: string; detail: string } {
@@ -52,23 +55,40 @@ export function measurementText(measurement: Measurement): { value: string; deta
       const d = distanceBetween(a, b);
       return {
         value: metres(d.length),
-        detail: `ΔX ${signed(d.dx)} · ΔY ${signed(d.dy)} · ΔZ ${signed(d.dz)} · horizontal ${metres(d.horizontal)}`
+        detail: t('measure.detailDistance', {
+          dx: signed(d.dx),
+          dy: signed(d.dy),
+          dz: signed(d.dz),
+          horizontal: metres(d.horizontal)
+        })
       };
     }
     case 'height': {
       if (!b) return { value: '', detail: '' };
       const d = distanceBetween(a, b);
-      return { value: signed(d.dz), detail: `horizontal ${metres(d.horizontal)} · directa ${metres(d.length)}` };
+      return {
+        value: signed(d.dz),
+        detail: t('measure.detailHeight', {
+          horizontal: metres(d.horizontal),
+          length: metres(d.length)
+        })
+      };
     }
     case 'area': {
       const area = polygonArea(measurement.points);
       if (!area) return { value: '', detail: '' };
-      return { value: `${area.area.toFixed(3)} m²`, detail: `perímetro ${metres(area.perimeter)}` };
+      return {
+        value: t('measure.squareMetresValue', { value: formatFixed(area.area, 3) }),
+        detail: t('measure.detailArea', { perimeter: metres(area.perimeter) })
+      };
     }
     case 'angle': {
       const angle = c ? angleAt(a, b, c) : null;
       if (angle === null) return { value: '', detail: '' };
-      return { value: `${angle.toFixed(1)}°`, detail: `suplementario ${(180 - angle).toFixed(1)}°` };
+      return {
+        value: t('measure.degreesValue', { value: formatFixed(angle, 1) }),
+        detail: t('measure.detailAngle', { supplementary: formatFixed(180 - angle, 1) })
+      };
     }
   }
 }

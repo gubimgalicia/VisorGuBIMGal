@@ -4,12 +4,13 @@ import type { ElementQuery, KernelPort, SpatialTree } from '../../domain/kernel/
 import type { ElementRef, ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import type { DisplayTarget } from '../viewer/displayRule';
 import {
-  SEARCH_FIELDS,
+  getSearchFields,
   describeQuery,
   elementLabels,
   isSearchable,
   searchModels
 } from '../viewer/search';
+import { t } from '../i18n';
 
 interface SearchPanelProps {
   models: ModelRecord[];
@@ -97,12 +98,13 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const total = results ? Object.values(results.matches).reduce((sum, ids) => sum + ids.length, 0) : 0;
   const target: DisplayTarget | null =
     results && total > 0 ? { by: 'search', label: describeQuery(results.query), matches: results.matches } : null;
+  const searchFields = getSearchFields();
   const fileName = (modelId: ModelId) => models.find((model) => model.id === modelId)?.fileName ?? modelId;
 
   if (models.length === 0) {
     return (
       <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-        No hay modelos en los que buscar.
+        {t('search.emptyModels')}
       </div>
     );
   }
@@ -120,9 +122,9 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
           className="select search-field"
           value={field}
           onChange={(event) => setField(event.target.value as ElementQuery['field'])}
-          title="Dónde buscar"
+          title={t('search.fieldTitle')}
         >
-          {SEARCH_FIELDS.map((item) => (
+          {searchFields.map((item) => (
             <option key={item.field} value={item.field}>
               {item.label}
             </option>
@@ -133,8 +135,8 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             className="input search-property-name"
             value={propertyName}
             onChange={(event) => setPropertyName(event.target.value)}
-            placeholder="Nombre de la propiedad (opcional)"
-            title="Solo las propiedades con este nombre"
+            placeholder={t('search.propertyPlaceholder')}
+            title={t('search.propertyTitle')}
           />
         )}
         <div className="search-row">
@@ -142,35 +144,37 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             className="input search-text"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder={field === 'globalId' ? 'Parte del GlobalId (distingue mayúsculas)' : 'Texto a buscar'}
-            title="Texto a buscar"
+            placeholder={
+              field === 'globalId' ? t('search.globalIdPlaceholder') : t('search.textPlaceholder')
+            }
+            title={t('search.textPlaceholder')}
           />
           <button
             type="submit"
             className="btn btn-primary btn-icon search-submit"
             disabled={!isSearchable(draft) || busy}
-            title="Buscar"
+            title={t('search.submitTitle')}
           >
             <Search size={14} />
           </button>
         </div>
       </form>
 
-      {busy && <div className="search-busy">Buscando…</div>}
+      {busy && <div className="search-busy">{t('search.busy')}</div>}
       {error && <div className="search-error">{error}</div>}
 
       {results && (
         <>
           <div className="search-summary">
             <span className="search-count">
-              {total} {total === 1 ? 'resultado' : 'resultados'}
+              {t('search.resultCount', { count: total })}
             </span>
             <button
               type="button"
               className="btn btn-ghost btn-icon search-isolate"
               disabled={!target}
               onClick={() => target && onIsolate(target)}
-              title="Aislar los resultados"
+              title={t('search.isolateResultsTitle')}
             >
               <Focus size={14} />
             </button>
@@ -179,14 +183,14 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
               className="btn btn-ghost btn-icon search-hide"
               disabled={!target}
               onClick={() => target && onHide(target)}
-              title="Ocultar los resultados"
+              title={t('search.hideResultsTitle')}
             >
               <EyeOff size={14} />
             </button>
           </div>
           {results.failed.length > 0 && (
             <div className="search-error">
-              No se pudo buscar en: {results.failed.map(fileName).join(', ')}
+              {t('search.failedModels', { models: results.failed.map(fileName).join(', ') })}
             </div>
           )}
           <div className="search-results">
@@ -209,7 +213,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
               );
             })}
             {total > rows.length && (
-              <div className="search-more">… y {total - rows.length} más; aislar los incluye todos</div>
+              <div className="search-more">{t('search.moreResults', { count: total - rows.length })}</div>
             )}
           </div>
         </>

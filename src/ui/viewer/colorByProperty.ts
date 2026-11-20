@@ -5,6 +5,7 @@ import type {
   ModelId,
   PropertySetItem
 } from '../../domain/models/ModelRecord';
+import { getIntlLocale, t } from '../i18n';
 
 export type ColorByMode = 'none' | 'class' | 'storey' | 'material' | 'property';
 
@@ -47,7 +48,14 @@ export const CATEGORY_PALETTE: readonly string[] = [
 
 export const FALLBACK_HEX = '#64748b';
 
-const FALLBACK_LABELS = new Set(['Sin valor', 'Sin material', 'Sin planta', 'Sin clase']);
+function getFallbackLabels(): Set<string> {
+  return new Set([
+    t('colorBy.noValue'),
+    t('colorBy.noMaterial'),
+    t('colorBy.noStorey'),
+    t('colorBy.noClass')
+  ]);
+}
 
 /**
  * Converts a `#rrggbb` hex string into a packed `u32` `(r << 24) | (g << 16) | (b << 8) | 0xff`.
@@ -70,7 +78,7 @@ function unwrapAttr(val: AttributeValue | undefined): string | number | boolean 
 }
 
 function extractPrimaryMaterial(materials: readonly MaterialInfo[] | undefined): string {
-  if (!materials || materials.length === 0) return 'Sin material';
+  if (!materials || materials.length === 0) return t('colorBy.noMaterial');
   for (const mat of materials) {
     if (mat.name?.trim()) return mat.name.trim();
     for (const layer of mat.layers ?? []) {
@@ -85,12 +93,12 @@ function extractPrimaryMaterial(materials: readonly MaterialInfo[] | undefined):
       if (c.name?.trim()) return c.name.trim();
     }
   }
-  return 'Sin material';
+  return t('colorBy.noMaterial');
 }
 
 function extractNamedProperty(element: ColorableElement, propertyName: string): string {
   const target = propertyName.trim().toLowerCase();
-  if (!target) return 'Sin valor';
+  if (!target) return t('colorBy.noValue');
   const details = element.details;
 
   const allSets: PropertySetItem[] = [
@@ -120,13 +128,13 @@ function extractNamedProperty(element: ColorableElement, propertyName: string): 
 
   if (target === 'name') {
     const n = details?.name || element.name;
-    return n?.trim() ? n.trim() : 'Sin valor';
+    return n?.trim() ? n.trim() : t('colorBy.noValue');
   }
   if (target === 'globalid') {
-    return details?.globalId?.trim() || 'Sin valor';
+    return details?.globalId?.trim() || t('colorBy.noValue');
   }
 
-  return 'Sin valor';
+  return t('colorBy.noValue');
 }
 
 /**
@@ -141,9 +149,9 @@ export function extractElementCategory(
     case 'none':
       return '';
     case 'class':
-      return (element.details?.type || element.ifcClass || '').trim() || 'Sin clase';
+      return (element.details?.type || element.ifcClass || '').trim() || t('colorBy.noClass');
     case 'storey':
-      return (element.storey || '').trim() || 'Sin planta';
+      return (element.storey || '').trim() || t('colorBy.noStorey');
     case 'material':
       return extractPrimaryMaterial(element.details?.materials);
     case 'property':
@@ -172,17 +180,19 @@ export function buildColorScheme(
     elementCategories.push({ modelId: el.modelId, expressId: el.expressId, label });
   }
 
+  const fallbackLabels = getFallbackLabels();
+  const intlLocale = getIntlLocale();
   const sortedLabels = Array.from(counts.keys()).sort((a, b) => {
-    const aFallback = FALLBACK_LABELS.has(a);
-    const bFallback = FALLBACK_LABELS.has(b);
+    const aFallback = fallbackLabels.has(a);
+    const bFallback = fallbackLabels.has(b);
     if (aFallback !== bFallback) return aFallback ? 1 : -1;
-    return a.localeCompare(b, 'es');
+    return a.localeCompare(b, intlLocale);
   });
 
   const labelToColor = new Map<string, { hex: string; rgba: number }>();
   let paletteIdx = 0;
   for (const label of sortedLabels) {
-    const hex = FALLBACK_LABELS.has(label)
+    const hex = fallbackLabels.has(label)
       ? FALLBACK_HEX
       : CATEGORY_PALETTE[paletteIdx++ % CATEGORY_PALETTE.length];
     labelToColor.set(label, { hex, rgba: hexToRgbaU32(hex) });
@@ -229,5 +239,6 @@ export function collectAvailablePropertyNames(elements: readonly ColorableElemen
       if (k.trim()) names.add(k.trim());
     }
   }
-  return Array.from(names).sort((a, b) => a.localeCompare(b, 'es'));
+  const intlLocale = getIntlLocale();
+  return Array.from(names).sort((a, b) => a.localeCompare(b, intlLocale));
 }
