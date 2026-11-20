@@ -1,3 +1,4 @@
+import { EDGE_ALPHA, EDGE_TANGENT, EDGE_WGSL } from './edges';
 import type { ElementRef, ModelBounds, ModelId } from '../../domain/models/ModelRecord';
 import {
   MESH_RECORD_WORDS,
@@ -174,6 +175,11 @@ export class WebGpuRenderer implements RendererPort {
 
   private depthTexture: GPUTexture | null = null;
   private depthTextureView: GPUTextureView | null = null;
+  /** C17: the edge pass, its parameters, and its bind group for the current depth view. */
+  private edges = false;
+  private edgePipeline: GPURenderPipeline | null = null;
+  private edgeParams: GPUBuffer | null = null;
+  private edgeBindGroup: { view: GPUTextureView; group: GPUBindGroup } | null = null;
   private idTexture: GPUTexture | null = null;
   private idTextureView: GPUTextureView | null = null;
 
@@ -322,6 +328,33 @@ export class WebGpuRenderer implements RendererPort {
   }
 
   private createPipelinesAndBuffers(device: GPUDevice): void {
+    const edgeModule = device.createShaderModule({ label: 'gubim-edge-shader', code: EDGE_WGSL });
+    this.edgePipeline = device.createRenderPipeline({
+      label: 'gubim-edge-pipeline',
+      layout: 'auto',
+      vertex: { module: edgeModule, entryPoint: 'vs_edge' },
+      fragment: {
+        module: edgeModule,
+        entryPoint: 'fs_edge',
+        targets: [
+          {
+            format: this.canvasFormat,
+            blend: {
+              color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+              alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' }
+            }
+          }
+        ]
+      },
+      primitive: { topology: 'triangle-list' }
+    });
+    this.edgeParams = device.createBuffer({
+      label: 'gubim-edge-params',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    this.edgeBindGroup = null;
+
     const shaderModule = device.createShaderModule({
       label: 'gubim-renderer-shader',
       code: RENDERER_WGSL
@@ -589,7 +622,7 @@ export class WebGpuRenderer implements RendererPort {
       label: 'gubim-depth-texture',
       size: { width, height, depthOrArrayLayers: 1 },
       format: 'depth32float',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
     this.depthTextureView = this.depthTexture.createView();
 
@@ -1316,6 +1349,40 @@ export class WebGpuRenderer implements RendererPort {
     this.requestRender();
   }
 
+  setEdges(on: boolean): void {
+    if (this.edges === on) return;
+    this.edges = on;
+    this.requestRender();
+  }
+
+  /** C17: darkens the creases and outlines of the opaque geometry drawn so far (edges.ts). */
+  private drawEdges(encoder: GPUCommandEncoder, colorView: GPUTextureView, depthView: GPUTextureView): void {
+    if (!this.device || !this.edgePipeline || !this.edgeParams || !this.canvas) return;
+    const { scale, relative } = this.camera.edgeDepthScale(this.canvas.height);
+    this.device.queue.writeBuffer(this.edgeParams, 0, new Float32Array([EDGE_TANGENT * scale, relative ? 1 : 0, EDGE_ALPHA, 0]));
+    if (this.edgeBindGroup?.view !== depthView) {
+      this.edgeBindGroup = {
+        view: depthView,
+        group: this.device.createBindGroup({
+          label: 'gubim-edge-bind-group',
+          layout: this.edgePipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: depthView },
+            { binding: 1, resource: { buffer: this.edgeParams } }
+          ]
+        })
+      };
+    }
+    const pass = encoder.beginRenderPass({
+      label: 'gubim-edge-pass',
+      colorAttachments: [{ view: colorView, loadOp: 'load', storeOp: 'store' }]
+    });
+    pass.setPipeline(this.edgePipeline);
+    pass.setBindGroup(0, this.edgeBindGroup.group);
+    pass.draw(3);
+    pass.end();
+  }
+
   getNavigationMode(): NavigationMode {
     return this.navigationMode;
   }
@@ -1503,7 +1570,7 @@ export class WebGpuRenderer implements RendererPort {
     const colorView = this.context.getCurrentTexture().createView();
     const encoder = this.device.createCommandEncoder();
 
-    const pass = encoder.beginRenderPass({
+    let pass = encoder.beginRenderPass({
       label: 'gubim-main-render-pass',
       colorAttachments: [
         {
@@ -1548,6 +1615,23 @@ export class WebGpuRenderer implements RendererPort {
         this.drawInstances(pass, model, batch, 'opaque');
         batchIdx++;
       }
+    }
+
+    // C17: the edges read the opaque depth, so they need a pass of their own; then the scene
+    // goes on over what is there.
+    if (this.edges && this.edgePipeline && this.depthTextureView) {
+      pass.end();
+      this.drawEdges(encoder, colorView, this.depthTextureView);
+      pass = encoder.beginRenderPass({
+        label: 'gubim-main-render-pass-after-edges',
+        colorAttachments: [{ view: colorView, loadOp: 'load', storeOp: 'store' }],
+        depthStencilAttachment: {
+          view: this.depthTextureView,
+          depthLoadOp: 'load',
+          depthStoreOp: 'store'
+        }
+      });
+      pass.setBindGroup(0, this.sceneBindGroup);
     }
 
     // Pass 2: Transparent geometry
@@ -1961,6 +2045,10 @@ export class WebGpuRenderer implements RendererPort {
 
     this.depthTexture?.destroy();
     this.depthTexture = null;
+    this.edgeParams?.destroy();
+    this.edgeParams = null;
+    this.edgePipeline = null;
+    this.edgeBindGroup = null;
     this.depthTextureView = null;
 
     this.idTexture?.destroy();

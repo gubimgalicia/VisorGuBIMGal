@@ -51,6 +51,8 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   const [cameraPose, setCameraPose] = useState<CameraPose | null>(() => renderer.getCameraPose());
   const [projection, setProjection] = useState<CameraProjection>(() => renderer.getProjection());
   const [navMode, setNavMode] = useState<NavigationMode>(() => renderer.getNavigationMode());
+  // C17: edges and outlines over the opaque geometry, off until asked for.
+  const [edges, setEdges] = useState(false);
 
   const handleFrame = useCallback(() => {
     const pose = renderer.getCameraPose();
@@ -97,6 +99,11 @@ export const BimViewer: React.FC<BimViewerProps> = ({
     const next: CameraProjection = projection === 'perspective' ? 'orthographic' : 'perspective';
     renderer.setProjection(next);
     setProjection(next);
+  };
+
+  const handleToggleEdges = () => {
+    renderer.setEdges(!edges);
+    setEdges(!edges);
   };
 
   const handleToggleNavMode = () => {
@@ -181,6 +188,15 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
         >
           {projection === 'orthographic' ? 'Orto' : 'Persp'}
+        </button>
+        <button
+          className={`btn btn-ghost nav-edges-btn ${edges ? 'active' : ''}`}
+          aria-pressed={edges}
+          onClick={handleToggleEdges}
+          title="Aristas y contornos sobre la geometría"
+          style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
+        >
+          Aristas
         </button>
         <button
           className={`btn btn-ghost nav-fp-btn ${navMode === 'first-person' ? 'active' : ''}`}

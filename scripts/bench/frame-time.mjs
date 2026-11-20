@@ -7,7 +7,7 @@
 // Prints the median and quartiles. To compare formats, run it with each kernel package in
 // src/infrastructure/kernel/pkg.
 //
-//   node scripts/bench/frame-time.mjs <gpu|gl2> <file.ifc> [--frames 60] [--port 5180] [--out <dir>]
+//   node scripts/bench/frame-time.mjs <gpu|gl2> <file.ifc> [--frames 60] [--port 5180] [--out <dir>] [--edges]
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import os from 'node:os';
@@ -21,6 +21,7 @@ const [mode, file] = args;
 const FRAMES = Number(opt('--frames', 60));
 const PORT = Number(opt('--port', 5180));
 const OUT = opt('--out', path.join(os.tmpdir(), 'gubim-frame-time'));
+const EDGES = args.includes('--edges');
 if (!['gpu', 'gl2'].includes(mode) || !file) {
   console.error('usage: frame-time.mjs <gpu|gl2> <file.ifc> [--frames 60]');
   process.exit(2);
@@ -72,6 +73,7 @@ try {
     const R = window.__gubim_dev__.activeRenderer;
     R.fitToView();
     R.setViewPreset('iso');
+    R.setEdges(${EDGES});
     const stats = R.getDebugStats();
     const formats = {};
     for (const m of R.models.values()) for (const b of m.batches) formats[b.vertexFormat] = (formats[b.vertexFormat] ?? 0) + 1;

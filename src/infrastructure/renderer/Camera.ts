@@ -229,6 +229,19 @@ export class Camera {
     return this.projection;
   }
 
+  /**
+   * C17: how much depth a pixel's step changes per unit of tangent slope, for the edge pass
+   * (edges.ts). Perspective: relative to the depth, the angle one pixel row spans. Orthographic:
+   * the metres one pixel row spans, over the depth range.
+   */
+  edgeDepthScale(heightPx: number): { scale: number; relative: boolean } {
+    const rows = Math.max(1, heightPx);
+    if (this.projection === 'orthographic') {
+      return { scale: (2 * this.orthoHalfExtents().halfH) / rows / (this.far() - this.near()), relative: false };
+    }
+    return { scale: (2 * Math.tan(this.fovY * 0.5)) / rows, relative: true };
+  }
+
   setProjection(projection: CameraProjection): void {
     if (projection === 'perspective' || projection === 'orthographic') {
       this.projection = projection;

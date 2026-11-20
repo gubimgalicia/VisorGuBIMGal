@@ -108,6 +108,9 @@ export interface RendererPort {
   setCameraPose(pose: CameraPose): void;
   getProjection(): CameraProjection;
   setProjection(projection: CameraProjection): void;
+
+  /** C17: draws the edges and outlines of the opaque geometry over it. Off by default. */
+  setEdges(on: boolean): void;
   getNavigationMode(): NavigationMode;
   setNavigationMode(mode: NavigationMode): void;
   getDebugStats(): RendererDebugStats;

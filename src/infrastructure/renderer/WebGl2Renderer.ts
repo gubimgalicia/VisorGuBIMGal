@@ -1,3 +1,4 @@
+import { EDGE_ALPHA, EDGE_FRAGMENT_GLSL, EDGE_TANGENT, EDGE_VERTEX_GLSL } from './edges';
 import type { ElementRef, ModelBounds, ModelId } from '../../domain/models/ModelRecord';
 import {
   MESH_RECORD_WORDS,
@@ -497,7 +498,15 @@ export class WebGl2Renderer implements RendererPort {
   /** The scene draws here for its float depth buffer, then is copied to the canvas. */
   private sceneFramebuffer: WebGLFramebuffer | null = null;
   private sceneColorRenderbuffer: WebGLRenderbuffer | null = null;
-  private sceneDepthRenderbuffer: WebGLRenderbuffer | null = null;
+  /** The scene's depth, a texture so the edge pass (C17) can read it. */
+  private sceneDepthTexture: WebGLTexture | null = null;
+  /** The scene's colour without its depth: the edge pass draws here while reading the depth. */
+  private edgeFramebuffer: WebGLFramebuffer | null = null;
+  private edgeProgram: WebGLProgram | null = null;
+  /** No attributes: the edge triangle comes from gl_VertexID. */
+  private edgeVao: WebGLVertexArrayObject | null = null;
+  private edgeUniforms: { depth: WebGLUniformLocation | null; limit: WebGLUniformLocation | null; relative: WebGLUniformLocation | null; alpha: WebGLUniformLocation | null } | null = null;
+  private edges = false;
   /** Size the framebuffers above were allocated at; a new context starts with none. */
   private framebufferSize: [number, number] = [0, 0];
   /** Kept for checks through the dev hook. */
@@ -707,7 +716,16 @@ export class WebGl2Renderer implements RendererPort {
     this.pickDepthRenderbuffer = gl.createRenderbuffer();
     this.sceneFramebuffer = gl.createFramebuffer();
     this.sceneColorRenderbuffer = gl.createRenderbuffer();
-    this.sceneDepthRenderbuffer = gl.createRenderbuffer();
+    this.sceneDepthTexture = gl.createTexture();
+    this.edgeFramebuffer = gl.createFramebuffer();
+    this.edgeVao = gl.createVertexArray();
+    this.edgeProgram = createProgram(gl, EDGE_VERTEX_GLSL, EDGE_FRAGMENT_GLSL);
+    this.edgeUniforms = {
+      depth: gl.getUniformLocation(this.edgeProgram, 'u_depth'),
+      limit: gl.getUniformLocation(this.edgeProgram, 'u_limit'),
+      relative: gl.getUniformLocation(this.edgeProgram, 'u_relative'),
+      alpha: gl.getUniformLocation(this.edgeProgram, 'u_alpha')
+    };
     this.framebufferSize = [0, 0];
 
     // Enable vertex attribute arrays once on the active context
@@ -741,11 +759,19 @@ export class WebGl2Renderer implements RendererPort {
     this.framebufferSize = [width, height];
 
     const gl = this.gl;
-    if (this.sceneFramebuffer && this.sceneColorRenderbuffer && this.sceneDepthRenderbuffer) {
+    if (this.sceneFramebuffer && this.sceneColorRenderbuffer && this.sceneDepthTexture && this.edgeFramebuffer) {
       gl.bindRenderbuffer(gl.RENDERBUFFER, this.sceneColorRenderbuffer);
       gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, width, height);
-      gl.bindRenderbuffer(gl.RENDERBUFFER, this.sceneDepthRenderbuffer);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT32F, width, height);
+      gl.bindTexture(gl.TEXTURE_2D, this.sceneDepthTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT32F, width, height, 0, gl.DEPTH_COMPONENT, gl.FLOAT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.edgeFramebuffer);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.sceneColorRenderbuffer);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFramebuffer);
       gl.framebufferRenderbuffer(
@@ -754,12 +780,7 @@ export class WebGl2Renderer implements RendererPort {
         gl.RENDERBUFFER,
         this.sceneColorRenderbuffer
       );
-      gl.framebufferRenderbuffer(
-        gl.FRAMEBUFFER,
-        gl.DEPTH_ATTACHMENT,
-        gl.RENDERBUFFER,
-        this.sceneDepthRenderbuffer
-      );
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.sceneDepthTexture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
@@ -1427,6 +1448,42 @@ export class WebGl2Renderer implements RendererPort {
     this.requestRender();
   }
 
+  setEdges(on: boolean): void {
+    if (this.edges === on) return;
+    this.edges = on;
+    this.requestRender();
+  }
+
+  /**
+   * C17: darkens the creases and outlines of the opaque geometry drawn so far (edges.ts). Reads
+   * the scene's depth while drawing into its colour alone, then puts the scene back as it was.
+   */
+  private drawEdges(gl: WebGL2RenderingContext, height: number): void {
+    if (!this.edgeProgram || !this.edgeUniforms || !this.edgeFramebuffer || !this.sceneDepthTexture) return;
+    const { scale, relative } = this.camera.edgeDepthScale(height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.edgeFramebuffer);
+    gl.disable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    gl.useProgram(this.edgeProgram);
+    this.boundProgram = this.edgeProgram;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.sceneDepthTexture);
+    gl.uniform1i(this.edgeUniforms.depth, 1);
+    gl.uniform1f(this.edgeUniforms.limit, EDGE_TANGENT * scale);
+    gl.uniform1i(this.edgeUniforms.relative, relative ? 1 : 0);
+    gl.uniform1f(this.edgeUniforms.alpha, EDGE_ALPHA);
+    gl.bindVertexArray(this.edgeVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+    // The depth texture must not stay bound while it is the scene's depth attachment.
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.disable(gl.BLEND);
+    gl.enable(gl.DEPTH_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFramebuffer);
+  }
+
   getNavigationMode(): NavigationMode {
     return this.navigationMode;
   }
@@ -1613,6 +1670,8 @@ export class WebGl2Renderer implements RendererPort {
         this.drawInstances(gl, model, batch, eye, 'opaque');
       }
     }
+
+    if (this.edges) this.drawEdges(gl, height);
 
     // Pass 2: Transparent geometry
     if (hasTransparent) {
@@ -2146,9 +2205,21 @@ export class WebGl2Renderer implements RendererPort {
         this.gl.deleteRenderbuffer(this.sceneColorRenderbuffer);
         this.sceneColorRenderbuffer = null;
       }
-      if (this.sceneDepthRenderbuffer) {
-        this.gl.deleteRenderbuffer(this.sceneDepthRenderbuffer);
-        this.sceneDepthRenderbuffer = null;
+      if (this.edgeFramebuffer) {
+        this.gl.deleteFramebuffer(this.edgeFramebuffer);
+        this.edgeFramebuffer = null;
+      }
+      if (this.edgeProgram) {
+        this.gl.deleteProgram(this.edgeProgram);
+        this.edgeProgram = null;
+      }
+      if (this.edgeVao) {
+        this.gl.deleteVertexArray(this.edgeVao);
+        this.edgeVao = null;
+      }
+      if (this.sceneDepthTexture) {
+        this.gl.deleteTexture(this.sceneDepthTexture);
+        this.sceneDepthTexture = null;
       }
     }
     this.framebufferSize = [0, 0];

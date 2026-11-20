@@ -13,8 +13,8 @@ const PORT = Number(process.env.E2E_PORT ?? 5173);
 const BASE = `http://127.0.0.1:${PORT}/`;
 const OUT = process.env.E2E_OUT ?? path.join(os.tmpdir(), 'gubim-e2e');
 const MODES = (process.env.E2E_MODES ?? 'gpu,gl2,none').split(',').map((m) => m.trim()).filter(Boolean);
-const SUITES = { tc: 'tc.mjs', e2e: 'e2e.mjs', glb: 'glb-check.mjs', fmt: 'formats-check.mjs', inst: 'instances-check.mjs' };
-const chosen = (process.env.E2E_SUITES ?? 'tc,e2e,glb,fmt,inst').split(',').map((s) => s.trim()).filter(Boolean);
+const SUITES = { tc: 'tc.mjs', e2e: 'e2e.mjs', glb: 'glb-check.mjs', fmt: 'formats-check.mjs', inst: 'instances-check.mjs', edge: 'edges-check.mjs' };
+const chosen = (process.env.E2E_SUITES ?? 'tc,e2e,glb,fmt,inst,edge').split(',').map((s) => s.trim()).filter(Boolean);
 if (path.resolve(OUT).startsWith(REPO)) throw new Error('E2E_OUT must be outside the repo: Chrome profiles there crash the Vite watcher');
 mkdirSync(OUT, { recursive: true });
 

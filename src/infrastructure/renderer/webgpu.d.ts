@@ -124,11 +124,14 @@ interface GPUBindGroupLayout {
 
 interface GPUBindGroupEntry {
   binding: GPUIndex32;
-  resource: {
-    buffer: GPUBuffer;
-    offset?: GPUSize64;
-    size?: GPUSize64;
-  };
+  /** A buffer range, or a texture view (the C17 edge pass reads the depth texture). */
+  resource:
+    | {
+        buffer: GPUBuffer;
+        offset?: GPUSize64;
+        size?: GPUSize64;
+      }
+    | GPUTextureView;
 }
 
 interface GPUBindGroupDescriptor {
@@ -262,6 +265,7 @@ interface GPURenderPassEncoder {
     width: GPUIndex32,
     height: GPUIndex32
   ): void;
+  draw(vertexCount: GPUSize32, instanceCount?: GPUSize32, firstVertex?: GPUSize32, firstInstance?: GPUSize32): void;
   drawIndexed(
     indexCount: GPUSize32,
     instanceCount?: GPUSize32,
