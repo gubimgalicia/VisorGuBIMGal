@@ -8,6 +8,7 @@ import { GisMapPanel } from './ui/components/GisMapPanel';
 import { DisplayBar } from './ui/components/DisplayBar';
 import { SectionBar } from './ui/components/SectionBar';
 import { SearchPanel } from './ui/components/SearchPanel';
+import { ComparePanel } from './ui/components/ComparePanel';
 import { IdsPanel } from './ui/components/IdsPanel';
 import { BcfPanel } from './ui/components/BcfPanel';
 import { MeasureBar } from './ui/components/MeasureBar';
@@ -25,6 +26,7 @@ import {
   collectAvailablePropertyNames,
   type ColorByMode,
   type ColorLegendItem,
+  type ColorSchemeResult,
   type ColorableElement
 } from './ui/viewer/colorByProperty';
 import { parseModelUrlParam } from './ui/viewer/urlModel';
@@ -77,7 +79,16 @@ import type { KernelDiagnostic, SpatialTree } from './domain/kernel/KernelPort';
 import { kernel, renderer } from './infrastructure/composition';
 import { leafletService } from './infrastructure/gis/LeafletService';
 
-import { Layers, FolderTree, Sliders, Scissors, Search, ShieldCheck, MessageSquareWarning } from 'lucide-react';
+import {
+  Layers,
+  FolderTree,
+  Sliders,
+  Scissors,
+  Search,
+  GitCompareArrows,
+  ShieldCheck,
+  MessageSquareWarning
+} from 'lucide-react';
 import { formatLength, t } from './ui/i18n';
 
 export default function App() {
@@ -103,6 +114,12 @@ export default function App() {
   const [colorByPropName, setColorByPropName] = useState<string>('Name');
   const [colorLegend, setColorLegend] = useState<ColorLegendItem[]>([]);
   const [availableColorProps, setAvailableColorProps] = useState<string[]>([]);
+  const [compareColorScheme, setCompareColorScheme] = useState<ColorSchemeResult | null>(null);
+  const prevColorStateRef = useRef<{
+    mode: ColorByMode;
+    propName: string;
+    bcfColors: Map<ModelId, Map<number, number>>;
+  } | null>(null);
   const activeColorsByModelRef = useRef<Map<ModelId, Map<number, number>>>(new Map());
   const bcfColorsByModelRef = useRef<Map<ModelId, Map<number, number>>>(new Map());
   const elementBatchMetaByModelRef = useRef<Map<ModelId, Map<number, ElementBatchMeta>>>(new Map());
@@ -310,6 +327,8 @@ export default function App() {
       setNextSavedViewIndex(1);
       setColorByMode('none');
       setColorLegend([]);
+      setCompareColorScheme(null);
+      prevColorStateRef.current = null;
       activeColorsByModelRef.current.clear();
       bcfColorsByModelRef.current.clear();
       elementBatchMetaByModelRef.current.clear();
@@ -320,6 +339,14 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    if (compareColorScheme && models.length > 0) {
+      setColorLegend(compareColorScheme.legend);
+      activeColorsByModelRef.current = compareColorScheme.colorsByModel;
+      for (const m of models) {
+        renderer.setElementColors(m.id, compareColorScheme.colorsByModel.get(m.id) ?? new Map());
+      }
+      return;
+    }
     if (colorByMode === 'none' || models.length === 0) {
       setColorLegend([]);
       const nextColors = new Map<ModelId, Map<number, number>>();
@@ -357,11 +384,40 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [colorByMode, colorByPropName, models, spatialTrees]);
+  }, [compareColorScheme, colorByMode, colorByPropName, models, spatialTrees]);
 
   const handleChangeColorByMode = useCallback((nextMode: ColorByMode) => {
     bcfColorsByModelRef.current.clear();
+    prevColorStateRef.current = null;
+    setCompareColorScheme(null);
     setColorByMode(nextMode);
+  }, []);
+
+  const handleApplyCompareColors = useCallback(
+    (scheme: ColorSchemeResult) => {
+      if (prevColorStateRef.current === null) {
+        prevColorStateRef.current = {
+          mode: colorByMode,
+          propName: colorByPropName,
+          bcfColors: new Map(
+            [...bcfColorsByModelRef.current.entries()].map(([id, map]) => [id, new Map(map)])
+          )
+        };
+      }
+      setCompareColorScheme(scheme);
+    },
+    [colorByMode, colorByPropName]
+  );
+
+  const handleClearCompareColors = useCallback(() => {
+    setCompareColorScheme(null);
+    const prev = prevColorStateRef.current;
+    prevColorStateRef.current = null;
+    if (prev) {
+      bcfColorsByModelRef.current = prev.bcfColors;
+      setColorByPropName(prev.propName);
+      setColorByMode(prev.mode);
+    }
   }, []);
 
   const handleIsolate = useCallback((target: DisplayTarget) => {
@@ -398,7 +454,7 @@ export default function App() {
   }, []);
 
   // Tab state
-  const [leftTab, setLeftTab] = useState<'models' | 'tree' | 'search'>('models');
+  const [leftTab, setLeftTab] = useState<'models' | 'tree' | 'search' | 'compare'>('models');
   const [rightTab, setRightTab] = useState<'props' | 'dxf' | 'ids' | 'bcf'>('props');
   const [isGisExpanded, setIsGisExpanded] = useState<boolean>(false);
 
@@ -771,6 +827,22 @@ export default function App() {
     }
   }, [selectedRef]);
 
+  const handleSelectAndFrame = useCallback(
+    async (ref: ElementRef) => {
+      await handleSelectElement(ref);
+      try {
+        const mesh = await kernel.elementMesh(ref.modelId, ref.expressId);
+        const elemBounds = mesh ? computeElementMeshBounds(mesh.positions) : null;
+        if (elemBounds) {
+          renderer.fitToBounds(elemBounds, true);
+        }
+      } catch (err) {
+        console.error('Error al encuadrar elemento seleccionado:', err);
+      }
+    },
+    [handleSelectElement]
+  );
+
   const handleViewportFrame = useCallback(() => {
     measure.frame();
     minimapFrames.notify();
@@ -1067,6 +1139,8 @@ export default function App() {
 
       bcfColorsByModelRef.current = interpreted.colorsByModel;
       activeColorsByModelRef.current = interpreted.colorsByModel;
+      prevColorStateRef.current = null;
+      setCompareColorScheme(null);
       setColorByMode('none');
       setColorLegend([]);
       for (const m of models) {
@@ -1128,6 +1202,13 @@ export default function App() {
               <Search size={13} />
               <span>{t('app.tabs.search')}</span>
             </button>
+            <button
+              className={`tab-btn tab-compare ${leftTab === 'compare' ? 'active' : ''}`}
+              onClick={() => setLeftTab('compare')}
+            >
+              <GitCompareArrows size={13} />
+              <span>{t('app.tabs.compare')}</span>
+            </button>
           </div>
 
           <div className="panel-body">
@@ -1161,6 +1242,17 @@ export default function App() {
                 onSelectElement={(ref) => void handleSelectElement(ref)}
                 onIsolate={handleIsolate}
                 onHide={handleHide}
+              />
+            </div>
+            {/* Kept mounted, so the comparison result survives a change of tab */}
+            <div style={{ display: leftTab === 'compare' ? 'block' : 'none' }}>
+              <ComparePanel
+                models={models}
+                kernel={kernel}
+                selectedRef={selectedRef}
+                onSelectAndFrame={(ref) => void handleSelectAndFrame(ref)}
+                onApplyCompareColors={handleApplyCompareColors}
+                onClearCompareColors={handleClearCompareColors}
               />
             </div>
           </div>
@@ -1232,6 +1324,7 @@ export default function App() {
                 propertyName={colorByPropName}
                 availableProperties={availableColorProps}
                 legend={colorLegend}
+                compareActive={compareColorScheme !== null}
                 onChangeMode={handleChangeColorByMode}
                 onChangePropertyName={setColorByPropName}
               />

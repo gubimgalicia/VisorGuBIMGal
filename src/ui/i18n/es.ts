@@ -70,6 +70,7 @@ export const es = {
       models: 'Modelos',
       tree: 'Árbol',
       search: 'Buscar',
+      compare: 'Comparar',
       properties: 'Propiedades',
       dxf: 'Planos y DXF',
       ids: 'IDS',
@@ -177,6 +178,55 @@ export const es = {
       property: 'Valor de propiedad'
     },
     describeQuery: 'Búsqueda {field}: «{query}»'
+  },
+  compare: {
+    needTwoModels: 'Abre al menos dos modelos IFC para compararlos.',
+    beforeLabel: 'Antes (versión base)',
+    afterLabel: 'Después (versión nueva)',
+    beforeTitle: 'Elegir el modelo base (versión anterior)',
+    afterTitle: 'Elegir el modelo nuevo (versión posterior)',
+    sameModelHint: 'Elige dos modelos distintos para comparar.',
+    runBtn: 'Comparar',
+    running: 'Comparando…',
+    clearBtn: 'Limpiar',
+    clearTitle: 'Limpiar comparación y restaurar los colores anteriores',
+    errorFallback: 'No se pudieron comparar los modelos.',
+    statusAdded: 'Añadidos',
+    statusRemoved: 'Eliminados',
+    statusChanged: 'Cambiados',
+    statusUnchanged: 'Sin cambios',
+    addedCount: {
+      one: '{count} añadido',
+      other: '{count} añadidos'
+    },
+    removedCount: {
+      one: '{count} eliminado',
+      other: '{count} eliminados'
+    },
+    changedCount: {
+      one: '{count} cambiado',
+      other: '{count} cambiados'
+    },
+    unchangedCount: '{count} sin cambios',
+    changeKindType: 'Tipo',
+    changeKindName: 'Nombre',
+    changeKindProperties: 'Propiedades',
+    changeKindGeometry: 'Geometría',
+    changeKindCount: '{kind}: {count}',
+    duplicatesNote: {
+      one: '{count} GlobalId duplicado omitido en la comparación.',
+      other: '{count} GlobalIds duplicados omitidos en la comparación.'
+    },
+    noDifferences: 'No hay diferencias entre las dos versiones.',
+    unnamed: 'Sin nombre',
+    groupHeader: '{label} ({count})',
+    entryTitleBefore: 'Elemento en el modelo base ({modelName}). Clic para seleccionar y encuadrar.',
+    entryTitleAfter: 'Elemento en el modelo nuevo ({modelName}). Clic para seleccionar y encuadrar.',
+    transitionDetail: '{before} → {after}',
+    propsChangedCount: {
+      one: '{count} propiedad modificada',
+      other: '{count} propiedades modificadas'
+    }
   },
   properties: {
     emptyTitle: 'Ningún elemento seleccionado',
@@ -332,6 +382,7 @@ export const es = {
     modeStorey: 'Por planta',
     modeMaterial: 'Por material',
     modeProperty: 'Por propiedad…',
+    modeCompare: 'Comparación',
     propertyPlaceholder: 'Propiedad (ej. Name, IsExternal)',
     noValue: 'Sin valor',
     noMaterial: 'Sin material',

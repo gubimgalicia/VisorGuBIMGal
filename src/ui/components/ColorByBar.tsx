@@ -7,6 +7,7 @@ interface ColorByBarProps {
   propertyName: string;
   availableProperties: readonly string[];
   legend: readonly ColorLegendItem[];
+  compareActive?: boolean;
   onChangeMode: (mode: ColorByMode) => void;
   onChangePropertyName: (name: string) => void;
 }
@@ -16,6 +17,7 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
   propertyName,
   availableProperties,
   legend,
+  compareActive = false,
   onChangeMode,
   onChangePropertyName
 }) => {
@@ -29,8 +31,10 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
         <span className="display-bar-label">{t('colorBy.label')}</span>
         <select
           className="select color-by-select"
-          value={mode}
-          onChange={(e) => onChangeMode(e.target.value as ColorByMode)}
+          value={compareActive ? 'compare' : mode}
+          onChange={(e) => {
+            if (e.target.value !== 'compare') onChangeMode(e.target.value as ColorByMode);
+          }}
           title={t('colorBy.selectTitle')}
         >
           <option value="none">{t('colorBy.modeNone')}</option>
@@ -38,10 +42,11 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
           <option value="storey">{t('colorBy.modeStorey')}</option>
           <option value="material">{t('colorBy.modeMaterial')}</option>
           <option value="property">{t('colorBy.modeProperty')}</option>
+          {compareActive && <option value="compare">{t('colorBy.modeCompare')}</option>}
         </select>
       </div>
 
-      {mode === 'property' && (
+      {!compareActive && mode === 'property' && (
         <div className="display-bar-row" style={{ marginTop: '2px' }}>
           <input
             type="text"
