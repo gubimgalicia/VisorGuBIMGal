@@ -172,8 +172,8 @@ interface GlShape {
   gpuBytes: number;
 }
 
-/** Bytes per instance: 3 vec4 rows at 0, 16, 32; 3 vec3 normal rows at 48, 60, 72; record at 84. */
-const GL_INSTANCE_BYTES = 88;
+/** Bytes per instance: 3 vec4 rows at 0, 16, 32; record at 48. The normal matrix is derived. */
+const GL_INSTANCE_BYTES = 52;
 
 /**
  * The instanced variant of a vertex shader written for f32 attributes (A13): the shape's vertex,
@@ -193,10 +193,7 @@ layout(location = 1) in vec3 a_shapeNormal;`;
 layout(location = 2) in vec4 a_row0;
 layout(location = 3) in vec4 a_row1;
 layout(location = 4) in vec4 a_row2;
-layout(location = 5) in vec3 a_n0;
-layout(location = 6) in vec3 a_n1;
-layout(location = 7) in vec3 a_n2;
-layout(location = 8) in uint a_instanceRecord;
+layout(location = 5) in uint a_instanceRecord;
 // The shape's grid, for q16 shapes.
 uniform vec3 u_quantMin;
 uniform vec3 u_quantMax;
@@ -219,7 +216,8 @@ ${local}
   vec4 shapePoint = vec4(shapeLocal, 1.0);
   vec3 a_position = vec3(dot(a_row0, shapePoint), dot(a_row1, shapePoint), dot(a_row2, shapePoint));
   // Normalised after the inverse transpose: a shape scaled from mm to m would come out 1000 long.
-  vec3 a_normal = normalize(vec3(dot(a_n0, shapeNormal), dot(a_n1, shapeNormal), dot(a_n2, shapeNormal)));
+  // mat3 of the rows is the transpose of the linear part, so its inverse is the inverse transpose.
+  vec3 a_normal = normalize(inverse(mat3(a_row0.xyz, a_row1.xyz, a_row2.xyz)) * shapeNormal);
   uint a_recordIdx = a_instanceRecord;`;
   return source.replace(F32_ATTRIBUTES, attributes).replace('void main() {', prologue);
 }
@@ -1078,7 +1076,7 @@ export class WebGl2Renderer implements RendererPort {
         gl.enableVertexAttribArray(1);
         if (shape.vertexFormat === 'q16') gl.vertexAttribPointer(1, 2, gl.SHORT, true, 0, 0);
         else gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
-        for (let location = 2; location <= 8; location++) {
+        for (let location = 2; location <= 5; location++) {
           gl.enableVertexAttribArray(location);
           gl.vertexAttribDivisor(location, 1);
         }
@@ -2177,10 +2175,7 @@ function pointInstances(gl: WebGL2RenderingContext, buffer: WebGLBuffer, offset:
   gl.vertexAttribPointer(2, 4, gl.FLOAT, false, GL_INSTANCE_BYTES, offset);
   gl.vertexAttribPointer(3, 4, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 16);
   gl.vertexAttribPointer(4, 4, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 32);
-  gl.vertexAttribPointer(5, 3, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 48);
-  gl.vertexAttribPointer(6, 3, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 60);
-  gl.vertexAttribPointer(7, 3, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 72);
-  gl.vertexAttribIPointer(8, 1, gl.UNSIGNED_INT, GL_INSTANCE_BYTES, offset + 84);
+  gl.vertexAttribIPointer(5, 1, gl.UNSIGNED_INT, GL_INSTANCE_BYTES, offset + 48);
 }
 
 /** Frees a shape's three buffers. */

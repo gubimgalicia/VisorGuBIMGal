@@ -80,7 +80,9 @@ export function instanceRows(m: Float32Array, at: number): { rows: number[]; nor
 /**
  * Per-instance GPU data in draw order. `stride` and `layout` place the fields:
  *   - WebGPU (96 bytes): 3 vec4 rows at 0, 16, 32; 3 vec3 normal rows at 48, 64, 80; u32 record at 92.
- *   - WebGL2 (88 bytes): 3 vec4 rows at 0, 16, 32; 3 vec3 normal rows at 48, 60, 72; u32 record at 84.
+ *   - WebGL2 (52 bytes): 3 vec4 rows at 0, 16, 32; u32 record at 48. Its shader derives the normal
+ *     matrix from the rows: every vertex reads its instance's data, and this hardware is limited
+ *     by vertex fetch (A12, T-158).
  * `firstRecord` is the batch-local record index of the first instance: instances come after the
  * batch's own records.
  */
@@ -91,9 +93,9 @@ export function packInstances(
   layout: 'webgpu' | 'webgl2',
   headerBytes = 0
 ): ArrayBuffer {
-  const stride = layout === 'webgpu' ? 96 : 88;
-  const normalAt = layout === 'webgpu' ? [48, 64, 80] : [48, 60, 72];
-  const recordAt = layout === 'webgpu' ? 92 : 84;
+  const stride = layout === 'webgpu' ? 96 : 52;
+  const normalAt = layout === 'webgpu' ? [48, 64, 80] : null;
+  const recordAt = layout === 'webgpu' ? 92 : 48;
   const buffer = new ArrayBuffer(headerBytes + plan.order.length * stride);
   const f32 = new Float32Array(buffer);
   const u32 = new Uint32Array(buffer);
@@ -104,7 +106,7 @@ export function packInstances(
     const rows = data?.rows ?? new Array(12).fill(0);
     const normalRows = data?.normalRows ?? new Array(9).fill(0);
     f32.set(rows, base / 4);
-    for (let r = 0; r < 3; r++) f32.set(normalRows.slice(r * 3, r * 3 + 3), (base + normalAt[r]) / 4);
+    if (normalAt) for (let r = 0; r < 3; r++) f32.set(normalRows.slice(r * 3, r * 3 + 3), (base + normalAt[r]) / 4);
     u32[(base + recordAt) / 4] = firstRecord + at;
   });
   return buffer;

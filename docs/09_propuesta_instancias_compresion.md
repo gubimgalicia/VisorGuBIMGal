@@ -268,6 +268,7 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
   1. Datos por instancia más ligeros: solo filas y registro (52 bytes), con la matriz normal calculada en el sombreador.
   2. Un mínimo de triángulos por forma, en torno a 32.
   3. Medir otra vez en una GPU dedicada antes de decidir.
+- **Propuesta 1 probada en WebGL2** (52 bytes por instancia, matriz normal con `inverse` en el sombreador): fontanería de la clínica 38,4 → 27,6 ms, Esplanades 14,9 → 11,6 ms, con las 5 suites del navegador en verde en WebGL2 y sin adaptador. WebGPU sigue con 96 bytes.
 - **Mandos en el código** (`crates/wasm-api/src/batches.rs`): `MIN_INSTANCE_TRIANGLES` (0) y `MIN_BATCH_INSTANCES` (1). Con esos valores la salida es idéntica byte a byte a la de la revisión 4 (`check-identical`, ahora también con formas e instancias).
 - Decide Nick, tras la revisión de Gemini.
 

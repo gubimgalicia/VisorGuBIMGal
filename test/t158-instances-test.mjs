@@ -97,16 +97,15 @@ check('WebGPU layout: 16-byte header, 96 bytes per instance, record at 92', () =
   });
 });
 
-check('WebGL2 layout: 88 bytes per instance, normal rows at 48, 60, 72, record at 84', () => {
+check('WebGL2 layout: 52 bytes per instance, record at 48', () => {
   const plan = planInstances(table);
   const buffer = packInstances({ instanceTable: table, instanceTransforms: transforms }, plan, 0, 'webgl2');
-  assert.equal(buffer.byteLength, 5 * 88);
+  assert.equal(buffer.byteLength, 5 * 52);
   const f32 = new Float32Array(buffer), u32 = new Uint32Array(buffer);
   plan.order.forEach((index, at) => {
-    const base = (at * 88) / 4;
+    const base = (at * 52) / 4;
     assert.equal(f32[base + 3], index);
-    assert.ok(near(Array.from(f32.subarray(base + 12, base + 21)), [1, 0, 0, 0, 1, 0, 0, 0, 1]));
-    assert.equal(u32[base + 21], at);
+    assert.equal(u32[base + 12], at);
   });
 });
 
