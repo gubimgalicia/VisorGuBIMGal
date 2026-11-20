@@ -516,6 +516,8 @@ export const es = {
     navOrbit: 'Órbita',
     edgesLabel: 'Aristas',
     edgesTitle: 'Aristas y contornos sobre la geometría',
+    storeyFree: 'Planta: libre',
+    storeyTitle: 'Recorrer una planta: la cámara queda a la altura de los ojos y el minimapa muestra su corte',
     perfMonitorTitle: 'Monitor de rendimiento (GPU, lotes y fotogramas)',
     dropTitle: 'Suelta el archivo IFC aquí',
     dropSubtitle: 'Se procesará localmente en el navegador mediante WebAssembly',

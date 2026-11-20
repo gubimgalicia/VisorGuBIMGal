@@ -399,11 +399,17 @@ canvas.bim-viewport {
 }
 
 /* Floating overlay toolbar on viewport */
+/* Between the controls column on the left (12 + 250 px) and the view cube on the right (168 px),
+   centred there; it wraps to a second row rather than slide under either. */
 .viewport-overlay-toolbar {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 270px;
+  right: 176px;
+  width: fit-content;
+  margin: 0 auto;
+  flex-wrap: wrap;
+  justify-content: center;
   background-color: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.1);

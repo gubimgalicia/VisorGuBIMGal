@@ -27,7 +27,7 @@ export class AutoRenderer implements RendererPort {
   private handlers: RendererEventHandlers = {};
   private pointerMode: PointerMode = 'select';
   private projection: CameraProjection = 'perspective';
-  private edges = false;
+  private edges = true;
   private navigationMode: NavigationMode = 'orbit';
   private preInitQueue: Array<(r: RendererPort) => void> = [];
   private backendListeners: Set<(backend: BackendType | null) => void> = new Set();
@@ -285,6 +285,19 @@ export class AutoRenderer implements RendererPort {
   setEdges(on: boolean): void {
     this.edges = on;
     this.activeRenderer?.setEdges(on);
+  }
+
+  getEdges(): boolean {
+    return this.activeRenderer?.getEdges() ?? this.edges;
+  }
+
+  walkAt(eye: { x: number; y: number; z: number } | null): void {
+    if (eye !== null) this.navigationMode = 'first-person';
+    this.activeRenderer?.walkAt(eye);
+  }
+
+  getEyeLock(): number | null {
+    return this.activeRenderer?.getEyeLock() ?? null;
   }
 
   getNavigationMode(): NavigationMode {

@@ -198,6 +198,9 @@ export function computeElementMeshBounds(positions: Float64Array): ModelBounds |
   };
 }
 
+/** C24: distance to the target while walking a storey: first-person steps scale with it. */
+export const WALK_DISTANCE = 5;
+
 /**
  * Orbit and first-person camera operating in IFC Z-up f64 world coordinates.
  * Produces a rotation-only view matrix at the camera eye (for RTC rendering)
@@ -212,6 +215,8 @@ export class Camera {
   private azimuth = ISO_AZIMUTH;
   /** Vertical angle from the X-Y plane towards +Z (radians, in [-pi/2, +pi/2]). */
   private elevation = ISO_ELEVATION;
+  /** C24: the height the eye is held at while walking a storey, or null. */
+  private eyeLock: number | null = null;
   /** Viewport aspect ratio (width / height). */
   private aspect = 16 / 9;
   /** Vertical field of view in radians (45 deg). */
@@ -262,6 +267,36 @@ export class Camera {
     ];
   }
 
+  /** C24: the height the eye is held at, or null when it moves freely. */
+  getEyeLock(): number | null {
+    return this.eyeLock;
+  }
+
+  /**
+   * C24: stands the eye at `(x, y, z)`, looking level along the current heading, and holds it at
+   * height `z` from then on: walking moves it across the floor only, and looking, panning and
+   * zooming never raise or lower it. Fitting, a view preset or a pose release it.
+   */
+  walkAt(x: number, y: number, z: number): void {
+    if (![x, y, z].every(Number.isFinite)) return;
+    this.elevation = 0;
+    this.distance = WALK_DISTANCE;
+    const { forward } = this.axes();
+    this.target = [x + this.distance * forward[0], y + this.distance * forward[1], z];
+    this.eyeLock = z;
+  }
+
+  /** C24: lets the eye move freely again, where it is. */
+  releaseEyeLock(): void {
+    this.eyeLock = null;
+  }
+
+  /** Keeps the eye at the locked height by moving the target, which the eye is measured from. */
+  private holdEye(): void {
+    if (this.eyeLock === null) return;
+    this.target[2] = this.eyeLock - this.distance * Math.sin(this.elevation);
+  }
+
   getTarget(): [number, number, number] {
     return [this.target[0], this.target[1], this.target[2]];
   }
@@ -293,6 +328,7 @@ export class Camera {
     ) {
       return;
     }
+    this.eyeLock = null;
     this.target = [pose.target[0], pose.target[1], pose.target[2]];
     this.distance = Math.max(0.05, Math.min(500000, pose.distance));
     this.azimuth = pose.azimuth;
@@ -308,6 +344,7 @@ export class Camera {
     const nextElev = this.elevation + dy * 0.007;
     const maxElev = Math.PI / 2;
     this.elevation = Math.max(-maxElev, Math.min(maxElev, nextElev));
+    this.holdEye();
   }
 
   /**
@@ -358,12 +395,25 @@ export class Camera {
       eye[1] + this.distance * forward[1],
       eye[2] + this.distance * forward[2]
     ];
+    this.holdEye();
   }
 
   /**
    * First-person walk/fly translation in metres along the camera's forward, right, and world-Z up axes.
    */
   walk(forwardMeters: number, rightMeters: number, upMeters = 0): void {
+    if (this.eyeLock !== null) {
+      // Walking a storey: forward is the heading across the floor, whatever the pitch, and no climbing.
+      const heading: Vec3 = [-Math.cos(this.azimuth), -Math.sin(this.azimuth), 0];
+      const { right } = this.axes();
+      const dx = heading[0] * forwardMeters + right[0] * rightMeters;
+      const dy = heading[1] * forwardMeters + right[1] * rightMeters;
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+      this.target[0] += dx;
+      this.target[1] += dy;
+      this.holdEye();
+      return;
+    }
     const { forward, right } = this.axes();
     const dx = forward[0] * forwardMeters + right[0] * rightMeters;
     const dy = forward[1] * forwardMeters + right[1] * rightMeters;
@@ -396,6 +446,7 @@ export class Camera {
     this.target[0] += rx * moveRight + ux * moveUp;
     this.target[1] += ry * moveRight + uy * moveUp;
     this.target[2] += rz * moveRight + uz * moveUp;
+    this.holdEye();
   }
 
   zoom(deltaY: number): void {
@@ -406,9 +457,11 @@ export class Camera {
   zoomBy(factor: number): void {
     if (!Number.isFinite(factor) || factor <= 0) return;
     this.distance = Math.max(0.05, Math.min(500000, this.distance * factor));
+    this.holdEye();
   }
 
   fitToBounds(bounds: ModelBounds, keepAngles = false): void {
+    this.eyeLock = null;
     const cx = (bounds.min.x + bounds.max.x) * 0.5;
     const cy = (bounds.min.y + bounds.max.y) * 0.5;
     const cz = (bounds.min.z + bounds.max.z) * 0.5;
@@ -429,6 +482,7 @@ export class Camera {
   }
 
   setPreset(preset: ViewPreset, bounds: ModelBounds | null): void {
+    this.eyeLock = null;
     if (bounds) {
       this.target = [
         (bounds.min.x + bounds.max.x) * 0.5,

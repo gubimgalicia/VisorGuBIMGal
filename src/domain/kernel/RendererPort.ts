@@ -109,8 +109,18 @@ export interface RendererPort {
   getProjection(): CameraProjection;
   setProjection(projection: CameraProjection): void;
 
-  /** C17: draws the edges and outlines of the opaque geometry over it. Off by default. */
+  /** C17: draws the edges and outlines of the opaque geometry over it. On by default. */
   setEdges(on: boolean): void;
+  getEdges(): boolean;
+
+  /**
+   * C24, walking a storey: switches to first person with the eye at `eye` (model coordinates),
+   * looking level, and holds it at that height until fitting, a view preset, a pose or `null`
+   * releases it. `null` releases it where the camera stands.
+   */
+  walkAt(eye: { x: number; y: number; z: number } | null): void;
+  /** C24: the height the eye is held at, or null. */
+  getEyeLock(): number | null;
   getNavigationMode(): NavigationMode;
   setNavigationMode(mode: NavigationMode): void;
   getDebugStats(): RendererDebugStats;

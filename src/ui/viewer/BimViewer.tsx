@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
-import { RefreshCw, Box, Compass, Eye, UploadCloud, Activity, Maximize2, Footprints } from 'lucide-react';
+import { RefreshCw, Box, Compass, Eye, UploadCloud, Activity, Maximize2, Footprints, Frame } from 'lucide-react';
 import { PerfMonitor } from '../components/PerfMonitor';
 import { ViewCube } from '../components/ViewCube';
 import type { ElementRef } from '../../domain/models/ModelRecord';
@@ -28,6 +28,10 @@ interface BimViewerProps {
   isWorking: boolean;
   /** Drawn over the canvas, in its coordinates. */
   children?: ReactNode;
+  /** C24: the storeys a user can walk, lowest first, the one walked (an index) and its setter. */
+  storeys?: ReadonlyArray<{ name: string; level: number }>;
+  walkStorey?: number | null;
+  onWalkStorey?: (index: number | null) => void;
 }
 
 export const BimViewer: React.FC<BimViewerProps> = ({
@@ -43,7 +47,10 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   onFrame,
   statusText,
   isWorking,
-  children
+  children,
+  storeys = [],
+  walkStorey = null,
+  onWalkStorey
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -52,15 +59,18 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   const [cameraPose, setCameraPose] = useState<CameraPose | null>(() => renderer.getCameraPose());
   const [projection, setProjection] = useState<CameraProjection>(() => renderer.getProjection());
   const [navMode, setNavMode] = useState<NavigationMode>(() => renderer.getNavigationMode());
-  // C17: edges and outlines over the opaque geometry, off until asked for.
-  const [edges, setEdges] = useState(false);
+  // C17: edges and outlines over the opaque geometry, on by default (Nick, 2026-11-20).
+  const [edges, setEdges] = useState<boolean>(() => renderer.getEdges());
 
   const handleFrame = useCallback(() => {
     const pose = renderer.getCameraPose();
     setCameraPose(pose);
     setProjection(renderer.getProjection());
+    setNavMode(renderer.getNavigationMode());
+    // Fitting, a view preset or a saved view release the storey: the menu follows.
+    if (walkStorey !== null && renderer.getEyeLock() === null) onWalkStorey?.(null);
     onFrame?.();
-  }, [renderer, onFrame]);
+  }, [renderer, onFrame, walkStorey, onWalkStorey]);
 
   useEffect(() => {
     renderer.setHandlers({
@@ -109,6 +119,7 @@ export const BimViewer: React.FC<BimViewerProps> = ({
 
   const handleToggleNavMode = () => {
     const next: NavigationMode = navMode === 'orbit' ? 'first-person' : 'orbit';
+    if (next === 'orbit' && walkStorey !== null) onWalkStorey?.(null);
     renderer.setNavigationMode(next);
     setNavMode(next);
   };
@@ -191,20 +202,36 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           {projection === 'orthographic' ? t('common.orthoShort') : t('common.perspShort')}
         </button>
         <button
-          className={`btn btn-ghost nav-edges-btn ${edges ? 'active' : ''}`}
+          className={`btn btn-ghost btn-icon nav-edges-btn ${edges ? 'active' : ''}`}
           aria-pressed={edges}
+          aria-label={t('viewer.edgesLabel')}
           onClick={handleToggleEdges}
           title={t('viewer.edgesTitle')}
-          style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
         >
-          {t('viewer.edgesLabel')}
+          <Frame size={14} />
         </button>
+        {storeys.length > 0 && onWalkStorey && (
+          <select
+            className="nav-storey-select"
+            value={walkStorey === null ? '' : String(walkStorey)}
+            onChange={(e) => onWalkStorey(e.target.value === '' ? null : Number(e.target.value))}
+            title={t('viewer.storeyTitle')}
+            style={{ fontSize: '11px', height: '26px', maxWidth: '110px' }}
+          >
+            <option value="">{t('viewer.storeyFree')}</option>
+            {storeys.map((storey, index) => (
+              <option key={`${storey.name}-${storey.level}`} value={String(index)}>
+                {storey.name}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           className={`btn btn-ghost nav-fp-btn ${navMode === 'first-person' ? 'active' : ''}`}
           aria-pressed={navMode === 'first-person'}
           onClick={handleToggleNavMode}
           title={t('viewer.toggleNavModeTitle')}
-          style={{ fontSize: '11px', padding: '4px 8px', height: '26px', gap: '4px' }}
+          style={{ fontSize: '11px', padding: '4px 8px', height: '26px', gap: '4px', whiteSpace: 'nowrap' }}
         >
           <Footprints size={13} />
           <span>{navMode === 'first-person' ? t('viewer.navFirstPerson') : t('viewer.navOrbit')}</span>

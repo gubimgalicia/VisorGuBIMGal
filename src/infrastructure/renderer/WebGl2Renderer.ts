@@ -506,7 +506,7 @@ export class WebGl2Renderer implements RendererPort {
   /** No attributes: the edge triangle comes from gl_VertexID. */
   private edgeVao: WebGLVertexArrayObject | null = null;
   private edgeUniforms: { depth: WebGLUniformLocation | null; limit: WebGLUniformLocation | null; relative: WebGLUniformLocation | null; alpha: WebGLUniformLocation | null } | null = null;
-  private edges = false;
+  private edges = true;
   /** Size the framebuffers above were allocated at; a new context starts with none. */
   private framebufferSize: [number, number] = [0, 0];
   /** Kept for checks through the dev hook. */
@@ -1452,6 +1452,24 @@ export class WebGl2Renderer implements RendererPort {
     if (this.edges === on) return;
     this.edges = on;
     this.requestRender();
+  }
+
+  getEdges(): boolean {
+    return this.edges;
+  }
+
+  walkAt(eye: { x: number; y: number; z: number } | null): void {
+    if (eye === null) {
+      this.camera.releaseEyeLock();
+    } else {
+      this.setNavigationMode('first-person');
+      this.camera.walkAt(eye.x, eye.y, eye.z);
+    }
+    this.requestRender();
+  }
+
+  getEyeLock(): number | null {
+    return this.camera.getEyeLock();
   }
 
   /**

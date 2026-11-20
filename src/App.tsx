@@ -44,6 +44,7 @@ import {
 import { applySavedView, captureSavedView, savedViewWithoutModel, type SavedView } from './ui/viewer/savedViews';
 import { MeasureOverlay } from './ui/components/MeasureOverlay';
 import { Minimap } from './ui/components/Minimap';
+import { walkStart, walkStoreys, type WalkStorey } from './ui/viewer/storeyWalk';
 import { MeasureController } from './ui/viewer/MeasureController';
 import { pickFace, VERTEX_RADIUS } from './domain/measure/snap';
 import { NO_SECTION, sceneBounds, sectionPlanes, type SectionState } from './ui/viewer/section';
@@ -91,6 +92,8 @@ export default function App() {
   const [activeBackend, setActiveBackend] = useState<'webgpu' | 'webgl2' | null>(null);
   const [displayRule, setDisplayRule] = useState<DisplayRule>(SHOW_ALL);
   const [showMinimap, setShowMinimap] = useState<boolean>(false);
+  /** C24: the storey being walked, or null. */
+  const [walkStorey, setWalkStorey] = useState<WalkStorey | null>(null);
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [nextSavedViewIndex, setNextSavedViewIndex] = useState<number>(1);
   const [isExportingCsv, setIsExportingCsv] = useState<boolean>(false);
@@ -135,6 +138,34 @@ export default function App() {
       }
     };
   }, []);
+
+  // C24: the storeys a user can walk. Picking one stands the eye on it, held at that height, and
+  // shows its cut in the minimap; `null` lets the camera move freely again.
+  const storeys = useMemo(() => walkStoreys(models.map((model) => spatialTrees[model.id])), [models, spatialTrees]);
+  const handleWalkStorey = useCallback(
+    (index: number | null) => {
+      const storey = index === null ? undefined : storeys[index];
+      if (!storey) {
+        renderer.walkAt(null);
+        setWalkStorey(null);
+        return;
+      }
+      renderer.walkAt(walkStart(renderer.getCameraPose(), sceneBounds(models), storey.level));
+      setWalkStorey(storey);
+      setShowMinimap(true);
+    },
+    [storeys, models]
+  );
+  // The menu shows the walked storey by its place in the list, which opening a model can change.
+  const walkIndex = useMemo(() => {
+    if (!walkStorey) return null;
+    const index = storeys.findIndex((storey) => storey.name === walkStorey.name && storey.level === walkStorey.level);
+    return index >= 0 ? index : null;
+  }, [storeys, walkStorey]);
+  // Its model removed, the walked storey is gone from the list: let the camera move freely.
+  useEffect(() => {
+    if (walkStorey && walkIndex === null) handleWalkStorey(null);
+  }, [walkStorey, walkIndex, handleWalkStorey]);
 
   const [section, setSection] = useState<SectionState>(NO_SECTION);
   const [isPickingFace, setIsPickingFace] = useState<boolean>(false);
@@ -1150,6 +1181,9 @@ export default function App() {
             onFrame={handleViewportFrame}
             statusText={statusText}
             isWorking={isWorking}
+            storeys={storeys}
+            walkStorey={walkIndex}
+            onWalkStorey={handleWalkStorey}
           >
             <MeasureOverlay controller={measure} renderer={renderer} />
             {showMinimap && (
@@ -1159,6 +1193,7 @@ export default function App() {
                 models={models}
                 spatialTrees={spatialTrees}
                 frames={minimapFrames}
+                storey={walkStorey}
               />
             )}
           </BimViewer>

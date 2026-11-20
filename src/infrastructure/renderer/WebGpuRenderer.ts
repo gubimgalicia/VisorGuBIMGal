@@ -176,7 +176,7 @@ export class WebGpuRenderer implements RendererPort {
   private depthTexture: GPUTexture | null = null;
   private depthTextureView: GPUTextureView | null = null;
   /** C17: the edge pass, its parameters, and its bind group for the current depth view. */
-  private edges = false;
+  private edges = true;
   private edgePipeline: GPURenderPipeline | null = null;
   private edgeParams: GPUBuffer | null = null;
   private edgeBindGroup: { view: GPUTextureView; group: GPUBindGroup } | null = null;
@@ -1353,6 +1353,24 @@ export class WebGpuRenderer implements RendererPort {
     if (this.edges === on) return;
     this.edges = on;
     this.requestRender();
+  }
+
+  getEdges(): boolean {
+    return this.edges;
+  }
+
+  walkAt(eye: { x: number; y: number; z: number } | null): void {
+    if (eye === null) {
+      this.camera.releaseEyeLock();
+    } else {
+      this.setNavigationMode('first-person');
+      this.camera.walkAt(eye.x, eye.y, eye.z);
+    }
+    this.requestRender();
+  }
+
+  getEyeLock(): number | null {
+    return this.camera.getEyeLock();
   }
 
   /** C17: darkens the creases and outlines of the opaque geometry drawn so far (edges.ts). */

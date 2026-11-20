@@ -62,6 +62,8 @@ interface MinimapProps {
   models: readonly ModelRecord[];
   spatialTrees: Record<ModelId, SpatialTree | null | undefined>;
   frames: FrameSignal;
+  /** C24: the storey being walked; the minimap shows it instead of the storey under the eye. */
+  storey?: { name: string; level: number } | null;
 }
 
 /** The plan extent of the models that have geometry, or null before any arrives. */
@@ -86,7 +88,7 @@ function planBounds(models: readonly ModelRecord[]): PlanBounds | null {
  * The plan is generated once per storey and model set, never per frame: only the eye and the
  * view cone follow the camera, on the renderer's after-frame signal, ten times a second.
  */
-export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spatialTrees, frames }) => {
+export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spatialTrees, frames, storey: walked = null }) => {
   const [pose, setPose] = useState<CameraPose | null>(() => renderer.getCameraPose());
   const [plan, setPlan] = useState<Plan | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -133,7 +135,7 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
     [models, spatialTrees]
   );
   const eye = pose ? eyeOf(pose) : null;
-  const storey = eye ? storeyAt(eye[2], storeys) : null;
+  const storey = walked ?? (eye ? storeyAt(eye[2], storeys) : null);
   const storeyLevel = storey ? storey.level : null;
   const storeyName = storey ? storey.name : null;
 
