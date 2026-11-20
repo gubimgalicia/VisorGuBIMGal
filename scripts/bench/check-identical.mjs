@@ -28,7 +28,9 @@ if (process.argv[2] === '--child') {
     if (!view) break;
     const batch = takeBatch(view);
     stream.update(batch.vertexFormat);
-    const parts = [batch.positions, batch.normals, batch.indices, batch.meshTable, Float64Array.from(batch.origin)];
+    // Since A13 also the instances and every shape the batch sends.
+    const shapeParts = batch.shapes.flatMap((shape) => [Uint32Array.of(shape.shapeId, shape.closed ? 1 : 0), Float32Array.from([...shape.box.min, ...shape.box.max]), shape.positions, shape.normals, shape.indices]);
+    const parts = [batch.positions, batch.normals, batch.indices, batch.meshTable, Float64Array.from(batch.origin), batch.instanceTable, batch.instanceTransforms, ...shapeParts];
     for (const part of parts) stream.update(new Uint8Array(part.buffer, part.byteOffset, part.byteLength));
   }
   const finished = model.finishStream();

@@ -11,6 +11,14 @@ use crate::wire::MAX_QUANT_STEP;
 /// Fewest uses of a shape, counted before the stream, for it to be sent once and drawn by
 /// instances (`docs/09` §2, rule 5; Nick's decision in §7).
 pub const MIN_INSTANCE_USES: u32 = 2;
+/// Fewest triangles a shape needs to be drawn by instances. Each instanced range is a draw call, so
+/// a tiny shape can cost more drawn alone than merged into its batch. 0: every shape (docs/09
+/// revision 4); a higher value is under evaluation (T-158, frame time on WebGL2).
+pub const MIN_INSTANCE_TRIANGLES: usize = 0;
+/// Fewest copies of a shape one batch needs to draw them by instances: each range is a draw call,
+/// and a copy alone in its batch is cheaper merged. 1: every accepted copy (docs/09 revision 4);
+/// a higher value is under evaluation (T-158, frame time on WebGL2).
+pub const MIN_BATCH_INSTANCES: usize = 1;
 
 /// Furthest a vertex may lie from its batch origin, in metres. Mirrors `MAX_BATCH_RADIUS`.
 pub const MAX_BATCH_RADIUS: f64 = 4096.0;
@@ -55,6 +63,18 @@ pub struct Batch {
     /// Triangles drawn by instances, so batches hold as many triangles as before A13.
     pub(crate) instanced_triangles: usize,
     pub(crate) draws: bool,
+    /// Copies accepted as instances, decided per shape when the batch closes (`finish`).
+    pub(crate) pending: Vec<PendingInstance>,
+}
+
+/// A copy the batch may draw as an instance, kept with its part in case it is merged instead.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PendingInstance {
+    express_id: u32,
+    flags: u32,
+    part: Part,
+    transform: DMat4,
+    accepted: Accepted,
 }
 
 /// A shape in its own coordinates, built as a part is, sent once per stream (A13).
@@ -90,27 +110,68 @@ impl Batch {
     }
 
     fn push(&mut self, element: &Prepared, shapes: &mut ShapeRegistry) {
-        let origin = DVec3::from_array(self.origin);
         for part in &element.parts {
             if let Some(instance) = &part.instance
                 && let Some(accepted) = shapes.accept(instance, self)
             {
-                let mut flags = element.flags;
-                if part.rgba & 0xFF != 0xFF {
-                    flags |= FLAG_TRANSPARENT;
-                }
-                if accepted.closed {
-                    flags |= FLAG_CLOSED;
-                }
-                // The shape travels re-centred on its own box: move the matrix to match.
-                let columns = instance_columns(&(instance.transform * DMat4::from_translation(accepted.centre)), origin);
-                self.instance_table.extend_from_slice(&[element.express_id, accepted.shape_id, part.rgba, flags]);
-                self.instance_transforms.extend_from_slice(&columns);
                 self.instanced_triangles += part.indices.len() / 3;
-                let (min, max) = transformed_box(accepted.min, accepted.max, &columns);
-                self.draw(min, max);
+                self.pending.push(PendingInstance {
+                    express_id: element.express_id,
+                    flags: element.flags,
+                    part: part.clone(),
+                    transform: instance.transform,
+                    accepted,
+                });
                 continue;
             }
+            self.push_part(element.express_id, element.flags, part);
+        }
+    }
+
+    /// Closes the batch: a shape with at least `MIN_BATCH_INSTANCES` copies here is drawn by
+    /// instances, the others' copies are merged as plain records, and shapes the batch took but
+    /// draws no instance of go back to the registry for a later batch.
+    pub(crate) fn finish(mut self, shapes: &mut ShapeRegistry) -> Batch {
+        let pending = std::mem::take(&mut self.pending);
+        let mut copies: HashMap<u32, usize> = HashMap::new();
+        for candidate in &pending {
+            *copies.entry(candidate.accepted.shape_id).or_insert(0) += 1;
+        }
+        let drawn = |shape_id: u32| copies.get(&shape_id).is_some_and(|count| *count >= MIN_BATCH_INSTANCES);
+        let origin = DVec3::from_array(self.origin);
+        for candidate in pending {
+            if !drawn(candidate.accepted.shape_id) {
+                self.push_part(candidate.express_id, candidate.flags, &candidate.part);
+                continue;
+            }
+            let accepted = &candidate.accepted;
+            let mut flags = candidate.flags;
+            if candidate.part.rgba & 0xFF != 0xFF {
+                flags |= FLAG_TRANSPARENT;
+            }
+            if accepted.closed {
+                flags |= FLAG_CLOSED;
+            }
+            // The shape travels re-centred on its own box: move the matrix to match.
+            let columns = instance_columns(&(candidate.transform * DMat4::from_translation(accepted.centre)), origin);
+            self.instance_table.extend_from_slice(&[candidate.express_id, accepted.shape_id, candidate.part.rgba, flags]);
+            self.instance_transforms.extend_from_slice(&columns);
+            let (min, max) = transformed_box(accepted.min, accepted.max, &columns);
+            self.draw(min, max);
+        }
+        let (kept, returned): (Vec<ShapeData>, Vec<ShapeData>) =
+            std::mem::take(&mut self.shapes).into_iter().partition(|shape| drawn(shape.shape_id));
+        self.shapes = kept;
+        for shape in returned {
+            shapes.give_back(shape);
+        }
+        self
+    }
+
+    /// A part drawn as plain geometry: its vertices, triangles and a record.
+    fn push_part(&mut self, express_id: u32, element_flags: u32, part: &Part) {
+        let origin = DVec3::from_array(self.origin);
+        {
             let first_vertex = (self.positions.len() / 3) as u32;
             let first_index = self.indices.len() as u32;
             for position in &part.positions {
@@ -128,7 +189,7 @@ impl Batch {
             }
             self.indices.extend(part.indices.iter().map(|index| first_vertex + index));
 
-            let mut flags = element.flags;
+            let mut flags = element_flags;
             if part.rgba & 0xFF != 0xFF {
                 flags |= FLAG_TRANSPARENT;
             }
@@ -136,7 +197,7 @@ impl Batch {
                 flags |= FLAG_CLOSED;
             }
             self.mesh_table.extend_from_slice(&[
-                element.express_id,
+                express_id,
                 first_vertex,
                 part.positions.len() as u32,
                 first_index,
@@ -182,8 +243,14 @@ fn transformed_box(min: [f32; 3], max: [f32; 3], m: &[f32; 12]) -> ([f32; 3], [f
     (low.map(down), high.map(up))
 }
 
+/// Whether a shape has enough triangles to be drawn by instances (`MIN_INSTANCE_TRIANGLES`).
+#[allow(clippy::absurd_extreme_comparisons)]
+fn big_enough(triangles: usize) -> bool {
+    triangles >= MIN_INSTANCE_TRIANGLES
+}
+
 /// A part that may be drawn as an instance of a shared shape, if its batch accepts it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct PartInstance {
     /// The leaf representation item: the shape's key.
     key: u32,
@@ -191,6 +258,7 @@ struct PartInstance {
 }
 
 /// What `ShapeRegistry::accept` gives the batch.
+#[derive(Debug, Clone, PartialEq)]
 struct Accepted {
     shape_id: u32,
     /// Where the shape's own coordinates were before it was re-centred.
@@ -235,7 +303,7 @@ impl ShapeRegistry {
         if let Some(entry) = self.entries.get(&key) {
             return entry.as_ref().is_some_and(|entry| entry.triangles == triangles);
         }
-        let entry = shape_data(shape).map(|(mut data, centre)| {
+        let entry = shape_data(shape).filter(|(data, _)| big_enough(data.indices.len() / 3)).map(|(mut data, centre)| {
             self.next_id += 1;
             data.shape_id = self.next_id;
             data.closed = closed;
@@ -246,6 +314,14 @@ impl ShapeRegistry {
         let usable = entry.as_ref().is_some_and(|entry| entry.triangles == triangles);
         self.entries.insert(key, entry);
         usable
+    }
+
+    /// A shape a batch took but drew no instance of: the next batch that accepts one takes it.
+    fn give_back(&mut self, data: ShapeData) {
+        let entry = self.entries.values_mut().flatten().find(|entry| entry.shape_id == data.shape_id);
+        if let Some(entry) = entry {
+            entry.pending = Some(data);
+        }
     }
 
     /// Whether this batch draws the part as an instance. The first batch to accept a shape takes
@@ -325,6 +401,7 @@ fn f32_determinant(transform: &DMat4) -> f64 {
 }
 
 /// One mesh of an element, with its sharp edges split so each vertex has one normal.
+#[derive(Debug, Clone, PartialEq)]
 struct Part {
     positions: Vec<DVec3>,
     normals: Vec<Vec3>,
@@ -654,7 +731,13 @@ impl GeometryStream {
     }
 
     /// The next batch, or `None` when every element has been processed.
-    pub fn next_batch(
+    pub fn next_batch(&mut self, evaluator: &mut ModelEvaluator<'_>, max_triangles: usize) -> Option<Batch> {
+        let batch = self.next_open_batch(evaluator, max_triangles)?;
+        Some(batch.finish(&mut self.shapes))
+    }
+
+    /// The next batch, its instances not yet decided.
+    fn next_open_batch(
         &mut self,
         evaluator: &mut ModelEvaluator<'_>,
         max_triangles: usize,

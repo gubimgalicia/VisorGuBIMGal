@@ -249,6 +249,28 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
 2. **Lotes que no caben en 16 bits** (infraestructura lineal, y los lotes de 1,01 a 1,22 mm): **vuelven a `f32`**, como propone §3. No se parten.
 3. **`MIN_INSTANCE_USES` = 2**, confirmado.
 
+## 7b. Medido tras construir A13 (T-158, 2026-11-20): memoria frente a tiempo de fotograma
+
+**A13 tal como está aprobado no debe fusionarse sin decidir esto.** Reduce la memoria de GPU, pero en este equipo (Intel UHD 630) alarga el fotograma. Medido con `scripts/bench/frame-time.mjs` (WebGL2: consulta de tiempo de GPU; WebGPU: de inicio a `onSubmittedWorkDone`) y `scripts/bench/gpu-bytes.mjs`, con el mismo renderizador y el kernel con y sin instancias:
+
+| Variante | Fontanería de la clínica: GPU, fotograma WebGL2 / WebGPU | Esplanades: GPU, fotograma WebGL2 / WebGPU |
+|---|---|---|
+| Sin instancias (A11 sola) | 139,7 MB, 19,9 / 26,3 ms | 5,9 MB, 2,2 / 6,0 ms |
+| Revisión 4: toda forma con 2 usos o más | 20,2 MB, 38,4 / 34,7 ms | 2,7 MB, 14,9 / 17,8 ms |
+| Solo formas de 32 triángulos o más | 20,5 MB, 38,6 ms / — | 5,1 MB, 3,1 ms / — |
+| Solo formas de 128 triángulos o más | 24,9 MB, 36,3 / 30,6 ms | 5,9 MB, 2,2 / 6,5 ms |
+| 4 copias o más de la forma en el mismo lote | 84,7 MB, 26,5 ms / — | 3,2 MB, 10,3 ms / — |
+| 32 triángulos y 4 copias por lote | 84,7 MB, 27,9 ms / — | 5,2 MB, 3,0 ms / — |
+
+- **Formas pequeñas:** cada rango de instancias es una llamada de dibujo. En Esplanades, 689 formas pequeñas con unas 11 copias cada una se convierten en miles de llamadas. Un mínimo de 32 triángulos por forma lo arregla (3,1 ms) y conserva casi todo el ahorro donde importa.
+- **Formas grandes (fontanería):** con cualquier umbral el fotograma sigue un 35-90 % por encima. La causa más probable es lo que lee cada vértice instanciado: además de sus 12 bytes en `q16`, los 88 bytes de su instancia en WebGL2 (filas de la matriz, filas de la normal y registro), o 96 de almacenamiento en WebGPU. A12 midió que este hardware está limitado precisamente por la lectura de vértices.
+- **Propuestas a evaluar (revisión 5):**
+  1. Datos por instancia más ligeros: solo filas y registro (52 bytes), con la matriz normal calculada en el sombreador.
+  2. Un mínimo de triángulos por forma, en torno a 32.
+  3. Medir otra vez en una GPU dedicada antes de decidir.
+- **Mandos en el código** (`crates/wasm-api/src/batches.rs`): `MIN_INSTANCE_TRIANGLES` (0) y `MIN_BATCH_INSTANCES` (1). Con esos valores la salida es idéntica byte a byte a la de la revisión 4 (`check-identical`, ahora también con formas e instancias).
+- Decide Nick, tras la revisión de Gemini.
+
 ## 8. Cambios respecto a las revisiones anteriores
 
 ### Revisión 4: ACK de Gemini (T-152, 2026-11-19)
