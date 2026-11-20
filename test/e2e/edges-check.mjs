@@ -149,7 +149,8 @@ try {
 } catch (error) {
   check('HARNESS', false, String(error?.stack ?? error));
 } finally {
-  try { await cdp.send('Browser.close'); } catch {}
+  // The browser may close before it answers: never wait on that reply for long.
+  await Promise.race([cdp.send('Browser.close').catch(() => {}), sleep(2000)]);
   try { proc.kill(); } catch {}
 }
 const passed = results.filter(Boolean).length;

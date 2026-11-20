@@ -2,7 +2,7 @@
 // the same element details the properties panel shows, so the two versions match by GlobalId.
 // node --experimental-strip-types test/t162-snapshots-test.mjs
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { diffModels } from '../src/domain/compare/modelDiff.ts';
@@ -54,10 +54,12 @@ check('ManySimpleWalls has one snapshot per drawn product, ascending', () => {
 
 // The panel's own text (src/ui/components/PropertiesPanel.tsx) from the details it is given, so a
 // snapshot cannot drift from what the user reads. A key repeated across sets keeps the last value.
-const DUPLEX = path.join(REPO, '../guBIM-wt-claude/test/models/bench/Duplex_A_20110907.ifc');
-check('every snapshot reads as the properties panel: SimpleWall, ManySimpleWalls, Duplex', () => {
+// Duplex is a real model, fetched by node scripts/fetch-models.mjs --bench; CI does not have it.
+const DUPLEX = path.join(REPO, 'test/models/bench/Duplex_A_20110907.ifc');
+const panelFiles = [path.join(REPO, 'public/samples/SimpleWall.ifc'), path.join(REPO, 'public/samples/ManySimpleWalls.ifc'), DUPLEX].filter((file) => existsSync(file));
+check(`every snapshot reads as the properties panel: ${panelFiles.map((file) => path.basename(file, '.ifc')).join(', ')}`, () => {
   let compared = 0;
-  for (const file of [path.join(REPO, 'public/samples/SimpleWall.ifc'), path.join(REPO, 'public/samples/ManySimpleWalls.ifc'), DUPLEX]) {
+  for (const file of panelFiles) {
     const model = open(file);
     const snapshots = JSON.parse(model.elementSnapshotsJson());
     assert.ok(snapshots.length > 0, file);
