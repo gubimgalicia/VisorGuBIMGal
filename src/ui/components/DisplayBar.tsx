@@ -7,6 +7,7 @@ import {
   type DisplayRule,
   type DisplayTarget
 } from '../viewer/displayRule';
+import { t } from '../i18n';
 
 interface DisplayBarProps {
   classes: ClassCount[];
@@ -48,12 +49,12 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           className="select display-class"
           value={classType}
           onChange={(event) => setChosenClass(event.target.value)}
-          title="Clase IFC"
+          title={t('display.classTitle')}
         >
-          <option value="">Clase IFC…</option>
+          <option value="">{t('display.classPlaceholder')}</option>
           {classes.map((item) => (
             <option key={item.type} value={item.type}>
-              {item.type} ({item.count})
+              {t('display.classOption', { type: item.type, count: item.count })}
             </option>
           ))}
         </select>
@@ -62,7 +63,7 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           className="btn btn-ghost btn-icon display-isolate-class"
           disabled={!classTarget}
           onClick={() => classTarget && onIsolate(classTarget)}
-          title="Aislar la clase"
+          title={t('display.isolateClassTitle')}
         >
           <Focus size={14} />
         </button>
@@ -71,20 +72,20 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           className="btn btn-ghost btn-icon display-hide-class"
           disabled={!classTarget}
           onClick={() => classTarget && onHide(classTarget)}
-          title="Ocultar la clase"
+          title={t('display.hideClassTitle')}
         >
           <EyeOff size={14} />
         </button>
       </div>
 
       <div className="display-bar-row">
-        <span className="display-bar-label">Selección</span>
+        <span className="display-bar-label">{t('display.selectionLabel')}</span>
         <button
           type="button"
           className="btn btn-ghost btn-icon display-isolate-selection"
           disabled={!selectionTarget}
           onClick={() => selectionTarget && onIsolate(selectionTarget)}
-          title="Aislar la selección"
+          title={t('display.isolateSelectionTitle')}
         >
           <Focus size={14} />
         </button>
@@ -93,7 +94,7 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           className="btn btn-ghost btn-icon display-hide-selection"
           disabled={!selectionTarget}
           onClick={() => selectionTarget && onHide(selectionTarget)}
-          title="Ocultar la selección"
+          title={t('display.hideSelectionTitle')}
         >
           <EyeOff size={14} />
         </button>
@@ -103,7 +104,7 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           className={`btn btn-ghost btn-icon display-ghost ${rule.ghost ? 'active' : ''}`}
           aria-pressed={rule.ghost}
           onClick={onToggleGhost}
-          title="Modo fantasma: lo que queda fuera del aislamiento se ve translúcido"
+          title={t('display.ghostTitle')}
         >
           <Ghost size={14} />
         </button>
@@ -112,7 +113,7 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
           className="btn btn-ghost btn-icon display-show-all"
           disabled={!active}
           onClick={onShowAll}
-          title="Mostrar todo"
+          title={t('display.showAllTitle')}
         >
           <Eye size={14} />
         </button>
@@ -122,8 +123,11 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
         <div className="display-bar-row">
           <span className="display-bar-label">
             {isExportingGlb && glbProgress
-              ? `GLB (${glbProgress.completed}/${glbProgress.total})`
-              : 'Escena 3D'}
+              ? t('display.glbProgressLabel', {
+                  completed: glbProgress.completed,
+                  total: glbProgress.total
+                })
+              : t('display.scene3dLabel')}
           </span>
           {isExportingGlb && onCancelGlb ? (
             <button
@@ -131,10 +135,10 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
               className="btn btn-secondary btn-sm gltf-cancel-btn"
               style={{ whiteSpace: 'nowrap' }}
               onClick={onCancelGlb}
-              title="Cancelar exportación GLB"
+              title={t('display.cancelGlbTitle')}
             >
               <X size={12} />
-              <span>Cancelar</span>
+              <span>{t('common.cancel')}</span>
             </button>
           ) : (
             <button
@@ -143,10 +147,10 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
               style={{ whiteSpace: 'nowrap' }}
               disabled={isExportingGlb}
               onClick={onExportGlb}
-              title="Exportar la escena visible a glTF binario (.glb)"
+              title={t('display.exportGlbTitle')}
             >
               <Download size={12} />
-              <span>Exportar GLB</span>
+              <span>{t('display.exportGlbLabel')}</span>
             </button>
           )}
         </div>
@@ -154,9 +158,13 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
 
       {active && (
         <div className="display-bar-status">
-          {rule.isolate && <div>Aislado: {describeTarget(rule.isolate)}</div>}
+          {rule.isolate && <div>{t('display.isolatedStatus', { target: describeTarget(rule.isolate) })}</div>}
           {rule.hidden.length > 0 && (
-            <div>Oculto: {rule.hidden.map(describeTarget).join(', ')}</div>
+            <div>
+              {t('display.hiddenStatus', {
+                targets: rule.hidden.map(describeTarget).join(', ')
+              })}
+            </div>
           )}
         </div>
       )}

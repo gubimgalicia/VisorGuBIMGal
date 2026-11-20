@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ColorByMode, ColorLegendItem } from '../viewer/colorByProperty';
+import { t } from '../i18n';
 
 interface ColorByBarProps {
   mode: ColorByMode;
@@ -22,21 +23,21 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
     <div
       className="display-bar color-by-bar"
       role="region"
-      aria-label="Color por propiedad y leyenda"
+      aria-label={t('colorBy.regionAriaLabel')}
     >
       <div className="display-bar-row">
-        <span className="display-bar-label">Color</span>
+        <span className="display-bar-label">{t('colorBy.label')}</span>
         <select
           className="select color-by-select"
           value={mode}
           onChange={(e) => onChangeMode(e.target.value as ColorByMode)}
-          title="Colorear elementos por clase, planta, material o propiedad"
+          title={t('colorBy.selectTitle')}
         >
-          <option value="none">Original IFC</option>
-          <option value="class">Por clase IFC</option>
-          <option value="storey">Por planta</option>
-          <option value="material">Por material</option>
-          <option value="property">Por propiedad…</option>
+          <option value="none">{t('colorBy.modeNone')}</option>
+          <option value="class">{t('colorBy.modeClass')}</option>
+          <option value="storey">{t('colorBy.modeStorey')}</option>
+          <option value="material">{t('colorBy.modeMaterial')}</option>
+          <option value="property">{t('colorBy.modeProperty')}</option>
         </select>
       </div>
 
@@ -48,7 +49,7 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
             list="color-prop-suggestions"
             value={propertyName}
             onChange={(e) => onChangePropertyName(e.target.value)}
-            placeholder="Propiedad (ej. Name, IsExternal)"
+            placeholder={t('colorBy.propertyPlaceholder')}
             style={{
               flex: 1,
               minWidth: 0,

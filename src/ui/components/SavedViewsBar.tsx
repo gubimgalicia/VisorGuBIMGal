@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BookmarkPlus, X } from 'lucide-react';
 import type { SavedView } from '../viewer/savedViews';
+import { t } from '../i18n';
 
 interface SavedViewsBarProps {
   views: readonly SavedView[];
@@ -27,11 +28,11 @@ export const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
   return (
     <div className="saved-views-bar">
       <div className="display-bar-row">
-        <span className="display-bar-label">Vistas</span>
+        <span className="display-bar-label">{t('savedViews.label')}</span>
         <input
           type="text"
           className="select saved-view-name"
-          placeholder={`Vista ${nextIndex}`}
+          placeholder={t('savedViews.defaultName', { index: nextIndex })}
           value={name}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
@@ -40,13 +41,13 @@ export const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
               handleSave();
             }
           }}
-          title="Nombre de la vista guardada"
+          title={t('savedViews.nameTitle')}
         />
         <button
           type="button"
           className="btn btn-ghost btn-icon saved-view-add"
           onClick={handleSave}
-          title="Guardar la vista actual (cámara, visibilidad, corte y selección)"
+          title={t('savedViews.saveTitle')}
         >
           <BookmarkPlus size={14} />
         </button>
@@ -60,7 +61,7 @@ export const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
                 type="button"
                 className="saved-view-apply"
                 onClick={() => onApply(view)}
-                title={`Restaurar ${view.name}`}
+                title={t('savedViews.applyTitle', { name: view.name })}
               >
                 {view.name}
               </button>
@@ -68,7 +69,7 @@ export const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
                 type="button"
                 className="btn btn-ghost btn-icon saved-view-delete"
                 onClick={() => onDelete(view.id)}
-                title={`Borrar ${view.name}`}
+                title={t('savedViews.deleteTitle', { name: view.name })}
               >
                 <X size={12} />
               </button>
