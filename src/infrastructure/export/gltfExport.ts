@@ -132,21 +132,30 @@ export function effectiveExportRgba(
  * Extracts per-element base RGBA color and kernel flags from a `GeometryBatch.meshTable`
  * (`7` `u32` words per record) into a `Map<expressId, ElementBatchMeta>`.
  */
+/**
+ * Each element's base colour and flags, from a batch's records and, since A13, its instances
+ * (four words each: expressId, shapeId, rgba, flags): an element drawn only by instances, a
+ * repeated door or fitting, would otherwise be left out of the GLB (docs/09 section 2).
+ */
 export function extractBatchElementMeta(
   meshTable: Uint32Array,
-  target: Map<number, ElementBatchMeta> = new Map()
+  target: Map<number, ElementBatchMeta> = new Map(),
+  instanceTable: Uint32Array = new Uint32Array(0)
 ): Map<number, ElementBatchMeta> {
-  for (let base = 0; base + MESH_RECORD_WORDS <= meshTable.length; base += MESH_RECORD_WORDS) {
-    const expressId = meshTable[base + FIELD_EXPRESS_ID] >>> 0;
-    if (expressId === 0) continue;
-    const rgba = meshTable[base + FIELD_RGBA] >>> 0;
-    const flags = meshTable[base + FIELD_FLAGS] >>> 0;
+  const add = (expressId: number, rgba: number, flags: number) => {
+    if (expressId === 0) return;
     const existing = target.get(expressId);
     if (!existing) {
       target.set(expressId, { baseRgba: rgba, flags });
     } else {
       existing.flags = (existing.flags | flags) >>> 0;
     }
+  };
+  for (let base = 0; base + MESH_RECORD_WORDS <= meshTable.length; base += MESH_RECORD_WORDS) {
+    add(meshTable[base + FIELD_EXPRESS_ID] >>> 0, meshTable[base + FIELD_RGBA] >>> 0, meshTable[base + FIELD_FLAGS] >>> 0);
+  }
+  for (let base = 0; base + 4 <= instanceTable.length; base += 4) {
+    add(instanceTable[base] >>> 0, instanceTable[base + 2] >>> 0, instanceTable[base + 3] >>> 0);
   }
   return target;
 }

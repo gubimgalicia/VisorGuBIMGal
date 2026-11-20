@@ -38,8 +38,22 @@ const check = (name, fn) => {
 
 const model = new Model(readFileSync(path.join(REPO, 'public/samples/ManySimpleWalls.ifc')));
 model.startStream();
-const real = { modelId: 'm', sequence: 1, ...takeBatch(model.nextBatch(65536)) };
+const streamed = { modelId: 'm', sequence: 1, ...takeBatch(model.nextBatch(65536)) };
 model.free();
+// Since A13 this batch also draws its doors by instances, so its box covers more than its own
+// vertices. The rules below are about the batch's own vertices: keep those alone, with box set
+// back to quantBox as a batch without instances has it. Instances get their own cases further down.
+const real = {
+  ...streamed,
+  box: { min: [...streamed.quantBox.min], max: [...streamed.quantBox.max] },
+  shapes: [],
+  instanceTable: new Uint32Array(0),
+  instanceTransforms: new Float32Array(0)
+};
+check('the streamed batch, with its shapes and instances, passes', () => {
+  assert.ok(streamed.instanceTable.length > 0, 'ManySimpleWalls draws its doors by instances');
+  assert.equal(findBatchError(streamed), null);
+});
 
 /** A deep copy, so each mutant starts clean. */
 const copy = (batch) => ({
@@ -292,4 +306,4 @@ check('cache: a batch record cut short is refused as corrupt', () => {
   assert.throws(() => CacheReader.open(file, identity, 3000), CacheCorrupt);
 });
 
-console.log(`\nt153-contract-test: ${passed}/14 pass`);
+console.log(`\nt153-contract-test: ${passed}/15 pass`);

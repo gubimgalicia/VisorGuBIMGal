@@ -155,6 +155,77 @@ fn vs_ghost_q16(
   return shade(q16Position(q, batchIdx), octNormal(oct), q.w, batchIdx, true);
 }
 
+// A13: instances of a shared shape. Each batch's block starts with its index in batches[] (kept
+// current by the renderer: docs/05 section 3) and holds one entry per instance, in draw order: the
+// matrix rows (shape to batch-local), the inverse-transpose rows for normals, and the record.
+struct InstanceGpu {
+  row0: vec4<f32>,
+  row1: vec4<f32>,
+  row2: vec4<f32>,
+  n0: vec3<f32>,
+  n1: vec3<f32>,
+  n2: vec3<f32>,
+  record: u32,
+};
+
+struct InstanceBlock {
+  batchIdx: u32,
+  pad0: u32,
+  pad1: u32,
+  pad2: u32,
+  items: array<InstanceGpu>,
+};
+
+// The shape's grid, for q16 shapes.
+struct ShapeGrid {
+  gridMin: vec3<f32>,
+  pad0: u32,
+  gridMax: vec3<f32>,
+  pad1: u32,
+};
+
+@group(1) @binding(0) var<storage, read> instanceBlock: InstanceBlock;
+@group(1) @binding(1) var<uniform> shapeGrid: ShapeGrid;
+
+fn placedPosition(local: vec3<f32>, it: InstanceGpu) -> vec3<f32> {
+  let p = vec4<f32>(local, 1.0);
+  return vec3<f32>(dot(it.row0, p), dot(it.row1, p), dot(it.row2, p));
+}
+
+// Normalised after the inverse transpose: a shape scaled from mm to m would otherwise come out
+// 1000 long, saturating worldUpZ and bending the interpolation (docs/09 section 2).
+fn placedNormal(local: vec3<f32>, it: InstanceGpu) -> vec3<f32> {
+  return normalize(vec3<f32>(dot(it.n0, local), dot(it.n1, local), dot(it.n2, local)));
+}
+
+fn shapeQ16Position(q: vec4<u32>) -> vec3<f32> {
+  return shapeGrid.gridMin + vec3<f32>(q.xyz) / 65535.0 * (shapeGrid.gridMax - shapeGrid.gridMin);
+}
+
+@vertex
+fn vs_main_inst(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @builtin(instance_index) ii: u32) -> ColorVaryings {
+  let it = instanceBlock.items[ii];
+  return shade(placedPosition(pos, it), placedNormal(normal, it), it.record, instanceBlock.batchIdx, false);
+}
+
+@vertex
+fn vs_ghost_inst(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @builtin(instance_index) ii: u32) -> ColorVaryings {
+  let it = instanceBlock.items[ii];
+  return shade(placedPosition(pos, it), placedNormal(normal, it), it.record, instanceBlock.batchIdx, true);
+}
+
+@vertex
+fn vs_main_inst_q16(@location(0) q: vec4<u32>, @location(1) oct: vec2<f32>, @builtin(instance_index) ii: u32) -> ColorVaryings {
+  let it = instanceBlock.items[ii];
+  return shade(placedPosition(shapeQ16Position(q), it), placedNormal(octNormal(oct), it), it.record, instanceBlock.batchIdx, false);
+}
+
+@vertex
+fn vs_ghost_inst_q16(@location(0) q: vec4<u32>, @location(1) oct: vec2<f32>, @builtin(instance_index) ii: u32) -> ColorVaryings {
+  let it = instanceBlock.items[ii];
+  return shade(placedPosition(shapeQ16Position(q), it), placedNormal(octNormal(oct), it), it.record, instanceBlock.batchIdx, true);
+}
+
 @fragment
 fn fs_main(in: ColorVaryings) -> @location(0) vec4<f32> {
   if (sectioned(in.relPos)) {
@@ -198,6 +269,18 @@ fn vs_pick_q16(
   @builtin(instance_index) batchIdx: u32
 ) -> PickVaryings {
   return pickVertex(q16Position(q, batchIdx), q.w, batchIdx);
+}
+
+@vertex
+fn vs_pick_inst(@location(0) pos: vec3<f32>, @location(1) _normal: vec3<f32>, @builtin(instance_index) ii: u32) -> PickVaryings {
+  let it = instanceBlock.items[ii];
+  return pickVertex(placedPosition(pos, it), it.record, instanceBlock.batchIdx);
+}
+
+@vertex
+fn vs_pick_inst_q16(@location(0) q: vec4<u32>, @location(1) _oct: vec2<f32>, @builtin(instance_index) ii: u32) -> PickVaryings {
+  let it = instanceBlock.items[ii];
+  return pickVertex(placedPosition(shapeQ16Position(q), it), it.record, instanceBlock.batchIdx);
 }
 
 fn pickVertex(pos: vec3<f32>, localRecordIdx: u32, batchIdx: u32) -> PickVaryings {

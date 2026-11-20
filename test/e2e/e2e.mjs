@@ -495,7 +495,9 @@ try {
     const facePt = thin === 1 ? [cx, faceCoord, box.min[2] + 3] : [faceCoord, cy, box.min[2] + 3];
     const fpx = await evaluate(`__t.R().project(${JSON.stringify(facePt)})`);
     await canvasClick(fpx.x, fpx.y);
-    await sleep(300);
+    // WebGPU answers a pick asynchronously: wait for the summary to show the new, vertical face
+    // (a horizontal look) instead of a fixed delay, which a busy machine outruns.
+    await waitFor(`/Mirada: \\([-\\d.]+, [-\\d.]+, -?0\\.000\\)/.test(document.querySelector('.dxf-face-summary')?.textContent ?? '')`, 5000, 'vertical face summary');
     await evaluate(`__t.setInput(${offsetInput}, 0.1), __t.frames(2)`);
     await evaluate(`document.querySelector('.dxf-generate-btn').click()`);
     await waitFor(`window.__lastDrawing && window.__lastDrawing.cut.normal[2] === 0`, 20000, 'vertical drawing');

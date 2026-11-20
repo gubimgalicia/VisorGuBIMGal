@@ -377,7 +377,7 @@ export default function App() {
 
         for await (const event of kernel.streamGeometry(modelId)) {
           if (event.type === 'batch') {
-            extractBatchElementMeta(event.batch.meshTable, batchMetaMap);
+            extractBatchElementMeta(event.batch.meshTable, batchMetaMap, event.batch.instanceTable);
             renderer.addBatch(event.batch);
           } else if (event.type === 'progress') {
             setStatusText(`Cargadas ${event.processedElements} mallas 3D...`);

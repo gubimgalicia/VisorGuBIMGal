@@ -17,6 +17,7 @@ registerHooks({
   }
 });
 const { planInstances, instanceRows, packInstances } = await import('../src/infrastructure/renderer/instances.ts');
+const { extractBatchElementMeta } = await import('../src/infrastructure/export/gltfExport.ts');
 
 let passed = 0;
 const check = (name, fn) => {
@@ -109,4 +110,12 @@ check('WebGL2 layout: 88 bytes per instance, normal rows at 48, 60, 72, record a
   });
 });
 
-console.log(`\nt158-instances-test: ${passed}/6 pass`);
+check('GLB metadata includes an element drawn only by instances', () => {
+  const records = new Uint32Array([5, 0, 3, 0, 3, 0xff0000ff, 0]);
+  const instances = new Uint32Array([9, 1, 0x00ff00ff, 8, 9, 1, 0x00ff00ff, 2]);
+  const meta = extractBatchElementMeta(records, new Map(), instances);
+  assert.deepEqual(meta.get(5), { baseRgba: 0xff0000ff, flags: 0 });
+  assert.deepEqual(meta.get(9), { baseRgba: 0x00ff00ff, flags: 10 });
+});
+
+console.log(`\nt158-instances-test: ${passed}/7 pass`);

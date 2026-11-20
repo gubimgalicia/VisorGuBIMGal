@@ -4,9 +4,13 @@ import {
   MeshField,
   findBatchError,
   vertexCountOf,
+  InstanceField,
+  INSTANCE_WORDS,
   type GeometryBatch,
+  type ShapeDef,
   type VertexFormat
 } from '../../domain/kernel/GeometryBatch';
+import { packInstances, planInstances, type InstanceRange } from './instances';
 import type {
   CameraPose,
   CameraProjection,
@@ -64,7 +68,33 @@ interface GpuBatchEntry {
   opaqueIndexBuffer: GPUBuffer | null;
   transparentIndexBuffer: GPUBuffer | null;
   gpuBytes: number;
+  /** A13: the batch's instance block (16-byte header, then 96 bytes per instance), or null. */
+  instanceBuffer: GPUBuffer | null;
+  instanceRanges: InstanceRange[];
+  /** One per shape the batch draws: its instance block and the shape's grid. */
+  instanceBindGroups: Map<number, GPUBindGroup>;
+  /** The batch index last written into the block's header; -1 until the first frame. */
+  instanceHeader: number;
+  instanceCount: number;
 }
+
+/** A shared shape on the GPU, kept per model until removeModel (A13). */
+interface GpuShape {
+  vertexFormat: VertexFormat;
+  positionBuffer: GPUBuffer;
+  normalBuffer: GPUBuffer;
+  indexBuffer: GPUBuffer;
+  indexFormat: GPUIndexFormat;
+  indexCount: number;
+  closed: boolean;
+  /** min, pad, max, pad: the q16 grid. */
+  gridBuffer: GPUBuffer;
+  gpuBytes: number;
+}
+
+/** Bytes of one instance in the block, after the 16-byte header. */
+const INSTANCE_GPU_BYTES = 96;
+const INSTANCE_HEADER_BYTES = 16;
 
 /** The pipelines of one vertex format. */
 interface PipelineSet {
@@ -88,6 +118,8 @@ interface ModelEntry extends DisplayState {
   batches: GpuBatchEntry[];
   /** Maps expressId -> list of record indices (0..recordCount-1) within this model. */
   expressIdToRecords: Map<number, number[]>;
+  /** A13: shapes the stream has sent, by shapeId; also the knownShapes of findBatchError. */
+  shapes: Map<number, GpuShape>;
   /** Starting record index in the global GPU record buffer. */
   recordBaseOffset: number;
   /** The kernel's 'complete' bounds, set by finishModel; not valid while the model streams. */
@@ -129,7 +161,9 @@ export class WebGpuRenderer implements RendererPort {
 
   private bindGroupLayout: GPUBindGroupLayout | null = null;
   private sceneBindGroup: GPUBindGroup | null = null;
-  private pipelines: Record<VertexFormat, PipelineSet> | null = null;
+  /** f32, q16, and their instanced forms f32i, q16i. */
+  private pipelines: Record<'f32' | 'q16' | 'f32i' | 'q16i', PipelineSet> | null = null;
+  private instanceBindGroupLayout: GPUBindGroupLayout | null = null;
 
   private sceneUniformBuffer: GPUBuffer | null = null;
   private batchGpuBuffer: GPUBuffer | null = null;
@@ -349,16 +383,34 @@ export class WebGpuRenderer implements RendererPort {
         attributes: [{ format: 'snorm16x2', offset: 0, shaderLocation: 1 }]
       }
     ];
-    const layouts = { f32: { buffers: f32Buffers, suffix: '' }, q16: { buffers: q16Buffers, suffix: '_q16' } };
-    const sets = {} as Record<VertexFormat, PipelineSet>;
-    for (const format of ['f32', 'q16'] as const) {
-      const { buffers: vertexBuffers, suffix } = layouts[format];
+    // Instanced pipelines (A13) add @group(1): the batch's instance block and the shape's grid.
+    this.instanceBindGroupLayout = device.createBindGroupLayout({
+      label: 'gubim-instance-bgl',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
+      ]
+    });
+    const instancedLayout = device.createPipelineLayout({
+      label: 'gubim-instanced-pipeline-layout',
+      bindGroupLayouts: [this.bindGroupLayout, this.instanceBindGroupLayout]
+    });
+    const layouts = {
+      f32: { buffers: f32Buffers, suffix: '', layout: pipelineLayout },
+      q16: { buffers: q16Buffers, suffix: '_q16', layout: pipelineLayout },
+      // A shape has no record buffer: the instance carries the record.
+      f32i: { buffers: f32Buffers.slice(0, 2), suffix: '_inst', layout: instancedLayout },
+      q16i: { buffers: q16Buffers, suffix: '_inst_q16', layout: instancedLayout }
+    };
+    const sets = {} as Record<'f32' | 'q16' | 'f32i' | 'q16i', PipelineSet>;
+    for (const format of ['f32', 'q16', 'f32i', 'q16i'] as const) {
+      const { buffers: vertexBuffers, suffix, layout: variantLayout } = layouts[format];
 
     // Closed meshes draw without their back faces, which never show from outside them.
     const opaquePipeline = (label: string, cullMode: 'none' | 'back'): GPURenderPipeline =>
       device.createRenderPipeline({
         label: label + suffix,
-        layout: pipelineLayout,
+        layout: variantLayout,
         vertex: {
           module: shaderModule,
           entryPoint: 'vs_main' + suffix,
@@ -384,7 +436,7 @@ export class WebGpuRenderer implements RendererPort {
     const blendedPipeline = (label: string, vertexEntryPoint: string): GPURenderPipeline =>
       device.createRenderPipeline({
         label: label + suffix,
-        layout: pipelineLayout,
+        layout: variantLayout,
         vertex: {
           module: shaderModule,
           entryPoint: vertexEntryPoint + suffix,
@@ -426,7 +478,7 @@ export class WebGpuRenderer implements RendererPort {
     const pickPipeline = (label: string, cullMode: 'none' | 'back'): GPURenderPipeline =>
       device.createRenderPipeline({
         label: label + suffix,
-        layout: pipelineLayout,
+        layout: variantLayout,
         vertex: {
           module: shaderModule,
           entryPoint: 'vs_pick' + suffix,
@@ -623,6 +675,7 @@ export class WebGpuRenderer implements RendererPort {
         baseRgba: [],
         colorOverrides: new Map(),
         expressIdToRecords: new Map(),
+        shapes: new Map(),
         displayEntries: new Map(),
         displayOthers: 'default',
         displayMayGhost: false,
@@ -676,7 +729,9 @@ export class WebGpuRenderer implements RendererPort {
     const q16 = batch.vertexFormat === 'q16';
     const vertexCount = vertexCountOf(batch.vertexFormat, positions);
     const recordCount = meshTable.length / MESH_RECORD_WORDS;
-    if (vertexCount === 0 || indices.length === 0 || recordCount === 0) {
+    const instanceCount = batch.instanceTable.length / INSTANCE_WORDS;
+    // A batch may hold only instances (A13); one with neither draws nothing.
+    if (recordCount === 0 && instanceCount === 0) {
       return;
     }
 
@@ -720,6 +775,28 @@ export class WebGpuRenderer implements RendererPort {
       }
       list.push(recIdxInModel);
     }
+
+    // A13: each instance gets a record after the batch's own, in draw order.
+    const plan = planInstances(batch.instanceTable);
+    plan.order.forEach((index, at) => {
+      const row = index * INSTANCE_WORDS;
+      const expressId = batch.instanceTable[row + InstanceField.expressId] >>> 0;
+      const rgba = batch.instanceTable[row + InstanceField.rgba] >>> 0;
+      const rawFlags = batch.instanceTable[row + InstanceField.flags] >>> 0;
+      const isSelected =
+        this.selectedRef !== null && this.selectedRef.modelId === model.modelId && this.selectedRef.expressId === expressId;
+      const stateFlags =
+        ((rawFlags & 0x7) | displayFlags(model, expressId, rawFlags) | (isSelected ? FLAG_SELECTED : 0)) >>> 0;
+      model.baseRgba!.push(rgba);
+      model.recordWords.push(expressId, model.numericId >>> 0, effectiveRgba(model, expressId, rgba), stateFlags);
+      let list = model.expressIdToRecords.get(expressId);
+      if (!list) {
+        list = [];
+        model.expressIdToRecords.set(expressId, list);
+      }
+      list.push(recordOffsetInModel + recordCount + at);
+    });
+    const totalRecords = recordCount + instanceCount;
 
     const posByteLen = Math.max(4, positions.byteLength);
     const positionBuffer = this.device.createBuffer({
@@ -779,7 +856,36 @@ export class WebGpuRenderer implements RendererPort {
     const transparentIndexBuffer = indexBuffer(groups.transparent);
     const indexGpuBytes = (opaqueIndexBuffer?.size ?? 0) + (transparentIndexBuffer?.size ?? 0);
 
-    const gpuBytes = positionBuffer.size + normalBuffer.size + (recordIndexBuffer?.size ?? 0) + indexGpuBytes;
+    for (const shape of batch.shapes) this.uploadShape(model, shape);
+    let instanceBuffer: GPUBuffer | null = null;
+    const instanceBindGroups = new Map<number, GPUBindGroup>();
+    if (instanceCount > 0 && this.instanceBindGroupLayout) {
+      // The header's batch index is written by updateGpuSceneTables, which knows it.
+      const data = packInstances(batch, plan, recordCount, 'webgpu', INSTANCE_HEADER_BYTES);
+      instanceBuffer = this.device.createBuffer({
+        size: data.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+      });
+      this.device.queue.writeBuffer(instanceBuffer, 0, data, 0, data.byteLength);
+      for (const range of plan.ranges) {
+        const shape = model.shapes.get(range.shapeId);
+        if (!shape || instanceBindGroups.has(range.shapeId)) continue;
+        instanceBindGroups.set(
+          range.shapeId,
+          this.device.createBindGroup({
+            label: 'gubim-instance-bg',
+            layout: this.instanceBindGroupLayout,
+            entries: [
+              { binding: 0, resource: { buffer: instanceBuffer } },
+              { binding: 1, resource: { buffer: shape.gridBuffer } }
+            ]
+          })
+        );
+      }
+    }
+
+    const gpuBytes =
+      positionBuffer.size + normalBuffer.size + (recordIndexBuffer?.size ?? 0) + indexGpuBytes + (instanceBuffer?.size ?? 0);
 
     const { min, max } = batch.box;
     const grid = batch.quantBox ?? batch.box;
@@ -793,7 +899,7 @@ export class WebGpuRenderer implements RendererPort {
       quantMax: [grid.max[0], grid.max[1], grid.max[2]],
       indexFormat,
       recordOffsetInModel,
-      recordCount,
+      recordCount: totalRecords,
       opaqueIndexCount: groups.opaque.length,
       closedIndexCount: groups.closedCount,
       transparentIndexCount: groups.transparent.length,
@@ -802,7 +908,12 @@ export class WebGpuRenderer implements RendererPort {
       recordIndexBuffer,
       opaqueIndexBuffer,
       transparentIndexBuffer,
-      gpuBytes
+      gpuBytes,
+      instanceBuffer,
+      instanceRanges: plan.ranges,
+      instanceBindGroups,
+      instanceHeader: -1,
+      instanceCount
     });
 
     // Records of the table's last model are appended; anything else moves models, so rebuild.
@@ -811,9 +922,81 @@ export class WebGpuRenderer implements RendererPort {
       model === this.recordTail &&
       model.recordBaseOffset + recordOffsetInModel === this.recordTotal
     ) {
-      this.recordTotal += recordCount;
+      this.recordTotal += totalRecords;
     } else {
       this.recordLayoutDirty = true;
+    }
+  }
+
+  /** A shape the stream sends once, kept on the GPU for the model's lifetime (A13). */
+  private uploadShape(model: ModelEntry, shape: ShapeDef): void {
+    if (!this.device || model.shapes.has(shape.shapeId)) return;
+    const device = this.device;
+    const upload = (data: Float32Array | Uint16Array | Int16Array | Uint32Array, usage: number): GPUBuffer => {
+      // writeBuffer moves whole 4-byte words: only 16-bit indices can fall short.
+      const source = data.byteLength % 4 === 0 ? data : padToWord(data as Uint16Array);
+      const buffer = device.createBuffer({ size: Math.max(4, source.byteLength), usage: usage | GPUBufferUsage.COPY_DST });
+      if (source.byteLength > 0) device.queue.writeBuffer(buffer, 0, source.buffer, source.byteOffset, source.byteLength);
+      return buffer;
+    };
+    const grid = new Float32Array(8);
+    grid.set(shape.box.min, 0);
+    grid.set(shape.box.max, 4);
+    const gridBuffer = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(gridBuffer, 0, grid.buffer, 0, 32);
+    const positionBuffer = upload(shape.positions, GPUBufferUsage.VERTEX);
+    const normalBuffer = upload(shape.normals, GPUBufferUsage.VERTEX);
+    const indexBuffer = upload(shape.indices, GPUBufferUsage.INDEX);
+    model.shapes.set(shape.shapeId, {
+      vertexFormat: shape.vertexFormat,
+      positionBuffer,
+      normalBuffer,
+      indexBuffer,
+      indexFormat: shape.indices instanceof Uint16Array ? 'uint16' : 'uint32',
+      indexCount: shape.indices.length,
+      closed: shape.closed,
+      gridBuffer,
+      gpuBytes: positionBuffer.size + normalBuffer.size + indexBuffer.size + gridBuffer.size
+    });
+  }
+
+  /**
+   * Draws a batch's instances for one pass, range by range: each range is one shape, opaque or
+   * transparent, in one call. Closed shapes cull back faces while no section plane is set.
+   */
+  private drawInstances(
+    pass: GPURenderPassEncoder,
+    model: ModelEntry,
+    batch: GpuBatchEntry,
+    kind: 'opaque' | 'transparent' | 'ghost' | 'pick'
+  ): void {
+    if (!this.pipelines || batch.instanceRanges.length === 0) return;
+    for (const range of batch.instanceRanges) {
+      if (kind === 'opaque' && range.transparent) continue;
+      if (kind === 'transparent' && !range.transparent) continue;
+      const shape = model.shapes.get(range.shapeId);
+      const group = batch.instanceBindGroups.get(range.shapeId);
+      if (!shape || !group) continue;
+      const set = this.pipelines[shape.vertexFormat === 'q16' ? 'q16i' : 'f32i'];
+      const cull = shape.closed && !range.transparent && this.sectionPlanes.length === 0;
+      const pipeline =
+        kind === 'ghost'
+          ? set.ghost
+          : kind === 'transparent'
+            ? set.transparent
+            : kind === 'pick'
+              ? cull
+                ? set.closedPick
+                : set.pick
+              : cull
+                ? set.closed
+                : set.opaque;
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(1, group);
+      pass.setVertexBuffer(0, shape.positionBuffer);
+      pass.setVertexBuffer(1, shape.normalBuffer);
+      pass.setIndexBuffer(shape.indexBuffer, shape.indexFormat);
+      pass.drawIndexed(shape.indexCount, range.count, 0, 0, range.first);
     }
   }
 
@@ -858,8 +1041,11 @@ export class WebGpuRenderer implements RendererPort {
       b.recordIndexBuffer?.destroy();
       b.opaqueIndexBuffer?.destroy();
       b.transparentIndexBuffer?.destroy();
+      b.instanceBuffer?.destroy();
     }
     model.batches.length = 0;
+    for (const shape of model.shapes.values()) destroyShape(shape);
+    model.shapes.clear();
 
     this.numToModelId.delete(model.numericId);
     this.models.delete(modelId);
@@ -1281,6 +1467,10 @@ export class WebGpuRenderer implements RendererPort {
         this.batchF32[base + 4] = batch.quantMin[0];
         this.batchF32[base + 5] = batch.quantMin[1];
         this.batchF32[base + 6] = batch.quantMin[2];
+        if (batch.instanceBuffer && batch.instanceHeader !== bIdx) {
+          this.device.queue.writeBuffer(batch.instanceBuffer, 0, new Uint32Array([bIdx]));
+          batch.instanceHeader = bIdx;
+        }
         this.batchF32[base + 8] = batch.quantMax[0];
         this.batchF32[base + 9] = batch.quantMax[1];
         this.batchF32[base + 10] = batch.quantMax[2];
@@ -1347,7 +1537,7 @@ export class WebGpuRenderer implements RendererPort {
           batchIdx++;
           continue;
         }
-        if (batch.transparentIndexCount > 0) {
+        if (batch.transparentIndexCount > 0 || batch.instanceRanges.some((range) => range.transparent)) {
           hasTransparent = true;
         }
         if (batch.opaqueIndexCount > 0 && batch.opaqueIndexBuffer) {
@@ -1355,6 +1545,7 @@ export class WebGpuRenderer implements RendererPort {
           setVertexBuffers(pass, batch);
           this.drawOpaque(pass, batch, batchIdx, set.closed, set.opaque);
         }
+        this.drawInstances(pass, model, batch, 'opaque');
         batchIdx++;
       }
     }
@@ -1374,6 +1565,7 @@ export class WebGpuRenderer implements RendererPort {
             pass.setIndexBuffer(batch.transparentIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.transparentIndexCount, 1, 0, 0, batchIdx);
           }
+          if (batch.inView) this.drawInstances(pass, model, batch, 'transparent');
           batchIdx++;
         }
       }
@@ -1402,6 +1594,7 @@ export class WebGpuRenderer implements RendererPort {
             pass.setIndexBuffer(batch.transparentIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.transparentIndexCount, 1, 0, 0, batchIdx);
           }
+          this.drawInstances(pass, model, batch, 'ghost');
           batchIdx++;
         }
       }
@@ -1571,6 +1764,7 @@ export class WebGpuRenderer implements RendererPort {
             pass.setIndexBuffer(batch.transparentIndexBuffer, batch.indexFormat);
             pass.drawIndexed(batch.transparentIndexCount, 1, 0, 0, batchIdx);
           }
+          this.drawInstances(pass, model, batch, 'pick');
           batchIdx++;
         }
       }
@@ -1649,6 +1843,7 @@ export class WebGpuRenderer implements RendererPort {
       recordCount += model.recordWords.length / 4;
       for (const b of model.batches) {
         liveGpuBuffers += b.recordIndexBuffer ? 3 : 2; // position, normal, and in f32 the record index
+        if (b.instanceBuffer) liveGpuBuffers++;
         if (b.opaqueIndexBuffer) liveGpuBuffers++;
         if (b.transparentIndexBuffer) liveGpuBuffers++;
         allocatedGpuBytes += b.gpuBytes;
@@ -1696,8 +1891,11 @@ export class WebGpuRenderer implements RendererPort {
         b.recordIndexBuffer?.destroy();
         b.opaqueIndexBuffer?.destroy();
         b.transparentIndexBuffer?.destroy();
+        b.instanceBuffer?.destroy();
       }
       model.batches.length = 0;
+      for (const shape of model.shapes.values()) destroyShape(shape);
+      model.shapes.clear();
       model.recordWords.length = 0;
       model.expressIdToRecords.clear();
     }
@@ -1768,4 +1966,12 @@ function padToWord(values: Uint32Array | Uint16Array): Uint16Array {
   const padded = new Uint16Array(values.length + 1);
   padded.set(values);
   return padded;
+}
+
+/** Frees a shape's four buffers. */
+function destroyShape(shape: GpuShape): void {
+  shape.positionBuffer.destroy();
+  shape.normalBuffer.destroy();
+  shape.indexBuffer.destroy();
+  shape.gridBuffer.destroy();
 }

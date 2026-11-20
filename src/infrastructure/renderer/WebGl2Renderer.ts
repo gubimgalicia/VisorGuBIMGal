@@ -4,9 +4,13 @@ import {
   MeshField,
   findBatchError,
   vertexCountOf,
+  InstanceField,
+  INSTANCE_WORDS,
   type GeometryBatch,
+  type ShapeDef,
   type VertexFormat
 } from '../../domain/kernel/GeometryBatch';
+import { packInstances, planInstances, type InstanceRange } from './instances';
 import {
   MAX_SECTION_PLANES,
   type CameraPose,
@@ -69,6 +73,11 @@ interface GlBatchEntry {
   normalBuffer: WebGLBuffer;
   /** f32 only: a q16 position carries its record index. */
   recordIndexBuffer: WebGLBuffer | null;
+  /** A13: 88 bytes per instance in draw order, ranges by shape, and a vertex array per shape. */
+  instanceBuffer: WebGLBuffer | null;
+  instanceRanges: InstanceRange[];
+  instanceVaos: Map<number, WebGLVertexArrayObject>;
+  instanceCount: number;
   opaqueIndexBuffer: WebGLBuffer | null;
   transparentIndexBuffer: WebGLBuffer | null;
   gpuBytes: number;
@@ -79,6 +88,8 @@ interface ModelEntry extends DisplayState {
   numericId: number;
   visible: boolean;
   batches: GlBatchEntry[];
+  /** A13: shapes the stream has sent, by shapeId. */
+  shapes: Map<number, GlShape>;
   /** Maps expressId -> list of record indices (0..recordCount-1) within this model. */
   expressIdToRecords: Map<number, number[]>;
   /** Starting record index in the global GPU record buffer. */
@@ -147,6 +158,72 @@ const Q16_DECODE = `void main() {
   uint a_recordIdx = a_q.w;`;
 
 /** The q16 variant of a vertex shader written for f32 attributes. */
+/** A shared shape on the GPU, kept per model until removeModel (A13). */
+interface GlShape {
+  vertexFormat: VertexFormat;
+  positionBuffer: WebGLBuffer;
+  normalBuffer: WebGLBuffer;
+  indexBuffer: WebGLBuffer;
+  indexType: number;
+  indexCount: number;
+  closed: boolean;
+  min: readonly [number, number, number];
+  max: readonly [number, number, number];
+  gpuBytes: number;
+}
+
+/** Bytes per instance: 3 vec4 rows at 0, 16, 32; 3 vec3 normal rows at 48, 60, 72; record at 84. */
+const GL_INSTANCE_BYTES = 88;
+
+/**
+ * The instanced variant of a vertex shader written for f32 attributes (A13): the shape's vertex,
+ * its matrix rows, its normal rows and its record as per-instance attributes, placed in the
+ * prologue so the body reads a_position, a_normal and a_recordIdx as before.
+ */
+function instancedVariant(source: string, q16: boolean): string {
+  if (!source.includes(F32_ATTRIBUTES) || !source.includes('void main() {')) {
+    throw new Error('vertex shader without the f32 attribute block');
+  }
+  const vertex = q16
+    ? `layout(location = 0) in uvec4 a_q;
+layout(location = 1) in vec2 a_oct;`
+    : `layout(location = 0) in vec3 a_shapePosition;
+layout(location = 1) in vec3 a_shapeNormal;`;
+  const attributes = `${vertex}
+layout(location = 2) in vec4 a_row0;
+layout(location = 3) in vec4 a_row1;
+layout(location = 4) in vec4 a_row2;
+layout(location = 5) in vec3 a_n0;
+layout(location = 6) in vec3 a_n1;
+layout(location = 7) in vec3 a_n2;
+layout(location = 8) in uint a_instanceRecord;
+// The shape's grid, for q16 shapes.
+uniform vec3 u_quantMin;
+uniform vec3 u_quantMax;
+
+vec3 octNormal(vec2 e) {
+  vec3 n = vec3(e.x, e.y, 1.0 - abs(e.x) - abs(e.y));
+  if (n.z < 0.0) {
+    vec2 signs = vec2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
+    n.xy = (vec2(1.0) - abs(n.yx)) * signs;
+  }
+  return normalize(n);
+}`;
+  const local = q16
+    ? `  vec3 shapeLocal = u_quantMin + vec3(a_q.xyz) / 65535.0 * (u_quantMax - u_quantMin);
+  vec3 shapeNormal = octNormal(a_oct);`
+    : `  vec3 shapeLocal = a_shapePosition;
+  vec3 shapeNormal = a_shapeNormal;`;
+  const prologue = `void main() {
+${local}
+  vec4 shapePoint = vec4(shapeLocal, 1.0);
+  vec3 a_position = vec3(dot(a_row0, shapePoint), dot(a_row1, shapePoint), dot(a_row2, shapePoint));
+  // Normalised after the inverse transpose: a shape scaled from mm to m would come out 1000 long.
+  vec3 a_normal = normalize(vec3(dot(a_n0, shapeNormal), dot(a_n1, shapeNormal), dot(a_n2, shapeNormal)));
+  uint a_recordIdx = a_instanceRecord;`;
+  return source.replace(F32_ATTRIBUTES, attributes).replace('void main() {', prologue);
+}
+
 function q16Variant(source: string): string {
   if (!source.includes(F32_ATTRIBUTES) || !source.includes('void main() {')) {
     throw new Error('vertex shader without the f32 attribute block');
@@ -394,6 +471,11 @@ export class WebGl2Renderer implements RendererPort {
   private mainUniforms!: ProgramUniforms;
   private mainQ16: ProgramInfo | null = null;
   private pickQ16: ProgramInfo | null = null;
+  /** A13: instanced programs for f32 and q16 shapes. */
+  private mainInstF32: ProgramInfo | null = null;
+  private mainInstQ16: ProgramInfo | null = null;
+  private pickInstF32: ProgramInfo | null = null;
+  private pickInstQ16: ProgramInfo | null = null;
   /** The program last bound with useProgram, to skip rebinding it. */
   private boundProgram: WebGLProgram | null = null;
 
@@ -563,8 +645,8 @@ export class WebGl2Renderer implements RendererPort {
       u_quantMin: null,
       u_quantMax: null
     };
-    const q16Program = (vs: string, fs: string): ProgramInfo => {
-      const program = createProgram(gl, withDepthMode(q16Variant(vs), mode), withDepthMode(fs, mode));
+    const variantProgram = (vsSource: string, fs: string): ProgramInfo => {
+      const program = createProgram(gl, withDepthMode(vsSource, mode), withDepthMode(fs, mode));
       const at = (name: string) => gl.getUniformLocation(program, name);
       return {
         program,
@@ -582,8 +664,12 @@ export class WebGl2Renderer implements RendererPort {
         }
       };
     };
-    this.mainQ16 = q16Program(VS_MAIN, FS_MAIN);
-    this.pickQ16 = q16Program(VS_PICK, FS_PICK);
+    this.mainQ16 = variantProgram(q16Variant(VS_MAIN), FS_MAIN);
+    this.pickQ16 = variantProgram(q16Variant(VS_PICK), FS_PICK);
+    this.mainInstF32 = variantProgram(instancedVariant(VS_MAIN, false), FS_MAIN);
+    this.mainInstQ16 = variantProgram(instancedVariant(VS_MAIN, true), FS_MAIN);
+    this.pickInstF32 = variantProgram(instancedVariant(VS_PICK, false), FS_PICK);
+    this.pickInstQ16 = variantProgram(instancedVariant(VS_PICK, true), FS_PICK);
 
     this.pickProgram = createProgram(gl, withDepthMode(VS_PICK, mode), withDepthMode(FS_PICK, mode));
     this.pickUniforms = {
@@ -791,6 +877,7 @@ export class WebGl2Renderer implements RendererPort {
         baseRgba: [],
         colorOverrides: new Map(),
         expressIdToRecords: new Map(),
+        shapes: new Map(),
         displayEntries: new Map(),
         displayOthers: 'default',
         displayMayGhost: false,
@@ -844,7 +931,9 @@ export class WebGl2Renderer implements RendererPort {
     const q16 = batch.vertexFormat === 'q16';
     const vertexCount = vertexCountOf(batch.vertexFormat, positions);
     const recordCount = meshTable.length / MESH_RECORD_WORDS;
-    if (vertexCount === 0 || indices.length === 0 || recordCount === 0) {
+    const instanceCount = batch.instanceTable.length / INSTANCE_WORDS;
+    // A batch may hold only instances (A13); one with neither draws nothing.
+    if (recordCount === 0 && instanceCount === 0) {
       return;
     }
 
@@ -888,6 +977,28 @@ export class WebGl2Renderer implements RendererPort {
       }
       list.push(recIdxInModel);
     }
+
+    // A13: each instance gets a record after the batch's own, in draw order.
+    const plan = planInstances(batch.instanceTable);
+    plan.order.forEach((index, at) => {
+      const row = index * INSTANCE_WORDS;
+      const expressId = batch.instanceTable[row + InstanceField.expressId] >>> 0;
+      const rgba = batch.instanceTable[row + InstanceField.rgba] >>> 0;
+      const rawFlags = batch.instanceTable[row + InstanceField.flags] >>> 0;
+      const isSelected =
+        this.selectedRef !== null && this.selectedRef.modelId === model.modelId && this.selectedRef.expressId === expressId;
+      const stateFlags =
+        ((rawFlags & 0x7) | displayFlags(model, expressId, rawFlags) | (isSelected ? FLAG_SELECTED : 0)) >>> 0;
+      model.baseRgba!.push(rgba);
+      model.recordWords.push(expressId, model.numericId >>> 0, effectiveRgba(model, expressId, rgba), stateFlags);
+      let list = model.expressIdToRecords.get(expressId);
+      if (!list) {
+        list = [];
+        model.expressIdToRecords.set(expressId, list);
+      }
+      list.push(recordOffsetInModel + recordCount + at);
+    });
+    const totalRecords = recordCount + instanceCount;
 
     const gl = this.gl;
     // Uploads must not touch a q16 batch's vertex array.
@@ -942,7 +1053,43 @@ export class WebGl2Renderer implements RendererPort {
     const transparentIndexBuffer = indexBuffer(groups.transparent, 'transparentes');
     const indexGpuBytes = groups.opaque.byteLength + groups.transparent.byteLength;
 
-    const gpuBytes = posByteLen + normByteLen + recIdxByteLen + indexGpuBytes;
+    for (const shape of batch.shapes) this.uploadShape(model, shape);
+    let instanceBuffer: WebGLBuffer | null = null;
+    const instanceVaos = new Map<number, WebGLVertexArrayObject>();
+    let instanceBytes = 0;
+    if (instanceCount > 0) {
+      const data = packInstances(batch, plan, recordCount, 'webgl2');
+      instanceBytes = data.byteLength;
+      instanceBuffer = gl.createBuffer();
+      if (!instanceBuffer) throw new Error('Error al crear buffer de instancias WebGL2');
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      for (const range of plan.ranges) {
+        const shape = model.shapes.get(range.shapeId);
+        if (!shape || instanceVaos.has(range.shapeId)) continue;
+        const vao = gl.createVertexArray();
+        if (!vao) throw new Error('Error al crear vertex array de instancias WebGL2');
+        gl.bindVertexArray(vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, shape.positionBuffer);
+        gl.enableVertexAttribArray(0);
+        if (shape.vertexFormat === 'q16') gl.vertexAttribIPointer(0, 4, gl.UNSIGNED_SHORT, 0, 0);
+        else gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, shape.normalBuffer);
+        gl.enableVertexAttribArray(1);
+        if (shape.vertexFormat === 'q16') gl.vertexAttribPointer(1, 2, gl.SHORT, true, 0, 0);
+        else gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+        for (let location = 2; location <= 8; location++) {
+          gl.enableVertexAttribArray(location);
+          gl.vertexAttribDivisor(location, 1);
+        }
+        pointInstances(gl, instanceBuffer, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, shape.indexBuffer);
+        gl.bindVertexArray(null);
+        instanceVaos.set(range.shapeId, vao);
+      }
+    }
+
+    const gpuBytes = posByteLen + normByteLen + recIdxByteLen + indexGpuBytes + instanceBytes;
 
     const { min, max } = batch.box;
     const grid = batch.quantBox ?? batch.box;
@@ -958,8 +1105,12 @@ export class WebGl2Renderer implements RendererPort {
       indexType: u16 ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT,
       indexBytes: u16 ? 2 : 4,
       vao,
+      instanceBuffer,
+      instanceRanges: plan.ranges,
+      instanceVaos,
+      instanceCount,
       recordOffsetInModel,
-      recordCount,
+      recordCount: totalRecords,
       opaqueIndexCount: groups.opaque.length,
       closedIndexCount: groups.closedCount,
       transparentIndexCount: groups.transparent.length,
@@ -977,7 +1128,7 @@ export class WebGl2Renderer implements RendererPort {
       model === this.recordTail &&
       model.recordBaseOffset + recordOffsetInModel === this.recordTotal
     ) {
-      this.recordTotal += recordCount;
+      this.recordTotal += totalRecords;
     } else {
       this.recordLayoutDirty = true;
     }
@@ -1024,9 +1175,13 @@ export class WebGl2Renderer implements RendererPort {
         this.gl.deleteBuffer(b.normalBuffer);
         if (b.recordIndexBuffer) this.gl.deleteBuffer(b.recordIndexBuffer);
         if (b.vao) this.gl.deleteVertexArray(b.vao);
+        if (b.instanceBuffer) this.gl.deleteBuffer(b.instanceBuffer);
+        for (const vao of b.instanceVaos.values()) this.gl.deleteVertexArray(vao);
         if (b.opaqueIndexBuffer) this.gl.deleteBuffer(b.opaqueIndexBuffer);
         if (b.transparentIndexBuffer) this.gl.deleteBuffer(b.transparentIndexBuffer);
       }
+      for (const shape of model.shapes.values()) deleteShape(this.gl, shape);
+      model.shapes.clear();
     }
     model.batches.length = 0;
 
@@ -1450,13 +1605,14 @@ export class WebGl2Renderer implements RendererPort {
 
       for (const batch of model.batches) {
         if (!batch.inView) continue;
-        if (batch.transparentIndexCount > 0) {
+        if (batch.transparentIndexCount > 0 || batch.instanceRanges.some((range) => range.transparent)) {
           hasTransparent = true;
         }
         if (batch.opaqueIndexCount > 0 && batch.opaqueIndexBuffer) {
           this.bindBatch(gl, model, batch, eye, 'main');
           this.drawOpaque(gl, batch);
         }
+        this.drawInstances(gl, model, batch, eye, 'opaque');
       }
     }
 
@@ -1475,6 +1631,7 @@ export class WebGl2Renderer implements RendererPort {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, batch.transparentIndexBuffer);
             gl.drawElements(gl.TRIANGLES, batch.transparentIndexCount, batch.indexType, 0);
           }
+          if (batch.inView) this.drawInstances(gl, model, batch, eye, 'transparent');
         }
       }
     }
@@ -1500,6 +1657,7 @@ export class WebGl2Renderer implements RendererPort {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, batch.transparentIndexBuffer);
             gl.drawElements(gl.TRIANGLES, batch.transparentIndexCount, batch.indexType, 0);
           }
+          this.drawInstances(gl, model, batch, eye, 'ghost');
         }
       }
       for (const info of mainPrograms) this.setGhostPass(gl, info, 0);
@@ -1564,8 +1722,8 @@ export class WebGl2Renderer implements RendererPort {
     const list: ProgramInfo[] = [];
     if (kind === 'main' && this.mainProgram) list.push({ program: this.mainProgram, uniforms: this.mainUniforms });
     if (kind === 'pick' && this.pickProgram) list.push({ program: this.pickProgram, uniforms: this.pickUniforms });
-    const q16 = kind === 'main' ? this.mainQ16 : this.pickQ16;
-    if (q16) list.push(q16);
+    const others = kind === 'main' ? [this.mainQ16, this.mainInstF32, this.mainInstQ16] : [this.pickQ16, this.pickInstF32, this.pickInstQ16];
+    for (const info of others) if (info) list.push(info);
     return list;
   }
 
@@ -1628,6 +1786,72 @@ export class WebGl2Renderer implements RendererPort {
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, batch.recordIndexBuffer);
     gl.vertexAttribIPointer(2, 1, gl.UNSIGNED_INT, 0, 0);
+  }
+
+  /** A shape the stream sends once, kept for the model's lifetime (A13). */
+  private uploadShape(model: ModelEntry, shape: ShapeDef): void {
+    const gl = this.gl;
+    if (!gl || model.shapes.has(shape.shapeId)) return;
+    gl.bindVertexArray(null);
+    const upload = (target: number, data: ArrayBufferView): WebGLBuffer => {
+      const buffer = gl.createBuffer();
+      if (!buffer) throw new Error('Error al crear buffer de forma WebGL2');
+      gl.bindBuffer(target, buffer);
+      gl.bufferData(target, data, gl.STATIC_DRAW);
+      return buffer;
+    };
+    const u16 = shape.indices instanceof Uint16Array;
+    model.shapes.set(shape.shapeId, {
+      vertexFormat: shape.vertexFormat,
+      positionBuffer: upload(gl.ARRAY_BUFFER, shape.positions),
+      normalBuffer: upload(gl.ARRAY_BUFFER, shape.normals),
+      indexBuffer: upload(gl.ELEMENT_ARRAY_BUFFER, shape.indices),
+      indexType: u16 ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT,
+      indexCount: shape.indices.length,
+      closed: shape.closed,
+      min: shape.box.min,
+      max: shape.box.max,
+      gpuBytes: shape.positions.byteLength + shape.normals.byteLength + shape.indices.byteLength
+    });
+  }
+
+  /**
+   * Draws a batch's instances for one pass, range by range: one shape, opaque or transparent,
+   * in one call. WebGL2 has no base instance, so each range points the instance attributes at its
+   * first instance. Closed shapes cull back faces while no section plane is set.
+   */
+  private drawInstances(
+    gl: WebGL2RenderingContext,
+    model: ModelEntry,
+    batch: GlBatchEntry,
+    eye: Vec3,
+    kind: 'opaque' | 'transparent' | 'ghost' | 'pick'
+  ): void {
+    if (batch.instanceRanges.length === 0 || !batch.instanceBuffer) return;
+    for (const range of batch.instanceRanges) {
+      if (kind === 'opaque' && range.transparent) continue;
+      if (kind === 'transparent' && !range.transparent) continue;
+      const shape = model.shapes.get(range.shapeId);
+      const vao = batch.instanceVaos.get(range.shapeId);
+      if (!shape || !vao) continue;
+      const q16 = shape.vertexFormat === 'q16';
+      const info = kind === 'pick' ? (q16 ? this.pickInstQ16 : this.pickInstF32) : q16 ? this.mainInstQ16 : this.mainInstF32;
+      if (!info) continue;
+      this.useProgram(gl, info.program);
+      const u = info.uniforms;
+      gl.uniform1i(u.u_modelVisible, 1);
+      gl.uniform3f(u.u_batchOffset, batch.origin[0] - eye[0], batch.origin[1] - eye[1], batch.origin[2] - eye[2]);
+      gl.uniform1ui(u.u_recordBase, model.recordBaseOffset + batch.recordOffsetInModel);
+      gl.uniform3f(u.u_quantMin, shape.min[0], shape.min[1], shape.min[2]);
+      gl.uniform3f(u.u_quantMax, shape.max[0], shape.max[1], shape.max[2]);
+      gl.bindVertexArray(vao);
+      pointInstances(gl, batch.instanceBuffer, range.first * GL_INSTANCE_BYTES);
+      const cull = shape.closed && !range.transparent && kind !== 'ghost' && this.sectionPlanes.length === 0;
+      if (cull) gl.enable(gl.CULL_FACE);
+      gl.drawElementsInstanced(gl.TRIANGLES, shape.indexCount, shape.indexType, 0, range.count);
+      if (cull) gl.disable(gl.CULL_FACE);
+    }
+    gl.bindVertexArray(null);
   }
 
   /**
@@ -1716,6 +1940,7 @@ export class WebGl2Renderer implements RendererPort {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, batch.transparentIndexBuffer);
             gl.drawElements(gl.TRIANGLES, batch.transparentIndexCount, batch.indexType, 0);
           }
+          this.drawInstances(gl, model, batch, eye, 'pick');
         }
       }
       gl.bindVertexArray(null);
@@ -1770,6 +1995,7 @@ export class WebGl2Renderer implements RendererPort {
       recordCount += model.recordWords.length / 4;
       for (const b of model.batches) {
         liveGpuBuffers += b.recordIndexBuffer ? 3 : 2;
+        if (b.instanceBuffer) liveGpuBuffers++;
         if (b.opaqueIndexBuffer) liveGpuBuffers++;
         if (b.transparentIndexBuffer) liveGpuBuffers++;
         allocatedGpuBytes += b.gpuBytes;
@@ -1817,9 +2043,13 @@ export class WebGl2Renderer implements RendererPort {
           this.gl.deleteBuffer(b.normalBuffer);
           if (b.recordIndexBuffer) this.gl.deleteBuffer(b.recordIndexBuffer);
           if (b.vao) this.gl.deleteVertexArray(b.vao);
+          if (b.instanceBuffer) this.gl.deleteBuffer(b.instanceBuffer);
+          for (const vao of b.instanceVaos.values()) this.gl.deleteVertexArray(vao);
           if (b.opaqueIndexBuffer) this.gl.deleteBuffer(b.opaqueIndexBuffer);
           if (b.transparentIndexBuffer) this.gl.deleteBuffer(b.transparentIndexBuffer);
         }
+        for (const shape of model.shapes.values()) deleteShape(this.gl, shape);
+        model.shapes.clear();
         model.batches.length = 0;
         model.recordWords.length = 0;
         model.expressIdToRecords.clear();
@@ -1833,9 +2063,14 @@ export class WebGl2Renderer implements RendererPort {
         this.gl.deleteProgram(this.pickProgram);
         this.pickProgram = null;
       }
-      for (const info of [this.mainQ16, this.pickQ16]) if (info) this.gl.deleteProgram(info.program);
+      const variants = [this.mainQ16, this.pickQ16, this.mainInstF32, this.mainInstQ16, this.pickInstF32, this.pickInstQ16];
+      for (const info of variants) if (info) this.gl.deleteProgram(info.program);
       this.mainQ16 = null;
       this.pickQ16 = null;
+      this.mainInstF32 = null;
+      this.mainInstQ16 = null;
+      this.pickInstF32 = null;
+      this.pickInstQ16 = null;
       this.boundProgram = null;
       if (this.recordTexture) {
         this.gl.deleteTexture(this.recordTexture);
@@ -1882,4 +2117,23 @@ export class WebGl2Renderer implements RendererPort {
     this.models.clear();
     this.numToModelId.clear();
   }
+}
+
+/** Points the per-instance attributes (locations 2 to 8) at `offset` in the instance buffer. */
+function pointInstances(gl: WebGL2RenderingContext, buffer: WebGLBuffer, offset: number): void {
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.vertexAttribPointer(2, 4, gl.FLOAT, false, GL_INSTANCE_BYTES, offset);
+  gl.vertexAttribPointer(3, 4, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 16);
+  gl.vertexAttribPointer(4, 4, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 32);
+  gl.vertexAttribPointer(5, 3, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 48);
+  gl.vertexAttribPointer(6, 3, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 60);
+  gl.vertexAttribPointer(7, 3, gl.FLOAT, false, GL_INSTANCE_BYTES, offset + 72);
+  gl.vertexAttribIPointer(8, 1, gl.UNSIGNED_INT, GL_INSTANCE_BYTES, offset + 84);
+}
+
+/** Frees a shape's three buffers. */
+function deleteShape(gl: WebGL2RenderingContext, shape: GlShape): void {
+  gl.deleteBuffer(shape.positionBuffer);
+  gl.deleteBuffer(shape.normalBuffer);
+  gl.deleteBuffer(shape.indexBuffer);
 }
