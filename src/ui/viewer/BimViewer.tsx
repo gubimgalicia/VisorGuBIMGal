@@ -194,10 +194,10 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           className={`btn btn-ghost nav-edges-btn ${edges ? 'active' : ''}`}
           aria-pressed={edges}
           onClick={handleToggleEdges}
-          title="Aristas y contornos sobre la geometría"
+          title={t('viewer.edgesTitle')}
           style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
         >
-          Aristas
+          {t('viewer.edgesLabel')}
         </button>
         <button
           className={`btn btn-ghost nav-fp-btn ${navMode === 'first-person' ? 'active' : ''}`}

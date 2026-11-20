@@ -141,7 +141,7 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
               className={`btn btn-ghost btn-icon minimap-toggle-btn ${showMinimap ? 'active' : ''}`}
               aria-pressed={showMinimap}
               onClick={onToggleMinimap}
-              title="Minimapa de planta con la posición y la mirada de la cámara"
+              title={t('display.minimapTitle')}
             >
               <MapIcon size={14} />
             </button>

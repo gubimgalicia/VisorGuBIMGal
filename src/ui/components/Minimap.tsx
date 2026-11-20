@@ -12,6 +12,7 @@ import {
   type MinimapFrame
 } from '../viewer/minimap';
 import { storeyLevels } from '../viewer/planDepth';
+import { t } from '../i18n';
 import { widenForPreview } from './drawingPreview';
 
 /** The map is a square, in CSS pixels. */
@@ -184,7 +185,7 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
             ? exported.content
             : new TextDecoder().decode(exported.content);
         const sheet = svgPlanSheet(svg);
-        if (!sheet) throw new Error('El plano no trae un viewBox utilizable.');
+        if (!sheet) throw new Error(t('minimap.badViewBox'));
 
         // svg.rs writes the drawing plus its margin in the viewBox, y counted downwards. A plan
         // cut at one storey can hold less than the models' full plan extent, so the drawing keeps
@@ -211,7 +212,7 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
       } catch (err) {
         if (!cancelled && mountedRef.current) {
           setPlan(null);
-          setPlanError(err instanceof Error ? err.message : 'No se pudo generar el minimapa.');
+          setPlanError(err instanceof Error ? err.message : t('minimap.failed'));
         }
       } finally {
         if (drawingId) {
@@ -244,12 +245,12 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
   const cone = pinned?.cone ?? null;
 
   return (
-    <div className="minimap-widget" aria-label="Minimapa de planta">
+    <div className="minimap-widget" aria-label={t('minimap.ariaLabel')}>
       <div className="minimap-map">
         {plan ? (
           <div className="minimap-plan" dangerouslySetInnerHTML={{ __html: plan.svg }} />
         ) : (
-          <div className="minimap-empty">{isGenerating ? 'Calculando…' : 'Sin plano'}</div>
+          <div className="minimap-empty">{isGenerating ? t('minimap.computing') : t('minimap.noPlan')}</div>
         )}
         {plan && cone && (
           <svg
@@ -279,11 +280,11 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
         ) : plan ? (
           plan.storeyName
         ) : isGenerating ? (
-          'Calculando el plano…'
+          t('minimap.computingPlan')
         ) : storeyName ? (
           storeyName
         ) : (
-          'Sin plantas'
+          t('minimap.noStoreys')
         )}
       </div>
     </div>

@@ -200,6 +200,7 @@ export const es = {
     showAllTitle: 'Mostrar todo',
     glbProgressLabel: 'GLB ({completed}/{total})',
     scene3dLabel: 'Escena 3D',
+    minimapTitle: 'Minimapa de planta con la posición y la mirada de la cámara',
     cancelGlbTitle: 'Cancelar exportación GLB',
     exportGlbTitle: 'Exportar la escena visible a glTF binario (.glb)',
     exportGlbLabel: 'Exportar GLB',
@@ -513,11 +514,22 @@ export const es = {
       'Modo Primera Persona (WASD / flechas para caminar, arrastrar para mirar)',
     navFirstPerson: '1.ª pers.',
     navOrbit: 'Órbita',
+    edgesLabel: 'Aristas',
+    edgesTitle: 'Aristas y contornos sobre la geometría',
     perfMonitorTitle: 'Monitor de rendimiento (GPU, lotes y fotogramas)',
     dropTitle: 'Suelta el archivo IFC aquí',
     dropSubtitle: 'Se procesará localmente en el navegador mediante WebAssembly',
     initErrorTitle: 'Error de Inicialización Gráfica',
     kernelStopped: 'El kernel se ha detenido.'
+  },
+  minimap: {
+    ariaLabel: 'Minimapa de planta',
+    computing: 'Calculando…',
+    noPlan: 'Sin plano',
+    computingPlan: 'Calculando el plano…',
+    noStoreys: 'Sin plantas',
+    badViewBox: 'El plano no trae un viewBox utilizable.',
+    failed: 'No se pudo generar el minimapa.'
   },
   csv: {
     noStorey: 'Sin planta',
