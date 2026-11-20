@@ -63,22 +63,24 @@ pub fn to_dxf_with(drawing: &Drawing, options: &DxfOptions) -> Vec<u8> {
     out.layer_table(&layers);
     out.section("ENTITIES");
     for planned in &layers {
+        let name_bytes = dxf_bytes(&planned.name, MAX_VALUE);
         for ring in &planned.layer.loops {
             for (from, to) in ring.segments() {
-                out.line(&planned.name, from, to);
+                out.line_bytes(&name_bytes, from, to);
             }
         }
         for segment in &planned.layer.visible {
-            out.line(&planned.name, segment.a, segment.b);
+            out.line_bytes(&name_bytes, segment.a, segment.b);
         }
         if options.include_hatch {
             for segment in &planned.layer.hatch {
-                out.line(&planned.name, segment.a, segment.b);
+                out.line_bytes(&name_bytes, segment.a, segment.b);
             }
         }
         if let Some(hidden) = &planned.hidden {
+            let hidden_bytes = dxf_bytes(hidden, MAX_VALUE);
             for segment in &planned.layer.hidden {
-                out.line(hidden, segment.a, segment.b);
+                out.line_bytes(&hidden_bytes, segment.a, segment.b);
             }
         }
     }
@@ -112,8 +114,10 @@ impl Writer {
     }
 
     fn number(&mut self, code: i16, value: f64) {
-        let text = format_number(value);
-        self.group(code, text.as_bytes());
+        self.bytes.extend_from_slice(code.to_string().as_bytes());
+        self.bytes.extend_from_slice(b"\r\n");
+        push_format_number(&mut self.bytes, value);
+        self.bytes.extend_from_slice(b"\r\n");
     }
 
     fn integer(&mut self, code: i16, value: i64) {
@@ -199,29 +203,29 @@ impl Writer {
         self.text(6, linetype);
     }
 
-    fn line(&mut self, layer: &str, from: glam::DVec2, to: glam::DVec2) {
-        self.group(0, b"LINE");
-        self.text(8, layer);
-        self.number(10, from.x);
-        self.number(20, from.y);
-        self.number(30, 0.0);
-        self.number(11, to.x);
-        self.number(21, to.y);
-        self.number(31, 0.0);
+    fn line_bytes(&mut self, layer: &[u8], from: glam::DVec2, to: glam::DVec2) {
+        self.bytes.extend_from_slice(b"0\r\nLINE\r\n8\r\n");
+        self.bytes.extend_from_slice(layer);
+        self.bytes.extend_from_slice(b"\r\n10\r\n");
+        push_format_number(&mut self.bytes, from.x);
+        self.bytes.extend_from_slice(b"\r\n20\r\n");
+        push_format_number(&mut self.bytes, from.y);
+        self.bytes.extend_from_slice(b"\r\n30\r\n0.000000\r\n11\r\n");
+        push_format_number(&mut self.bytes, to.x);
+        self.bytes.extend_from_slice(b"\r\n21\r\n");
+        push_format_number(&mut self.bytes, to.y);
+        self.bytes.extend_from_slice(b"\r\n31\r\n0.000000\r\n");
     }
 }
 
 /// Six decimals is a micrometre: far finer than any drawing, and short enough to read.
-fn format_number(value: f64) -> String {
+#[inline]
+fn push_format_number(out: &mut Vec<u8>, value: f64) {
     if !value.is_finite() {
-        return "0.000000".into();
+        out.extend_from_slice(b"0.000000");
+        return;
     }
-    let rounded = crate::fixed::fixed(value, 6);
-    // -0.000000 is legal but ugly, and it changes between platforms.
-    if rounded.starts_with('-') && rounded[1..].bytes().all(|byte| byte == b'0' || byte == b'.') {
-        return rounded[1..].to_string();
-    }
-    rounded
+    crate::fixed::push_fixed_clean_bytes(out, value, 6);
 }
 
 /// Everything the drawing draws, in drawing coordinates.

@@ -6,8 +6,6 @@
 //! integer is trusted only when the scaled value is clearly away from a tie (…5 exactly at the
 //! last kept digit); near a tie, and for values too large for an exact integer, `format!` decides.
 
-use std::fmt::Write;
-
 /// How far from a tie, in units of the last kept digit, the scaled value must be. The product
 /// `value × 10^N` is within 2⁻⁵² of it relatively, under 0.01 units below 2⁴³ (8.8e12), the
 /// largest scaled value taken here.
@@ -16,8 +14,53 @@ const TIE_MARGIN: f64 = 0.01;
 const MAX_SCALED: f64 = 8.0e12;
 
 const POWERS: [f64; 10] = [1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9];
+const INT_POWERS: [u64; 10] = [
+    1,
+    10,
+    100,
+    1_000,
+    10_000,
+    100_000,
+    1_000_000,
+    10_000_000,
+    100_000_000,
+    1_000_000_000,
+];
+
+#[inline]
+fn write_units(buf: &mut [u8; 32], negative: bool, units: u64, decimals: usize) -> &[u8] {
+    let power = INT_POWERS[decimals];
+    let mut int_part = units / power;
+    let mut frac_part = units % power;
+    let mut pos = 32usize;
+    if decimals > 0 {
+        for _ in 0..decimals {
+            pos -= 1;
+            buf[pos] = b'0' + (frac_part % 10) as u8;
+            frac_part /= 10;
+        }
+        pos -= 1;
+        buf[pos] = b'.';
+    }
+    if int_part == 0 {
+        pos -= 1;
+        buf[pos] = b'0';
+    } else {
+        while int_part > 0 {
+            pos -= 1;
+            buf[pos] = b'0' + (int_part % 10) as u8;
+            int_part /= 10;
+        }
+    }
+    if negative {
+        pos -= 1;
+        buf[pos] = b'-';
+    }
+    &buf[pos..]
+}
 
 /// `format!("{value:.decimals}")` for a finite value, `decimals` at most 9.
+#[cfg(test)]
 pub(crate) fn fixed(value: f64, decimals: usize) -> String {
     debug_assert!(decimals < POWERS.len());
     let scaled = value * POWERS[decimals];
@@ -27,17 +70,40 @@ pub(crate) fn fixed(value: f64, decimals: usize) -> String {
         return format!("{value:.decimals$}");
     }
     let units = magnitude.round() as u64;
-    let mut out = String::with_capacity(24);
-    // A negative value that rounds to zero still prints its sign, as format! does.
-    if value.is_sign_negative() {
-        out.push('-');
+    let mut buf = [0u8; 32];
+    let slice = write_units(&mut buf, value.is_sign_negative(), units, decimals);
+    String::from_utf8_lossy(slice).into_owned()
+}
+
+/// Appends `fixed(value, decimals)` without `-0.0...` directly to `out` without allocating.
+#[inline]
+pub(crate) fn push_fixed_clean(out: &mut String, value: f64, decimals: usize) {
+    // SAFETY: only ASCII digits, '-', and '.' are pushed.
+    push_fixed_clean_bytes(unsafe { out.as_mut_vec() }, value, decimals);
+}
+
+/// Appends `fixed(value, decimals)` without `-0.0...` directly to `out` as ASCII bytes.
+#[inline]
+pub(crate) fn push_fixed_clean_bytes(out: &mut Vec<u8>, value: f64, decimals: usize) {
+    debug_assert!(decimals < POWERS.len());
+    let scaled = value * POWERS[decimals];
+    let magnitude = scaled.abs();
+    let fraction = magnitude - magnitude.floor();
+    if !scaled.is_finite() || magnitude >= MAX_SCALED || (fraction - 0.5).abs() <= TIE_MARGIN {
+        use std::io::Write;
+        let start = out.len();
+        let _ = write!(out, "{value:.decimals$}");
+        if out.get(start) == Some(&b'-')
+            && out[start + 1..].iter().all(|&b| b == b'0' || b == b'.')
+        {
+            out.remove(start);
+        }
+        return;
     }
-    let power = 10u64.pow(decimals as u32);
-    let _ = write!(out, "{}", units / power);
-    if decimals > 0 {
-        let _ = write!(out, ".{:0width$}", units % power, width = decimals);
-    }
-    out
+    let units = magnitude.round() as u64;
+    let mut buf = [0u8; 32];
+    let slice = write_units(&mut buf, value.is_sign_negative() && units != 0, units, decimals);
+    out.extend_from_slice(slice);
 }
 
 #[cfg(test)]

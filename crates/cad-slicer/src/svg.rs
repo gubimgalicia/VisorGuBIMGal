@@ -158,11 +158,14 @@ fn push_ring(path: &mut String, ring: &Loop, place: impl Fn(DVec2) -> Option<DVe
             continue;
         };
         if started {
-            path.push_str(&format!(" L {} {}", number(point.x), number(point.y)));
+            path.push_str(" L ");
         } else {
-            path.push_str(&format!("M {} {}", number(point.x), number(point.y)));
+            path.push_str("M ");
             started = true;
         }
+        push_number(path, point.x);
+        path.push(' ');
+        push_number(path, point.y);
     }
     if started && ring.closed {
         path.push_str(" Z");
@@ -173,25 +176,30 @@ fn push_segment(path: &mut String, segment: &Segment, place: impl Fn(DVec2) -> O
     let (Some(from), Some(to)) = (place(segment.a), place(segment.b)) else {
         return;
     };
-    path.push_str(&format!(
-        "M {} {} L {} {}",
-        number(from.x),
-        number(from.y),
-        number(to.x),
-        number(to.y)
-    ));
+    path.push_str("M ");
+    push_number(path, from.x);
+    path.push(' ');
+    push_number(path, from.y);
+    path.push_str(" L ");
+    push_number(path, to.x);
+    path.push(' ');
+    push_number(path, to.y);
+}
+
+#[inline]
+fn push_number(out: &mut String, value: f64) {
+    if !value.is_finite() {
+        out.push('0');
+        return;
+    }
+    crate::fixed::push_fixed_clean(out, value, 4);
 }
 
 /// Four decimals in metres is 0.1 mm, and always the same string for the same number.
 fn number(value: f64) -> String {
-    if !value.is_finite() {
-        return "0".into();
-    }
-    let rounded = crate::fixed::fixed(value, 4);
-    if rounded.starts_with('-') && rounded[1..].bytes().all(|byte| byte == b'0' || byte == b'.') {
-        return rounded[1..].to_string();
-    }
-    rounded
+    let mut out = String::with_capacity(16);
+    push_number(&mut out, value);
+    out
 }
 
 fn bounds(drawing: &Drawing) -> (DVec2, DVec2) {
