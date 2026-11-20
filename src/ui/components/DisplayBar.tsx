@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Focus, EyeOff, Ghost, Eye, Download, X } from 'lucide-react';
+import { Focus, EyeOff, Ghost, Eye, Download, X, Map as MapIcon } from 'lucide-react';
 import type { ElementRef } from '../../domain/models/ModelRecord';
 import {
   describeTarget,
@@ -20,6 +20,9 @@ interface DisplayBarProps {
   onCancelGlb?: () => void;
   isExportingGlb?: boolean;
   glbProgress?: { completed: number; total: number } | null;
+  /** The floor-plan minimap in the corner of the 3D view. Off by default. */
+  showMinimap?: boolean;
+  onToggleMinimap?: () => void;
 }
 
 export const DisplayBar: React.FC<DisplayBarProps> = ({
@@ -33,7 +36,9 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
   onExportGlb,
   onCancelGlb,
   isExportingGlb = false,
-  glbProgress = null
+  glbProgress = null,
+  showMinimap = false,
+  onToggleMinimap
 }) => {
   const [chosenClass, setChosenClass] = useState('');
   const classType = classes.some((item) => item.type === chosenClass) ? chosenClass : '';
@@ -125,6 +130,18 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
               ? `GLB (${glbProgress.completed}/${glbProgress.total})`
               : 'Escena 3D'}
           </span>
+          {/* In this row, not a row of its own: the panel floats over the model, so it stays short. */}
+          {onToggleMinimap && (
+            <button
+              type="button"
+              className={`btn btn-ghost btn-icon minimap-toggle-btn ${showMinimap ? 'active' : ''}`}
+              aria-pressed={showMinimap}
+              onClick={onToggleMinimap}
+              title="Minimapa de planta con la posición y la mirada de la cámara"
+            >
+              <MapIcon size={14} />
+            </button>
+          )}
           {isExportingGlb && onCancelGlb ? (
             <button
               type="button"
