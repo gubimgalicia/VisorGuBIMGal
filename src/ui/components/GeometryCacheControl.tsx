@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { cacheUsage, clearCache } from '../../infrastructure/kernel/geometryCache';
+import { formatNumber, t } from '../i18n';
 
-const megabytes = (bytes: number) => `${(bytes / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 })} MB`;
+const megabytes = (bytes: number) =>
+  t('cache.megabytes', {
+    value: formatNumber(bytes / 1048576, { maximumFractionDigits: 1 })
+  });
 
 /**
  * What the geometry cache holds in this browser, and a way to empty it. Reopening a cached model
@@ -31,18 +35,18 @@ export const GeometryCacheControl: React.FC = () => {
 
   const label =
     usage === null
-      ? 'Caché de geometría no disponible en este navegador.'
-      : `Caché de geometría: ${usage.models} ${usage.models === 1 ? 'modelo' : 'modelos'}, ${megabytes(usage.bytes)}.`;
+      ? t('cache.unavailable')
+      : t('cache.summary', { count: usage.models, size: megabytes(usage.bytes) });
 
   return (
     <div className="geometry-cache" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#94a3b8' }}>
-      <span title="Al reabrir un archivo ya cargado, su geometría se lee de aquí en vez de calcularse. Se guarda solo en este navegador.">
+      <span title={t('cache.tooltip')}>
         {label}
       </span>
       {usage !== null && usage.models > 0 && (
-        <button className="btn btn-ghost" onClick={empty} disabled={busy} title="Vaciar la caché de geometría">
+        <button className="btn btn-ghost" onClick={empty} disabled={busy} title={t('cache.emptyTitle')}>
           <Trash2 size={14} />
-          <span>Vaciar</span>
+          <span>{t('common.empty')}</span>
         </button>
       )}
     </div>

@@ -1,5 +1,6 @@
 import type { KernelErrorCode } from '../../domain/kernel/KernelPort';
 import type { ModelId, ModelRecord } from '../../domain/models/ModelRecord';
+import { t } from '../i18n';
 
 export interface ModelFileSource {
   name: string;
@@ -18,7 +19,7 @@ export function createFailedModelRecord(
   errorMessage: string,
   existing?: ModelRecord
 ): ModelRecord {
-  const message = errorMessage.trim() || 'El kernel se ha detenido.';
+  const message = errorMessage.trim() || t('viewer.kernelStopped');
   if (existing) {
     return {
       ...existing,
@@ -65,7 +66,7 @@ export function markModelCrashed(
   modelId: ModelId,
   errorMessage: string
 ): ModelRecord[] {
-  const message = errorMessage.trim() || 'El kernel se ha detenido.';
+  const message = errorMessage.trim() || t('viewer.kernelStopped');
   return models.map((m) =>
     m.id === modelId
       ? {

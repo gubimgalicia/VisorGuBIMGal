@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 /**
  * A small XML reader and writer for the exchange formats the viewer reads and writes (BCF).
  * Namespaces are dropped from names; comments, processing instructions and the DOCTYPE are
@@ -58,7 +60,9 @@ export function parseXml(xml: string): XmlNode {
     if (m[1] !== undefined) {
       top().text += m[1];
     } else if (m[2] !== undefined) {
-      if (stack.length < 2 || top().tag !== localName(m[2])) throw new XmlError(`Etiqueta de cierre inesperada: ${m[2]}.`);
+      if (stack.length < 2 || top().tag !== localName(m[2])) {
+        throw new XmlError(t('xml.unexpectedClosingTag', { tag: m[2] }));
+      }
       stack.pop();
     } else if (m[3] !== undefined) {
       const node: XmlNode = { tag: localName(m[3]), attrs: parseAttributes(m[4]), children: [], text: '' };
@@ -66,8 +70,8 @@ export function parseXml(xml: string): XmlNode {
       if (m[5] !== '/') stack.push(node);
     }
   }
-  if (stack.length !== 1) throw new XmlError(`Falta el cierre de ${top().tag}.`);
-  if (root.children.length !== 1) throw new XmlError('El documento XML no tiene un único elemento raíz.');
+  if (stack.length !== 1) throw new XmlError(t('xml.missingClosingTag', { tag: top().tag }));
+  if (root.children.length !== 1) throw new XmlError(t('xml.invalidRoot'));
   return root.children[0];
 }
 

@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 /**
  * A ZIP reader and writer for small archives such as BCF files, on the browser's own deflate
  * streams. Stored and deflated entries only; no ZIP64, no encryption, no spanning. Every entry's
@@ -47,7 +49,7 @@ async function through(bytes: Uint8Array, stream: CompressionStream | Decompress
     length += value.length;
     if (length > limit) {
       await reader.cancel().catch(() => undefined);
-      throw new ZipError('Una entrada del archivo comprimido ocupa más de lo que declara.');
+      throw new ZipError(t('zip.entrySizeExceeded'));
     }
     chunks.push(value);
   }
@@ -71,18 +73,18 @@ export async function readZip(bytes: Uint8Array): Promise<Map<string, Uint8Array
       break;
     }
   }
-  if (end < 0) throw new ZipError('No es un archivo ZIP.');
+  if (end < 0) throw new ZipError(t('zip.notZip'));
   const count = view.getUint16(end + 10, true);
   const centralSize = view.getUint32(end + 12, true);
   const centralAt = view.getUint32(end + 16, true);
-  if (count === 0xffff || centralAt === 0xffffffff) throw new ZipError('Los archivos ZIP64 no están admitidos.');
-  if (count > MAX_ENTRIES || centralAt + centralSize > end) throw new ZipError('El directorio del archivo ZIP está dañado.');
+  if (count === 0xffff || centralAt === 0xffffffff) throw new ZipError(t('zip.zip64Unsupported'));
+  if (count > MAX_ENTRIES || centralAt + centralSize > end) throw new ZipError(t('zip.corruptDirectory'));
 
   const files = new Map<string, Uint8Array>();
   let total = 0;
   let at = centralAt;
   for (let i = 0; i < count; i++) {
-    if (at + 46 > end || view.getUint32(at, true) !== CENTRAL_HEADER) throw new ZipError('El directorio del archivo ZIP está dañado.');
+    if (at + 46 > end || view.getUint32(at, true) !== CENTRAL_HEADER) throw new ZipError(t('zip.corruptDirectory'));
     const flags = view.getUint16(at + 8, true);
     const method = view.getUint16(at + 10, true);
     const crc = view.getUint32(at + 16, true);
@@ -96,16 +98,16 @@ export async function readZip(bytes: Uint8Array): Promise<Map<string, Uint8Array
     const name = new TextDecoder(flags & UTF8_NAMES ? 'utf-8' : 'latin1').decode(rawName).replace(/\\/g, '/');
     at += 46 + nameLength + extraLength + commentLength;
     if (name.endsWith('/')) continue;
-    if (flags & 1) throw new ZipError(`«${name}» está cifrado.`);
-    if (packed === 0xffffffff || size === 0xffffffff) throw new ZipError('Los archivos ZIP64 no están admitidos.');
+    if (flags & 1) throw new ZipError(t('zip.encryptedEntry', { name }));
+    if (packed === 0xffffffff || size === 0xffffffff) throw new ZipError(t('zip.zip64Unsupported'));
     total += size;
-    if (total > MAX_UNZIPPED_BYTES) throw new ZipError('El archivo descomprimido sería demasiado grande.');
+    if (total > MAX_UNZIPPED_BYTES) throw new ZipError(t('zip.unzippedTooLarge'));
 
     if (localAt + 30 > bytes.length || view.getUint32(localAt, true) !== LOCAL_HEADER) {
-      throw new ZipError(`La entrada «${name}» está dañada.`);
+      throw new ZipError(t('zip.corruptEntry', { name }));
     }
     const dataAt = localAt + 30 + view.getUint16(localAt + 26, true) + view.getUint16(localAt + 28, true);
-    if (dataAt + packed > bytes.length) throw new ZipError(`La entrada «${name}» está cortada.`);
+    if (dataAt + packed > bytes.length) throw new ZipError(t('zip.truncatedEntry', { name }));
     const data = bytes.subarray(dataAt, dataAt + packed);
     let content: Uint8Array;
     if (method === STORED) {
@@ -115,12 +117,12 @@ export async function readZip(bytes: Uint8Array): Promise<Map<string, Uint8Array
         content = await through(data, new DecompressionStream('deflate-raw'), size);
       } catch (error) {
         if (error instanceof ZipError) throw error;
-        throw new ZipError(`La entrada «${name}» está dañada.`);
+        throw new ZipError(t('zip.corruptEntry', { name }));
       }
     } else {
-      throw new ZipError(`La entrada «${name}» usa una compresión no admitida (${method}).`);
+      throw new ZipError(t('zip.unsupportedCompression', { name, method }));
     }
-    if (content.length !== size || crc32(content) !== crc) throw new ZipError(`La entrada «${name}» está dañada.`);
+    if (content.length !== size || crc32(content) !== crc) throw new ZipError(t('zip.corruptEntry', { name }));
     files.set(name, content);
   }
   return files;

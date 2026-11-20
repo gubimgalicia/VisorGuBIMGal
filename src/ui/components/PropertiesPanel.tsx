@@ -1,6 +1,7 @@
 import React from 'react';
 import { Info, Tag, Hash, FileSpreadsheet } from 'lucide-react';
 import type { AttributeValue, SelectedElementDetails } from '../../domain/models/ModelRecord';
+import { t } from '../i18n';
 
 interface PropertiesPanelProps {
   element: SelectedElementDetails | null;
@@ -28,9 +29,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ element }) => 
     return (
       <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
         <Info size={32} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
-        <p style={{ fontWeight: 500 }}>Ningún elemento seleccionado</p>
+        <p style={{ fontWeight: 500 }}>{t('properties.emptyTitle')}</p>
         <p style={{ fontSize: '11px', marginTop: '4px' }}>
-          Haz clic en cualquier elemento 3D o en el árbol espacial para inspeccionar sus propiedades IFC.
+          {t('properties.emptyHint')}
         </p>
       </div>
     );
@@ -53,7 +54,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ element }) => 
           <span style={{ fontSize: '13px', fontWeight: 600 }}>{element.type}</span>
         </div>
         <div style={{ fontSize: '12px', fontWeight: 500, color: '#f8fafc', marginBottom: '8px' }}>
-          {element.name || 'Sin nombre definido'}
+          {element.name || t('properties.unnamed')}
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '11px' }}>
@@ -75,7 +76,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ element }) => 
       {/* Property Sets */}
       <div style={{ marginBottom: '8px' }}>
         <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>
-          Conjuntos de propiedades ({element.propertySets.length})
+          {t('properties.propertySetsHeading', { count: element.propertySets.length })}
         </span>
       </div>
 
@@ -84,7 +85,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ element }) => 
           <div className="pset-header">
             <span>{pset.name}</span>
             {pset.properties.length > 0 && (
-              <span style={{ fontSize: '10px', color: '#94a3b8' }}>{pset.properties.length} props</span>
+              <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                {t('properties.propsCount', { count: pset.properties.length })}
+              </span>
             )}
           </div>
           <table className="pset-table">
@@ -112,7 +115,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ element }) => 
           <div className="pset-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <FileSpreadsheet size={13} />
-              <span>Atributos IFC de entidad</span>
+              <span>{t('properties.attributesHeading')}</span>
             </div>
           </div>
           <table className="pset-table">

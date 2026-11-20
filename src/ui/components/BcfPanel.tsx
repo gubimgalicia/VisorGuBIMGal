@@ -18,28 +18,39 @@ import {
   type BcfTopic,
   type BcfViewpoint
 } from '../viewer/bcf';
+import { t } from '../i18n';
 
 const DEFAULT_TYPES = ['Issue', 'Clash', 'Request', 'Remark'];
 const DEFAULT_STATUSES = ['Open', 'InProgress', 'Resolved', 'Closed'];
 const DEFAULT_PRIORITIES = ['High', 'Normal', 'Low'];
 
-const STATUS_LABELS: Record<string, string> = {
-  Open: 'Abierta',
-  InProgress: 'En curso',
-  Resolved: 'Resuelta',
-  Closed: 'Cerrada'
+const STATUS_KEYS: Record<string, 'bcf.statusOpen' | 'bcf.statusInProgress' | 'bcf.statusResolved' | 'bcf.statusClosed'> = {
+  Open: 'bcf.statusOpen',
+  InProgress: 'bcf.statusInProgress',
+  Resolved: 'bcf.statusResolved',
+  Closed: 'bcf.statusClosed'
 };
 
-const PRIORITY_LABELS: Record<string, string> = {
-  High: 'Alta',
-  Normal: 'Normal',
-  Low: 'Baja'
+const PRIORITY_KEYS: Record<string, 'bcf.priorityHigh' | 'bcf.priorityNormal' | 'bcf.priorityLow'> = {
+  High: 'bcf.priorityHigh',
+  Normal: 'bcf.priorityNormal',
+  Low: 'bcf.priorityLow'
+};
+
+const getStatusLabel = (status: string): string => {
+  const key = STATUS_KEYS[status];
+  return key ? t(key) : status;
+};
+
+const getPriorityLabel = (priority: string): string => {
+  const key = PRIORITY_KEYS[priority];
+  return key ? t(key) : priority;
 };
 
 function createInitialProject(): BcfProject {
   return {
     version: '3.0',
-    project: { projectId: newGuid(), name: 'Proyecto guBIM' },
+    project: { projectId: newGuid(), name: t('bcf.defaultProjectName') },
     extensions: {
       ...emptyExtensions(),
       topicTypes: [...DEFAULT_TYPES],
@@ -128,7 +139,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
       setProject(imported);
       setActiveTopicGuid(imported.topics[0]?.guid ?? null);
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : 'No se pudo leer el archivo BCF.');
+      setErrorText(err instanceof Error ? err.message : t('bcf.readError'));
     } finally {
       setIsBusy(false);
     }
@@ -140,7 +151,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
     setErrorText(null);
     try {
       const bytes = await writeBcf(project);
-      const filename = 'incidencias-bcf3.bcf';
+      const filename = t('bcf.exportFilename');
       if (typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__gubim_last_bcf__ = {
           filename,
@@ -160,14 +171,15 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : 'Error al exportar el archivo BCF 3.0.');
+      setErrorText(err instanceof Error ? err.message : t('bcf.exportError'));
     } finally {
       setIsBusy(false);
     }
   }, [project]);
 
   const handleAddTopic = useCallback(() => {
-    const trimmedTitle = newTitle.trim() || `Incidencia ${project.topics.length + 1}`;
+    const trimmedTitle =
+      newTitle.trim() || t('bcf.defaultTopicTitle', { index: project.topics.length + 1 });
     const trimmedAuthor = newAuthor.trim() || 'guBIM';
     const trimmedDesc = newDescription.trim();
     const nowIso = new Date().toISOString();
@@ -234,7 +246,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
         )
       }));
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : 'Error al capturar punto de vista 3D.');
+      setErrorText(err instanceof Error ? err.message : t('bcf.captureViewpointError'));
     } finally {
       setIsBusy(false);
     }
@@ -298,10 +310,10 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           style={{ flex: 1 }}
           disabled={isBusy}
           onClick={() => fileInputRef.current?.click()}
-          title="Importar archivo BCF 2.1 o 3.0 (.bcf, .bcfzip)"
+          title={t('bcf.importTitle')}
         >
           <Upload size={13} />
-          <span>Importar .bcf</span>
+          <span>{t('bcf.importLabel')}</span>
         </button>
         <button
           type="button"
@@ -309,10 +321,10 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           style={{ flex: 1 }}
           disabled={isBusy || project.topics.length === 0}
           onClick={() => void handleExportBcf()}
-          title="Exportar incidencias como archivo BCF 3.0 (.bcf)"
+          title={t('bcf.exportTitle')}
         >
           <Download size={13} />
-          <span>Exportar .bcf 3.0</span>
+          <span>{t('bcf.exportLabel')}</span>
         </button>
       </div>
 
@@ -345,12 +357,12 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
         }}
       >
         <div style={{ fontSize: '11px', fontWeight: 600, color: '#cbd5e1' }}>
-          Nueva incidencia BCF
+          {t('bcf.newTopicHeading')}
         </div>
         <input
           type="text"
           className="bcf-new-topic-title"
-          placeholder="Título de la incidencia..."
+          placeholder={t('bcf.titlePlaceholder')}
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -371,7 +383,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
             className="bcf-new-topic-type"
             value={newType}
             onChange={(e) => setNewType(e.target.value)}
-            aria-label="Tipo de incidencia"
+            aria-label={t('bcf.typeAriaLabel')}
             style={{
               flex: 1,
               padding: '4px 6px',
@@ -382,9 +394,9 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
               color: '#e2e8f0'
             }}
           >
-            {topicTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {topicTypes.map((topicType) => (
+              <option key={topicType} value={topicType}>
+                {topicType}
               </option>
             ))}
           </select>
@@ -392,7 +404,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
             className="bcf-new-topic-status"
             value={newStatus}
             onChange={(e) => setNewStatus(e.target.value)}
-            aria-label="Estado de incidencia"
+            aria-label={t('bcf.statusAriaLabel')}
             style={{
               flex: 1,
               padding: '4px 6px',
@@ -405,7 +417,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           >
             {topicStatuses.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABELS[s] ?? s}
+                {getStatusLabel(s)}
               </option>
             ))}
           </select>
@@ -413,7 +425,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
             className="bcf-new-topic-priority"
             value={newPriority}
             onChange={(e) => setNewPriority(e.target.value)}
-            aria-label="Prioridad de incidencia"
+            aria-label={t('bcf.priorityAriaLabel')}
             style={{
               flex: 1,
               padding: '4px 6px',
@@ -426,7 +438,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           >
             {priorities.map((p) => (
               <option key={p} value={p}>
-                {PRIORITY_LABELS[p] ?? p}
+                {getPriorityLabel(p)}
               </option>
             ))}
           </select>
@@ -435,7 +447,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           <input
             type="text"
             className="bcf-new-topic-author"
-            placeholder="Autor..."
+            placeholder={t('bcf.authorPlaceholder')}
             value={newAuthor}
             onChange={(e) => setNewAuthor(e.target.value)}
             style={{
@@ -451,7 +463,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           <input
             type="text"
             className="bcf-new-topic-desc"
-            placeholder="Descripción opcional..."
+            placeholder={t('bcf.descriptionPlaceholder')}
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
             style={{
@@ -472,19 +484,21 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           onClick={handleAddTopic}
         >
           <Plus size={13} />
-          <span>Crear incidencia</span>
+          <span>{t('bcf.createTopicBtn')}</span>
         </button>
       </div>
 
       {/* Topic list */}
       {project.topics.length === 0 ? (
         <div style={{ padding: '16px 10px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-          Sin incidencias activas. Crea una incidencia o importa un archivo <strong>.bcf</strong> (2.1 o 3.0).
+          {t('bcf.emptyBeforeExt')}
+          <strong>{t('bcf.emptyExt')}</strong>
+          {t('bcf.emptyAfterExt')}
         </div>
       ) : (
         <div className="bcf-topic-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-            Incidencias ({project.topics.length}) — BCF {project.version}
+            {t('bcf.topicsHeading', { count: project.topics.length, version: project.version })}
           </div>
           {project.topics.map((topic) => {
             const isSelected = activeTopic?.guid === topic.guid;
@@ -515,7 +529,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                       textOverflow: 'ellipsis'
                     }}
                   >
-                    {topic.title || '(Sin título)'}
+                    {topic.title || t('bcf.untitledTopic')}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span
@@ -528,7 +542,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                         color: '#38bdf8'
                       }}
                     >
-                      {STATUS_LABELS[topic.topicStatus] ?? (topic.topicStatus || 'Abierta')}
+                      {getStatusLabel(topic.topicStatus || DEFAULT_STATUSES[0])}
                     </span>
                     <button
                       type="button"
@@ -538,17 +552,17 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                         e.stopPropagation();
                         handleDeleteTopic(topic.guid);
                       }}
-                      title="Eliminar incidencia"
+                      title={t('bcf.deleteTopicTitle')}
                     >
                       <Trash2 size={12} />
                     </button>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '4px', fontSize: '10px', color: '#94a3b8' }}>
-                  <span>{topic.topicType || 'Issue'}</span>
-                  {topic.priority && <span>Prioridad: {PRIORITY_LABELS[topic.priority] ?? topic.priority}</span>}
-                  <span>Vistas: {topic.viewpoints.length}</span>
-                  <span>Comentarios: {topic.comments.length}</span>
+                  <span>{topic.topicType || DEFAULT_TYPES[0]}</span>
+                  {topic.priority && <span>{t('bcf.priorityLine', { priority: getPriorityLabel(topic.priority) })}</span>}
+                  <span>{t('bcf.viewsLine', { count: topic.viewpoints.length })}</span>
+                  <span>{t('bcf.commentsLine', { count: topic.comments.length })}</span>
                 </div>
               </div>
             );
@@ -589,7 +603,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
             >
               {topicStatuses.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABELS[s] ?? s}
+                  {getStatusLabel(s)}
                 </option>
               ))}
             </select>
@@ -605,17 +619,17 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8' }}>
-                Puntos de vista 3D ({activeTopic.viewpoints.length})
+                {t('bcf.viewpointsHeading', { count: activeTopic.viewpoints.length })}
               </span>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm bcf-capture-viewpoint-btn"
                 disabled={isBusy}
                 onClick={() => void handleCaptureViewpoint()}
-                title="Capturar cámara, selección, visibilidad, colores, sección y miniatura PNG"
+                title={t('bcf.captureViewpointTitle')}
               >
                 <Camera size={12} />
-                <span>Capturar vista 3D</span>
+                <span>{t('bcf.captureViewpointBtn')}</span>
               </button>
             </div>
 
@@ -639,7 +653,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                   {thumbUrl && (
                     <img
                       src={thumbUrl}
-                      alt={`Vista ${idx + 1}`}
+                      alt={t('bcf.viewpointAlt', { index: idx + 1 })}
                       className="bcf-viewpoint-thumb"
                       onClick={() => void onApplyViewpoint(vp)}
                       style={{
@@ -654,26 +668,32 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0' }}>
-                      Vista #{vp.index ?? idx + 1}{' '}
+                      {t('bcf.viewpointHeader', { index: vp.index ?? idx + 1 })}
                       <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: '10px' }}>
-                        ({vp.camera?.kind === 'orthogonal' ? 'Orto' : 'Persp'})
+                        {t('bcf.viewpointKindParen', {
+                          kind: vp.camera?.kind === 'orthogonal' ? t('common.orthoShort') : t('common.perspShort')
+                        })}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
                       {vp.selection.length > 0 && (
-                        <span className="bcf-vp-sel-count">Sel: {vp.selection.length}</span>
+                        <span className="bcf-vp-sel-count">{t('bcf.vpSelCount', { count: vp.selection.length })}</span>
                       )}
                       {vp.visibility && vp.visibility.exceptions.length > 0 && (
                         <span className="bcf-vp-vis-count">
-                          {vp.visibility.defaultVisibility ? 'Ocultos' : 'Aislados'}:{' '}
-                          {vp.visibility.exceptions.length}
+                          {t('bcf.vpVisCount', {
+                            label: vp.visibility.defaultVisibility
+                              ? t('bcf.vpHiddenLabel')
+                              : t('bcf.vpIsolatedLabel'),
+                            count: vp.visibility.exceptions.length
+                          })}
                         </span>
                       )}
                       {vp.coloring.length > 0 && (
-                        <span className="bcf-vp-color-count">Colores: {vp.coloring.length}</span>
+                        <span className="bcf-vp-color-count">{t('bcf.vpColorCount', { count: vp.coloring.length })}</span>
                       )}
                       {vp.clippingPlanes.length > 0 && (
-                        <span className="bcf-vp-planes-count">Planos: {vp.clippingPlanes.length}</span>
+                        <span className="bcf-vp-planes-count">{t('bcf.vpPlanesCount', { count: vp.clippingPlanes.length })}</span>
                       )}
                     </div>
                   </div>
@@ -683,17 +703,17 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                       className="btn btn-secondary btn-sm bcf-apply-viewpoint-btn"
                       style={{ padding: '3px 6px', fontSize: '10px' }}
                       onClick={() => void onApplyViewpoint(vp)}
-                      title="Restaurar este punto de vista en el visor 3D"
+                      title={t('bcf.applyViewpointTitle')}
                     >
                       <Eye size={12} />
-                      <span>Ver</span>
+                      <span>{t('bcf.applyViewpointBtn')}</span>
                     </button>
                     <button
                       type="button"
                       className="btn btn-ghost btn-icon bcf-delete-viewpoint-btn"
                       style={{ width: '22px', height: '22px', padding: 0 }}
                       onClick={() => handleDeleteViewpoint(activeTopic.guid, vp.guid)}
-                      title="Eliminar punto de vista"
+                      title={t('bcf.deleteViewpointTitle')}
                     >
                       <Trash2 size={12} />
                     </button>
@@ -707,7 +727,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <MessageSquare size={12} />
-              <span>Comentarios ({activeTopic.comments.length})</span>
+              <span>{t('bcf.commentsHeading', { count: activeTopic.comments.length })}</span>
             </div>
 
             {activeTopic.comments.map((c) => {
@@ -726,7 +746,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '10px' }}>
-                    <strong>{c.author || 'Anónimo'}</strong>
+                    <strong>{c.author || t('bcf.anonymousAuthor')}</strong>
                     <span>{c.date ? c.date.slice(0, 10) : ''}</span>
                   </div>
                   <div className="bcf-comment-text" style={{ color: '#e2e8f0', marginTop: '2px' }}>
@@ -740,7 +760,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                       onClick={() => void onApplyViewpoint(linkedVp)}
                     >
                       <Eye size={10} />
-                      <span>Ir a vista vinculada</span>
+                      <span>{t('bcf.goToLinkedViewpoint')}</span>
                     </button>
                   )}
                 </div>
@@ -751,7 +771,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
               <input
                 type="text"
                 className="bcf-comment-input"
-                placeholder="Añadir comentario..."
+                placeholder={t('bcf.commentPlaceholder')}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => {
@@ -772,7 +792,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                   className="bcf-comment-viewpoint-select"
                   value={commentViewpointGuid}
                   onChange={(e) => setCommentViewpointGuid(e.target.value)}
-                  aria-label="Vincular punto de vista"
+                  aria-label={t('bcf.linkViewpointAriaLabel')}
                   style={{
                     width: '82px',
                     padding: '4px',
@@ -783,10 +803,10 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                     color: '#cbd5e1'
                   }}
                 >
-                  <option value="">Sin vista</option>
+                  <option value="">{t('bcf.noLinkedViewpoint')}</option>
                   {activeTopic.viewpoints.map((vp, idx) => (
                     <option key={vp.guid} value={vp.guid}>
-                      Vista #{vp.index ?? idx + 1}
+                      {t('bcf.viewpointOption', { index: vp.index ?? idx + 1 })}
                     </option>
                   ))}
                 </select>
@@ -796,7 +816,7 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
                 className="btn btn-secondary btn-sm bcf-add-comment-btn"
                 onClick={handleAddComment}
               >
-                Añadir
+                {t('common.add')}
               </button>
             </div>
           </div>

@@ -9,6 +9,7 @@ import type {
   ModelId,
   PropertySetItem
 } from '../../domain/models/ModelRecord';
+import { t } from '../i18n';
 
 export type IdsValueConstraint =
   | { kind: 'simple'; value: string }
@@ -336,7 +337,7 @@ export function parseIdsXml(xml: string): IdsDocument {
           : undefined;
 
     return {
-      name: (specNode.attrs.name || `Especificación ${index + 1}`).trim(),
+      name: (specNode.attrs.name || t('ids.defaultSpecName', { index: index + 1 })).trim(),
       description: specNode.attrs.description?.trim(),
       instructions: specNode.attrs.instructions?.trim(),
       ifcVersion: specNode.attrs.ifcVersion?.trim(),
@@ -348,7 +349,7 @@ export function parseIdsXml(xml: string): IdsDocument {
   });
 
   return {
-    title: titleNode?.text.trim() || 'Especificación IDS',
+    title: titleNode?.text.trim() || t('ids.defaultDocTitle'),
     specifications
   };
 }
@@ -445,7 +446,7 @@ export function extractIdsCandidates(
     const nextAncestors = [...ancestors, node.type];
     const nextStorey =
       node.type === 'IfcBuildingStorey'
-        ? node.name?.trim() || `Planta #${node.expressId}`
+        ? node.name?.trim() || t('ids.defaultStoreyName', { id: node.expressId })
         : currentStorey;
 
     for (const elem of node.elements) {
@@ -456,7 +457,7 @@ export function extractIdsCandidates(
         expressId: elem.expressId,
         ifcClass: elem.type,
         name: elem.name ?? '',
-        storey: nextStorey ?? 'Sin planta',
+        storey: nextStorey ?? t('ids.noStorey'),
         ancestors: nextAncestors
       });
     }
@@ -476,7 +477,7 @@ export function extractIdsCandidates(
       expressId: elem.expressId,
       ifcClass: elem.type,
       name: elem.name ?? '',
-      storey: 'Sin planta',
+      storey: t('ids.noStorey'),
       ancestors: []
     });
   }
@@ -544,7 +545,7 @@ function describeConstraint(c: IdsValueConstraint | undefined): string {
   if (c.minExclusive !== undefined) parts.push(`> ${c.minExclusive}`);
   if (c.maxInclusive !== undefined) parts.push(`<= ${c.maxInclusive}`);
   if (c.maxExclusive !== undefined) parts.push(`< ${c.maxExclusive}`);
-  return parts.join(' y ') || 'restricción';
+  return parts.join(t('ids.constraintAnd')) || t('ids.constraintFallback');
 }
 
 function checkFacetRawMatch(facet: IdsFacet, element: IdsCandidateElement): boolean {
@@ -624,7 +625,11 @@ function checkRequirementFacet(facet: IdsFacet, element: IdsCandidateElement): s
       if (!hasProp) return null;
       return matched
         ? null
-        : `Propiedad ${describeConstraint(facet.propertySet)}.${describeConstraint(facet.baseName)} no cumple (${describeConstraint(facet.value)})`;
+        : t('ids.failOptionalProperty', {
+            pset: describeConstraint(facet.propertySet),
+            prop: describeConstraint(facet.baseName),
+            value: describeConstraint(facet.value)
+          });
     }
     return null;
   }
@@ -633,13 +638,18 @@ function checkRequirementFacet(facet: IdsFacet, element: IdsCandidateElement): s
     if (!matched) return null;
     switch (facet.kind) {
       case 'attribute':
-        return `Atributo prohibido presente: ${describeConstraint(facet.name)}`;
+        return t('ids.failProhibitedAttr', { name: describeConstraint(facet.name) });
       case 'property':
-        return `Propiedad prohibida presente: ${describeConstraint(facet.propertySet)}.${describeConstraint(facet.baseName)}`;
+        return t('ids.failProhibitedProp', {
+          pset: describeConstraint(facet.propertySet),
+          prop: describeConstraint(facet.baseName)
+        });
       case 'material':
-        return `Material prohibido presente${facet.value ? `: ${describeConstraint(facet.value)}` : ''}`;
+        return facet.value
+          ? t('ids.failProhibitedMaterialValue', { value: describeConstraint(facet.value) })
+          : t('ids.failProhibitedMaterial');
       case 'partOf':
-        return `Relación espacial prohibida: ${describeConstraint(facet.entityName)}`;
+        return t('ids.failProhibitedPartOf', { entity: describeConstraint(facet.entityName) });
     }
   }
 
@@ -647,15 +657,36 @@ function checkRequirementFacet(facet: IdsFacet, element: IdsCandidateElement): s
 
   switch (facet.kind) {
     case 'entity':
-      return `Tipo de entidad no cumple: ${describeConstraint(facet.name)}${facet.predefinedType ? ` (${describeConstraint(facet.predefinedType)})` : ''}`;
+      return facet.predefinedType
+        ? t('ids.failEntityWithPredefined', {
+            name: describeConstraint(facet.name),
+            predefined: describeConstraint(facet.predefinedType)
+          })
+        : t('ids.failEntity', { name: describeConstraint(facet.name) });
     case 'attribute':
-      return `Atributo ${describeConstraint(facet.name)}${facet.value ? ` = ${describeConstraint(facet.value)}` : ''} no cumple`;
+      return facet.value
+        ? t('ids.failAttributeWithValue', {
+            name: describeConstraint(facet.name),
+            value: describeConstraint(facet.value)
+          })
+        : t('ids.failAttribute', { name: describeConstraint(facet.name) });
     case 'property':
-      return `Propiedad ${describeConstraint(facet.propertySet)}.${describeConstraint(facet.baseName)}${facet.value ? ` (${describeConstraint(facet.value)})` : ''} no cumple`;
+      return facet.value
+        ? t('ids.failPropertyWithValue', {
+            pset: describeConstraint(facet.propertySet),
+            prop: describeConstraint(facet.baseName),
+            value: describeConstraint(facet.value)
+          })
+        : t('ids.failProperty', {
+            pset: describeConstraint(facet.propertySet),
+            prop: describeConstraint(facet.baseName)
+          });
     case 'material':
-      return `Material requerido${facet.value ? ` (${describeConstraint(facet.value)})` : ''} no encontrado`;
+      return facet.value
+        ? t('ids.failMaterialWithValue', { value: describeConstraint(facet.value) })
+        : t('ids.failMaterial');
     case 'partOf':
-      return `Debe pertenecer a ${describeConstraint(facet.entityName)}`;
+      return t('ids.failPartOf', { entity: describeConstraint(facet.entityName) });
   }
 }
 
@@ -699,7 +730,7 @@ export function evaluateIdsDocument(
     let cardinalityFailed = false;
     if (spec.minOccurs !== undefined && applicable.length < spec.minOccurs) {
       cardinalityFailed = true;
-      cardinalityNote = `Se requerían al menos ${spec.minOccurs} elementos aplicables y se encontraron ${applicable.length}.`;
+      cardinalityNote = t('ids.minOccursNote', { min: spec.minOccurs, found: applicable.length });
     }
     if (
       spec.maxOccurs !== undefined &&
@@ -707,7 +738,7 @@ export function evaluateIdsDocument(
       applicable.length > spec.maxOccurs
     ) {
       cardinalityFailed = true;
-      cardinalityNote = `Se permitían como máximo ${spec.maxOccurs} elementos aplicables y se encontraron ${applicable.length}.`;
+      cardinalityNote = t('ids.maxOccursNote', { max: spec.maxOccurs, found: applicable.length });
     }
 
     let status: 'pass' | 'fail' | 'not-applicable';

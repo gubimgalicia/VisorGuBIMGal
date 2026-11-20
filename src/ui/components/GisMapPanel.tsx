@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, Layers, X, Navigation } from 'lucide-react';
 import { leafletService } from '../../infrastructure/gis/LeafletService';
 import type { ModelRecord } from '../../domain/models/ModelRecord';
+import { formatFixed, t } from '../i18n';
 
 interface GisMapPanelProps {
   models: ModelRecord[];
@@ -72,10 +73,13 @@ export const GisMapPanel: React.FC<GisMapPanelProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <MapPin size={14} color="#38bdf8" />
-          <span style={{ fontWeight: 600 }}>Contexto GIS 2D (Leaflet / PNOA / OSM)</span>
+          <span style={{ fontWeight: 600 }}>{t('gis.headerTitle')}</span>
           {clickedCoords && (
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#94a3b8' }}>
-              Lat: {clickedCoords.lat.toFixed(5)}, Lng: {clickedCoords.lng.toFixed(5)}
+              {t('gis.coordsLabel', {
+                lat: formatFixed(clickedCoords.lat, 5),
+                lng: formatFixed(clickedCoords.lng, 5)
+              })}
             </span>
           )}
         </div>
@@ -84,11 +88,11 @@ export const GisMapPanel: React.FC<GisMapPanelProps> = ({
           <button
             className="btn btn-ghost btn-icon"
             onClick={handleCenterModel}
-            title="Centrar en el modelo IFC"
+            title={t('gis.centerModelTitle')}
           >
             <Navigation size={14} />
           </button>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} title="Cerrar panel GIS">
+          <button className="btn btn-ghost btn-icon" onClick={onClose} title={t('gis.closeTitle')}>
             <X size={14} />
           </button>
         </div>

@@ -8,6 +8,7 @@ import {
   type SectionAxis,
   type SectionState
 } from '../viewer/section';
+import { formatLength, t } from '../i18n';
 
 interface SectionBarProps {
   section: SectionState;
@@ -38,7 +39,7 @@ const Slider: React.FC<SliderProps> = ({ className, label, min, max, value, onCh
     step={max > min ? (max - min) / STEPS : 'any'}
     value={value}
     onChange={(event) => onChange(Number(event.target.value))}
-    title={`${label}: ${value.toFixed(2)} m`}
+    title={t('section.sliderTitle', { label, value: formatLength(value, 2) })}
   />
 );
 
@@ -74,18 +75,18 @@ export const SectionBar: React.FC<SectionBarProps> = ({
   return (
     <div className="section-bar">
       <div className="display-bar-row">
-        <span className="display-bar-label">Corte 3D</span>
+        <span className="display-bar-label">{t('section.title')}</span>
         <select
           className="select section-mode"
           value={section.mode}
           disabled={!bounds}
           onChange={(event) => handleModeChange(event.target.value as SectionState['mode'])}
-          title="Corte 3D"
+          title={t('section.title')}
         >
-          <option value="off">Sin corte</option>
-          <option value="plane">Plano</option>
-          <option value="box">Caja</option>
-          <option value="face">Por cara</option>
+          <option value="off">{t('section.modeOff')}</option>
+          <option value="plane">{t('section.modePlane')}</option>
+          <option value="box">{t('section.modeBox')}</option>
+          <option value="face">{t('section.modeFace')}</option>
         </select>
         {bounds && (
           <button
@@ -93,7 +94,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
             className={`btn btn-ghost btn-icon section-pick-face-btn ${isPickingFace ? 'active' : ''}`}
             aria-pressed={isPickingFace}
             onClick={() => onTogglePickFace?.(!isPickingFace)}
-            title="Elegir una cara del modelo 3D para cortar en su plano"
+            title={t('section.pickFaceBtnTitle')}
           >
             <MousePointerClick size={14} />
           </button>
@@ -112,10 +113,10 @@ export const SectionBar: React.FC<SectionBarProps> = ({
               <MousePointerClick size={13} />
               <span>
                 {isPickingFace
-                  ? 'Haz clic en una cara 3D…'
+                  ? t('section.pickingFacePrompt')
                   : section.face
-                    ? 'Elegir otra cara'
-                    : 'Elegir cara'}
+                    ? t('section.pickAnotherFace')
+                    : t('section.pickFace')}
               </span>
             </button>
             {section.face && (
@@ -124,7 +125,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
                 className={`btn btn-ghost btn-icon section-flip ${section.flip ? 'active' : ''}`}
                 aria-pressed={section.flip}
                 onClick={() => update({ flip: !section.flip })}
-                title="Invertir sentido del corte por cara"
+                title={t('section.flipFaceTitle')}
               >
                 <FlipVertical2 size={14} />
               </button>
@@ -134,7 +135,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
             <div className="display-bar-row">
               <Slider
                 className="section-face-offset"
-                label="Desplazamiento desde la cara"
+                label={t('section.faceOffsetLabel')}
                 min={-faceRange}
                 max={faceRange}
                 value={section.face.offset}
@@ -142,7 +143,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
                   update({ face: section.face ? { ...section.face, offset } : null })
                 }
               />
-              <span className="section-value">{section.face.offset.toFixed(2)} m</span>
+              <span className="section-value">{formatLength(section.face.offset, 2)}</span>
             </div>
           )}
         </>
@@ -155,11 +156,11 @@ export const SectionBar: React.FC<SectionBarProps> = ({
               className="select section-axis"
               value={section.axis}
               onChange={(event) => update({ axis: event.target.value as SectionAxis, position: null })}
-              title="Eje del plano"
+              title={t('section.axisTitle')}
             >
               {SECTION_AXES.map((axis) => (
                 <option key={axis} value={axis}>
-                  Eje {axis.toUpperCase()}
+                  {t('section.axisOption', { axis: axis.toUpperCase() })}
                 </option>
               ))}
             </select>
@@ -168,7 +169,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
               className={`btn btn-ghost btn-icon section-flip ${section.flip ? 'active' : ''}`}
               aria-pressed={section.flip}
               onClick={() => update({ flip: !section.flip })}
-              title="Invertir: conservar el otro lado del plano"
+              title={t('section.flipPlaneTitle')}
             >
               <FlipVertical2 size={14} />
             </button>
@@ -176,13 +177,13 @@ export const SectionBar: React.FC<SectionBarProps> = ({
           <div className="display-bar-row">
             <Slider
               className="section-position"
-              label={`Plano ${section.axis.toUpperCase()}`}
+              label={t('section.planeSliderLabel', { axis: section.axis.toUpperCase() })}
               min={bounds.min[section.axis]}
               max={bounds.max[section.axis]}
               value={planePosition(section, bounds)}
               onChange={(position) => update({ position })}
             />
-            <span className="section-value">{planePosition(section, bounds).toFixed(2)} m</span>
+            <span className="section-value">{formatLength(planePosition(section, bounds), 2)}</span>
           </div>
         </>
       )}
@@ -194,7 +195,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
             <span className="section-axis-label">{axis.toUpperCase()}</span>
             <Slider
               className={`section-box-min-${axis}`}
-              label={`Mínimo ${axis.toUpperCase()}`}
+              label={t('section.boxMinLabel', { axis: axis.toUpperCase() })}
               min={bounds.min[axis]}
               max={bounds.max[axis]}
               value={min[axis]}
@@ -202,7 +203,7 @@ export const SectionBar: React.FC<SectionBarProps> = ({
             />
             <Slider
               className={`section-box-max-${axis}`}
-              label={`Máximo ${axis.toUpperCase()}`}
+              label={t('section.boxMaxLabel', { axis: axis.toUpperCase() })}
               min={bounds.min[axis]}
               max={bounds.max[axis]}
               value={max[axis]}

@@ -1,19 +1,15 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Check, Download, Trash2, X } from 'lucide-react';
-import { MEASURE_KINDS, canClose, measurementText, type MeasureKind } from '../viewer/measure';
+import { getMeasureKinds, canClose, measurementText, type MeasureKind } from '../viewer/measure';
 import type { MeasureController } from '../viewer/MeasureController';
 import type { CsvGroupBy } from '../viewer/csvExport';
+import { t } from '../i18n';
 
 interface MeasureBarProps {
   controller: MeasureController;
   onExportCsv?: (groupBy: CsvGroupBy) => void;
   isExportingCsv?: boolean;
 }
-
-const LABELS = Object.fromEntries(MEASURE_KINDS.map(({ kind, label }) => [kind, label])) as Record<
-  MeasureKind,
-  string
->;
 
 export const MeasureBar: React.FC<MeasureBarProps> = ({
   controller,
@@ -22,7 +18,12 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
 }) => {
   const { kind, draft, measurements } = useSyncExternalStore(controller.subscribe, controller.getState);
   const [groupBy, setGroupBy] = useState<CsvGroupBy>('class');
-  const hint = MEASURE_KINDS.find((item) => item.kind === kind)?.hint;
+  const measureKinds = getMeasureKinds();
+  const labels = Object.fromEntries(measureKinds.map(({ kind: k, label }) => [k, label])) as Record<
+    MeasureKind,
+    string
+  >;
+  const hint = measureKinds.find((item) => item.kind === kind)?.hint;
 
   // Escape starts the measurement in hand again; Enter closes an area.
   useEffect(() => {
@@ -40,15 +41,15 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
   return (
     <div className="measure-bar">
       <div className="display-bar-row">
-        <span className="display-bar-label">Medir</span>
+        <span className="display-bar-label">{t('measure.label')}</span>
         <select
           className="select measure-mode"
           value={kind ?? ''}
           onChange={(event) => controller.setKind((event.target.value || null) as MeasureKind | null)}
-          title="Medir"
+          title={t('measure.label')}
         >
-          <option value="">Sin medir</option>
-          {MEASURE_KINDS.map((item) => (
+          <option value="">{t('measure.noneOption')}</option>
+          {measureKinds.map((item) => (
             <option key={item.kind} value={item.kind}>
               {item.label}
             </option>
@@ -59,7 +60,7 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
             type="button"
             className="btn btn-ghost btn-icon measure-close"
             onClick={() => controller.closeDraft()}
-            title="Cerrar el área (Intro)"
+            title={t('measure.closeAreaTitle')}
           >
             <Check size={14} />
           </button>
@@ -69,7 +70,7 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
             type="button"
             className="btn btn-ghost btn-icon measure-clear"
             onClick={() => controller.clear()}
-            title="Borrar todas las mediciones"
+            title={t('measure.clearAllTitle')}
           >
             <Trash2 size={14} />
           </button>
@@ -78,15 +79,15 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
 
       {onExportCsv && (
         <div className="display-bar-row">
-          <span className="display-bar-label">CSV</span>
+          <span className="display-bar-label">{t('measure.csvLabel')}</span>
           <select
             className="select csv-group-select"
             value={groupBy}
             onChange={(event) => setGroupBy(event.target.value as CsvGroupBy)}
-            title="Agrupar mediciones CSV por clase o planta"
+            title={t('measure.csvGroupTitle')}
           >
-            <option value="class">Por clase IFC</option>
-            <option value="storey">Por planta</option>
+            <option value="class">{t('measure.csvByClass')}</option>
+            <option value="storey">{t('measure.csvByStorey')}</option>
           </select>
           <button
             type="button"
@@ -94,10 +95,10 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
             style={{ whiteSpace: 'nowrap' }}
             disabled={isExportingCsv}
             onClick={() => onExportCsv(groupBy)}
-            title="Exportar mediciones a CSV por clase o planta"
+            title={t('measure.csvExportTitle')}
           >
             <Download size={12} />
-            <span>{isExportingCsv ? 'Exportando...' : 'CSV'}</span>
+            <span>{isExportingCsv ? t('measure.csvExporting') : t('measure.csvLabel')}</span>
           </button>
         </div>
       )}
@@ -105,7 +106,7 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
       {hint && (
         <div className="display-bar-status measure-hint">
           {hint}
-          {draft && draft.points.length > 0 && ` ${draft.points.length} marcado(s); Esc para empezar de nuevo.`}
+          {draft && draft.points.length > 0 && t('measure.draftHintSuffix', { count: draft.points.length })}
         </div>
       )}
 
@@ -121,13 +122,13 @@ export const MeasureBar: React.FC<MeasureBarProps> = ({
                 data-id={measurement.id}
                 title={detail}
               >
-                <span className="measure-kind">{LABELS[measurement.kind]}</span>
+                <span className="measure-kind">{labels[measurement.kind]}</span>
                 <span className="measure-value">{value}</span>
                 <button
                   type="button"
                   className="btn btn-ghost btn-icon measure-delete"
                   onClick={() => controller.remove(measurement.id)}
-                  title="Borrar esta medición"
+                  title={t('measure.deleteOneTitle')}
                 >
                   <X size={12} />
                 </button>

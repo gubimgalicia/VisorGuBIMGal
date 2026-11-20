@@ -77,6 +77,7 @@ import { kernel, renderer } from './infrastructure/composition';
 import { leafletService } from './infrastructure/gis/LeafletService';
 
 import { Layers, FolderTree, Sliders, Scissors, Search, ShieldCheck, MessageSquareWarning } from 'lucide-react';
+import { formatLength, t } from './ui/i18n';
 
 export default function App() {
   const [models, setModels] = useState<ModelRecord[]>([]);
@@ -84,7 +85,7 @@ export default function App() {
   const [selectedRef, setSelectedRef] = useState<ElementRef | null>(null);
   const [, setHoveredRef] = useState<ElementRef | null>(null);
   const [selectedElement, setSelectedElement] = useState<SelectedElementDetails | null>(null);
-  const [statusText, setStatusText] = useState<string>('Listo. Abre un archivo IFC para comenzar.');
+  const [statusText, setStatusText] = useState<string>(() => t('app.statusReady'));
   const [isWorking, setIsWorking] = useState<boolean>(false);
   const [, setRendererError] = useState<string | null>(null);
   const [activeBackend, setActiveBackend] = useState<'webgpu' | 'webgl2' | null>(null);
@@ -163,7 +164,7 @@ export default function App() {
         measure.setKind(null);
         renderer.setPointerMode('measure');
         setIsPickingFace(true);
-        setStatusText('Haz clic sobre una cara del modelo 3D para fijar el plano de corte.');
+        setStatusText(t('app.statusPickFace'));
       } else {
         setIsPickingFace(false);
         renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
@@ -181,8 +182,8 @@ export default function App() {
         renderer.setPointerMode('measure');
         setStatusText(
           target === 'top'
-            ? 'Haz clic sobre el modelo 3D para fijar la cota del corte (arriba).'
-            : 'Haz clic sobre el modelo 3D para fijar la cota del fondo (abajo).'
+            ? t('app.statusPickHeightTop')
+            : t('app.statusPickHeightBottom')
         );
       } else {
         renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
@@ -227,7 +228,7 @@ export default function App() {
       }
       const ray = renderer.rayAt(hitX, hitY) ?? renderer.rayAt(x, y);
       if (!ref || !ray) {
-        setStatusText('Ninguna cara bajo el cursor. Haz clic sobre un elemento 3D.');
+        setStatusText(t('app.statusNoFaceUnderCursor'));
         return;
       }
       const mesh = await kernel.elementMesh(ref.modelId, ref.expressId);
@@ -235,14 +236,19 @@ export default function App() {
       const activePlanes = sectionPlanes(section, bounds);
       const hit = pickFace(mesh, ray, activePlanes) ?? pickFace(mesh, ray, []);
       if (!hit) {
-        setStatusText('No se pudo determinar la cara en ese punto. Inténtalo en otra zona.');
+        setStatusText(t('app.statusFaceDetermineFailed'));
         return;
       }
       if (heightPick) {
         setPickedHeight({ target: heightPick, z: hit.point[2], seq: Date.now() });
         setHeightPick(null);
         renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
-        setStatusText(`Cota ${heightPick === 'top' ? 'del corte' : 'del fondo'}: ${hit.point[2].toFixed(2)} m`);
+        const value = formatLength(hit.point[2], 2);
+        setStatusText(
+          heightPick === 'top'
+            ? t('app.statusHeightTopPicked', { value })
+            : t('app.statusHeightBottomPicked', { value })
+        );
         return;
       }
       setSection((prev) => ({
@@ -257,7 +263,7 @@ export default function App() {
       }));
       setIsPickingFace(false);
       renderer.setPointerMode(measure.getState().kind ? 'measure' : 'select');
-      setStatusText('Plano de corte fijado sobre la cara seleccionada.');
+      setStatusText(t('app.statusFaceCutFixed'));
     },
     [isPickingFace, heightPick, measure, section, bounds]
   );
@@ -373,7 +379,7 @@ export default function App() {
       modelSourcesRef.current.set(modelId, fileInput);
       let opened = false;
       setIsWorking(true);
-      setStatusText(`Cargando ${fileInput.name}...`);
+      setStatusText(t('app.statusLoadingFile', { fileName: fileInput.name }));
 
       try {
         if (existingModelId) {
@@ -389,12 +395,16 @@ export default function App() {
 
         // 1. Open model in kernel
         const summary = await kernel.openModel(modelId, buffer, (phase, pct) => {
-          setStatusText(`${phase} (${pct}%)`);
+          setStatusText(t('app.statusPhaseProgress', { phase, pct }));
         });
         opened = true;
 
         // 2. Stream geometry from kernel to renderer
-        setStatusText(`Procesando geometría 3D (${activeBackend === 'webgl2' ? 'WebGL2' : 'WebGPU'})...`);
+        setStatusText(
+          t('app.statusProcessingGeometry', {
+            backend: activeBackend === 'webgl2' ? 'WebGL2' : 'WebGPU'
+          })
+        );
         renderer.addModel(modelId);
 
         let meshCount = 0;
@@ -408,7 +418,7 @@ export default function App() {
             extractBatchElementMeta(event.batch.meshTable, batchMetaMap, event.batch.instanceTable);
             renderer.addBatch(event.batch);
           } else if (event.type === 'progress') {
-            setStatusText(`Cargadas ${event.processedElements} mallas 3D...`);
+            setStatusText(t('app.statusLoadedMeshesProgress', { count: event.processedElements }));
           } else if (event.type === 'complete') {
             completed = true;
             meshCount = event.meshCount;
@@ -449,7 +459,7 @@ export default function App() {
         };
 
         setModels((prev) => upsertModelRecord(prev, newModel));
-        setStatusText(`${fileInput.name} cargado con ${meshCount} mallas.`);
+        setStatusText(t('app.statusModelLoaded', { fileName: fileInput.name, count: meshCount }));
       } catch (err) {
         if (opened) {
           renderer.removeModel(modelId);
@@ -459,14 +469,14 @@ export default function App() {
             // ignore close error
           }
         }
-        const message = err instanceof Error ? err.message : 'Error';
+        const message = err instanceof Error ? err.message : t('common.error');
         console.error('Error loading IFC:', err);
         setModels((prev) => {
           const existing = prev.find((m) => m.id === modelId);
           const failed = createFailedModelRecord(modelId, fileInput, message, existing);
           return upsertModelRecord(prev, failed);
         });
-        setStatusText(`Error al cargar ${fileInput.name}: ${message}`);
+        setStatusText(t('app.statusLoadError', { fileName: fileInput.name, message }));
       } finally {
         setIsWorking(false);
       }
@@ -488,15 +498,19 @@ export default function App() {
     async (sampleUrl: string, sampleName: string) => {
       try {
         setIsWorking(true);
-        setStatusText(`Descargando muestra ${sampleName}...`);
+        setStatusText(t('app.statusDownloadingSample', { sampleName }));
         const resp = await fetch(sampleUrl);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok) throw new Error(t('app.httpStatusError', { status: resp.status }));
         const blob = await resp.blob();
         const file = new File([blob], sampleName.split(' ')[0] + '.ifc', { type: 'application/octet-stream' });
         await loadIfcFile(file);
       } catch (err) {
         console.error(err);
-        setStatusText(`Error al descargar muestra: ${err instanceof Error ? err.message : 'Error'}`);
+        setStatusText(
+          t('app.statusDownloadSampleError', {
+            message: err instanceof Error ? err.message : t('common.error')
+          })
+        );
         setIsWorking(false);
       }
     },
@@ -513,16 +527,19 @@ export default function App() {
     void (async () => {
       try {
         setIsWorking(true);
-        setStatusText(`Descargando ${target.fileName}...`);
+        setStatusText(t('app.statusDownloadingFile', { fileName: target.fileName }));
         const resp = await fetch(target.url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok) throw new Error(t('app.httpStatusError', { status: resp.status }));
         const blob = await resp.blob();
         const file = new File([blob], target.fileName, { type: 'application/octet-stream' });
         await loadIfcFile(file);
       } catch (err) {
         console.error(err);
         setStatusText(
-          `Error al descargar ${target.fileName}: ${err instanceof Error ? err.message : 'Error'}`
+          t('app.statusDownloadFileError', {
+            fileName: target.fileName,
+            message: err instanceof Error ? err.message : t('common.error')
+          })
         );
         setIsWorking(false);
       }
@@ -660,7 +677,7 @@ export default function App() {
       if (targetModels.length === 0) return;
 
       setIsExportingCsv(true);
-      setStatusText('Calculando mediciones para exportar CSV...');
+      setStatusText(t('app.statusCalculatingCsv'));
       try {
         const entries = targetModels.flatMap((model) =>
           extractSpatialElements(model.id, model.fileName, spatialTrees[model.id])
@@ -677,7 +694,7 @@ export default function App() {
         }
 
         const csv = buildMedicionesCsv(rows, groupBy);
-        const filename = `mediciones-por-${groupBy === 'class' ? 'clase' : 'planta'}.csv`;
+        const filename = groupBy === 'class' ? t('app.csvFilenameClass') : t('app.csvFilenameStorey');
         if (typeof window !== 'undefined') {
           (window as unknown as Record<string, unknown>).__gubim_last_csv__ = {
             filename,
@@ -695,11 +712,13 @@ export default function App() {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         }
-        setStatusText(`Mediciones exportadas a ${filename} (${rows.length} elementos).`);
+        setStatusText(t('app.statusCsvExported', { filename, count: rows.length }));
       } catch (err) {
         console.error('Error exporting CSV:', err);
         setStatusText(
-          `Error al exportar CSV: ${err instanceof Error ? err.message : 'Error'}`
+          t('app.statusCsvError', {
+            message: err instanceof Error ? err.message : t('common.error')
+          })
         );
       } finally {
         setIsExportingCsv(false);
@@ -761,7 +780,7 @@ export default function App() {
   const handleExportGlb = useCallback(async () => {
     const visibleModels = models.filter((m) => m.status === 'ready' && m.visible);
     if (visibleModels.length === 0) {
-      setStatusText('No hay modelos visibles para exportar a GLB.');
+      setStatusText(t('app.statusNoVisibleModelsGlb'));
       return;
     }
 
@@ -771,7 +790,7 @@ export default function App() {
 
     setIsExportingGlb(true);
     setGlbProgress({ completed: 0, total: 0 });
-    setStatusText('Preparando exportación GLB de la escena visible...');
+    setStatusText(t('app.statusPreparingGlb'));
 
     try {
       const exportInputs: ModelExportInput[] = visibleModels.map((model) => {
@@ -794,13 +813,13 @@ export default function App() {
         getGlobalId: (modelId, expressId) => resolveRefToGuid({ modelId, expressId }),
         onProgress: ({ completed, total }) => {
           setGlbProgress({ completed, total });
-          setStatusText(`Exportando GLB (${completed}/${total})...`);
+          setStatusText(t('app.statusExportingGlb', { completed, total }));
         },
         signal: controller.signal,
         yieldEvery: 1
       });
 
-      const filename = 'escena-visible.glb';
+      const filename = t('app.glbFilename');
       if (typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__gubim_last_glb__ = {
           filename,
@@ -818,14 +837,16 @@ export default function App() {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       }
-      setStatusText(`Escena exportada a ${filename} (${elementCount} elementos).`);
+      setStatusText(t('app.statusGlbExported', { filename, count: elementCount }));
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        setStatusText('Exportación GLB cancelada.');
+        setStatusText(t('app.statusGlbCancelled'));
       } else {
         console.error('Error exporting GLB:', err);
         setStatusText(
-          `Error al exportar GLB: ${err instanceof Error ? err.message : 'Error'}`
+          t('app.statusGlbError', {
+            message: err instanceof Error ? err.message : t('common.error')
+          })
         );
       }
     } finally {
@@ -1060,21 +1081,21 @@ export default function App() {
               onClick={() => setLeftTab('models')}
             >
               <Layers size={13} />
-              <span>Modelos</span>
+              <span>{t('app.tabs.models')}</span>
             </button>
             <button
               className={`tab-btn ${leftTab === 'tree' ? 'active' : ''}`}
               onClick={() => setLeftTab('tree')}
             >
               <FolderTree size={13} />
-              <span>Árbol</span>
+              <span>{t('app.tabs.tree')}</span>
             </button>
             <button
               className={`tab-btn tab-search ${leftTab === 'search' ? 'active' : ''}`}
               onClick={() => setLeftTab('search')}
             >
               <Search size={13} />
-              <span>Buscar</span>
+              <span>{t('app.tabs.search')}</span>
             </button>
           </div>
 
@@ -1206,28 +1227,28 @@ export default function App() {
               onClick={() => setRightTab('props')}
             >
               <Sliders size={13} />
-              <span>Propiedades</span>
+              <span>{t('app.tabs.properties')}</span>
             </button>
             <button
               className={`tab-btn ${rightTab === 'dxf' ? 'active' : ''}`}
               onClick={() => setRightTab('dxf')}
             >
               <Scissors size={13} />
-              <span>Planos y DXF</span>
+              <span>{t('app.tabs.dxf')}</span>
             </button>
             <button
               className={`tab-btn tab-ids ${rightTab === 'ids' ? 'active' : ''}`}
               onClick={() => setRightTab('ids')}
             >
               <ShieldCheck size={13} />
-              <span>IDS</span>
+              <span>{t('app.tabs.ids')}</span>
             </button>
             <button
               className={`tab-btn tab-bcf ${rightTab === 'bcf' ? 'active' : ''}`}
               onClick={() => setRightTab('bcf')}
             >
               <MessageSquareWarning size={13} />
-              <span>BCF</span>
+              <span>{t('app.tabs.bcf')}</span>
             </button>
           </div>
 

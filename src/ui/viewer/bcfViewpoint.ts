@@ -4,6 +4,7 @@ import type { ElementRef, ModelId, ModelRecord } from '../../domain/models/Model
 import { newGuid, type BcfCamera, type BcfColoring, type BcfComponent, type BcfViewpoint, type Vec3 } from './bcf';
 import { SHOW_ALL, targetMembers, type DisplayRule } from './displayRule';
 import { NO_SECTION, SECTION_AXES, type AxisValues, type SectionAxis, type SectionState } from './section';
+import { t } from '../i18n';
 
 const DEFAULT_FOV_DEG = 45;
 const HALF_FOV_RAD = (DEFAULT_FOV_DEG * Math.PI) / 360; // pi / 8
@@ -457,7 +458,7 @@ export function interpretBcfViewpoint(
     if (!viewpoint.visibility.defaultVisibility) {
       if (matchCount > 0) {
         displayRule = {
-          isolate: { by: 'search', label: 'Punto de vista BCF', matches },
+          isolate: { by: 'search', label: t('bcf.viewpointDefaultLabel'), matches },
           hidden: [],
           ghost: options?.ghost ?? false
         };
@@ -465,7 +466,7 @@ export function interpretBcfViewpoint(
     } else if (matchCount > 0) {
       displayRule = {
         isolate: null,
-        hidden: [{ by: 'search', label: 'Ocultos BCF', matches }],
+        hidden: [{ by: 'search', label: t('bcf.hiddenDefaultLabel'), matches }],
         ghost: options?.ghost ?? false
       };
     }

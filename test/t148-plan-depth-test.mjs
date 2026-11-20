@@ -1,7 +1,33 @@
 // T-148: a plan's default projection depth, down to the storey the cut stands in.
 // node --experimental-strip-types test/t148-plan-depth-test.mjs
 import assert from 'node:assert/strict';
-import { defaultPlanDepth, planRange, FALLBACK_PLAN_DEPTH, FLOOR_MARGIN } from '../src/ui/viewer/planDepth.ts';
+import { existsSync } from 'node:fs';
+import { registerHooks } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+// Resolve extensionless relative imports and directory imports (such as ../i18n) under Node ESM.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    try {
+      return nextResolve(specifier, context);
+    } catch (err) {
+      if (specifier.startsWith('.') && context.parentURL) {
+        const base = path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier);
+        for (const candidate of [`${base}.ts`, path.join(base, 'index.ts')]) {
+          if (existsSync(candidate)) {
+            return nextResolve(pathToFileURL(candidate).href, context);
+          }
+        }
+      }
+      throw err;
+    }
+  }
+});
+
+const { defaultPlanDepth, planRange, FALLBACK_PLAN_DEPTH, FLOOR_MARGIN } = await import(
+  '../src/ui/viewer/planDepth.ts'
+);
 
 let passed = 0;
 const check = (name, fn) => { fn(); passed++; console.log(`PASS ${name}`); };

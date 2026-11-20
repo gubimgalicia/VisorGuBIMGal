@@ -11,6 +11,7 @@ import {
   type IdsReport,
   type IdsSpecResult
 } from '../viewer/idsChecker';
+import { t } from '../i18n';
 
 interface IdsPanelProps {
   models: ModelRecord[];
@@ -56,7 +57,7 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
         const evaluated = evaluateIdsDocument(doc, candidates);
         setReport(evaluated);
       } catch (err) {
-        setErrorText(err instanceof Error ? err.message : 'Error al evaluar el archivo IDS.');
+        setErrorText(err instanceof Error ? err.message : t('ids.evalError'));
       } finally {
         setIsEvaluating(false);
       }
@@ -73,14 +74,14 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
         const xmlText = await file.text();
         const doc = parseIdsXml(xmlText);
         if (doc.specifications.length === 0) {
-          setErrorText('El archivo IDS no contiene especificaciones (<specification>).');
+          setErrorText(t('ids.emptySpecsError'));
           return;
         }
         setIdsFileName(file.name);
         setIdsDoc(doc);
         await runEvaluation(doc);
       } catch (err) {
-        setErrorText(err instanceof Error ? err.message : 'No se pudo leer el archivo IDS.');
+        setErrorText(err instanceof Error ? err.message : t('ids.readError'));
       }
     },
     [runEvaluation]
@@ -93,7 +94,7 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
       if (!matches[f.modelId]) matches[f.modelId] = [];
       matches[f.modelId].push(f.expressId);
     }
-    onIsolate({ by: 'search', label: `Fallos IDS: ${spec.name}`, matches });
+    onIsolate({ by: 'search', label: t('ids.isolateFailuresLabel', { name: spec.name }), matches });
   };
 
   return (
@@ -116,7 +117,7 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload size={13} />
-          <span>{idsFileName ? 'Cambiar archivo .ids' : 'Abrir archivo .ids'}</span>
+          <span>{idsFileName ? t('ids.changeFile') : t('ids.openFile')}</span>
         </button>
         {idsDoc && (
           <button
@@ -124,7 +125,7 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
             className="btn btn-secondary btn-icon ids-revalidate-btn"
             disabled={isEvaluating}
             onClick={() => void runEvaluation(idsDoc)}
-            title="Revalidar IDS frente a los modelos activos"
+            title={t('ids.revalidateTitle')}
           >
             <RefreshCw size={13} />
           </button>
@@ -148,8 +149,9 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
 
       {!report && !errorText && (
         <div style={{ padding: '20px 10px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-          Carga una especificación <strong>.ids</strong> (buildingSMART IDS 1.0) para comprobar
-          entidades, atributos, propiedades, materiales y estructura espacial de los modelos activos.
+          {t('ids.emptyBeforeExt')}
+          <strong>{t('ids.emptyExt')}</strong>
+          {t('ids.emptyAfterExt')}
         </div>
       )}
 
@@ -170,13 +172,13 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
             <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{idsFileName}</div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '11px' }}>
               <span className="ids-passed-count" style={{ color: '#4ade80', fontWeight: 600 }}>
-                Cumplen: {report.passedSpecs}
+                {t('ids.passedCount', { count: report.passedSpecs })}
               </span>
               <span className="ids-failed-count" style={{ color: '#f87171', fontWeight: 600 }}>
-                Fallan: {report.failedSpecs}
+                {t('ids.failedCount', { count: report.failedSpecs })}
               </span>
               <span className="ids-na-count" style={{ color: '#94a3b8' }}>
-                N/A: {report.notApplicableSpecs}
+                {t('ids.naCount', { count: report.notApplicableSpecs })}
               </span>
             </div>
           </div>
@@ -219,7 +221,7 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
                     </span>
                   </div>
                   <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                    {spec.passedCount}/{spec.applicableCount} elem.
+                    {t('ids.specRatio', { passed: spec.passedCount, applicable: spec.applicableCount })}
                   </span>
                 </div>
 
@@ -239,17 +241,17 @@ export const IdsPanel: React.FC<IdsPanelProps> = ({
                   <div style={{ marginTop: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                       <span style={{ fontSize: '11px', color: '#f87171', fontWeight: 600 }}>
-                        Incumplimientos ({spec.failures.length})
+                        {t('ids.failuresCount', { count: spec.failures.length })}
                       </span>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm ids-isolate-failures-btn"
                         style={{ padding: '2px 6px', fontSize: '10px' }}
                         onClick={() => handleIsolateSpecFailures(spec)}
-                        title="Aislar en 3D los elementos que incumplen esta especificación"
+                        title={t('ids.isolateFailuresTitle')}
                       >
                         <Eye size={11} />
-                        <span>Aislar fallos</span>
+                        <span>{t('ids.isolateFailuresBtn')}</span>
                       </button>
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>

@@ -1,5 +1,6 @@
 import type { ElementDetails, ElementMesh, SpatialNode, SpatialTree } from '../../domain/kernel/KernelPort';
 import type { ModelId } from '../../domain/models/ModelRecord';
+import { formatFixed, getIntlLocale, t } from '../i18n';
 
 export type CsvGroupBy = 'class' | 'storey';
 
@@ -65,7 +66,7 @@ export function extractSpatialElements(
   const visit = (node: SpatialNode, currentStorey: string | null) => {
     const nextStorey =
       node.type === 'IfcBuildingStorey'
-        ? node.name?.trim() || `Planta #${node.expressId}`
+        ? node.name?.trim() || t('tree.storeyFallback', { id: node.expressId })
         : currentStorey;
 
     for (const elem of node.elements) {
@@ -76,7 +77,7 @@ export function extractSpatialElements(
         expressId: elem.expressId,
         ifcClass: elem.type,
         name: elem.name ?? '',
-        storey: nextStorey ?? 'Sin planta'
+        storey: nextStorey ?? t('csv.noStorey')
       });
     }
 
@@ -95,7 +96,7 @@ export function extractSpatialElements(
       expressId: elem.expressId,
       ifcClass: elem.type,
       name: elem.name ?? '',
-      storey: 'Sin planta'
+      storey: t('csv.noStorey')
     });
   }
 
@@ -242,7 +243,7 @@ export function aggregateMediciones(
   const map = new Map<string, MedicionGroupRow>();
 
   for (const row of rows) {
-    const key = (groupBy === 'class' ? row.ifcClass : row.storey).trim() || 'Sin clasificar';
+    const key = (groupBy === 'class' ? row.ifcClass : row.storey).trim() || t('csv.unclassified');
     const existing = map.get(key);
     if (existing) {
       existing.count += 1;
@@ -260,7 +261,8 @@ export function aggregateMediciones(
     }
   }
 
-  return Array.from(map.values()).sort((a, b) => a.group.localeCompare(b.group, 'es'));
+  const intlLocale = getIntlLocale();
+  return Array.from(map.values()).sort((a, b) => a.group.localeCompare(b.group, intlLocale));
 }
 
 export function escapeCsvCell(value: string | number): string {
@@ -279,9 +281,15 @@ export function buildMedicionesCsv(
   groupBy: CsvGroupBy
 ): string {
   const groups = aggregateMediciones(rows, groupBy);
-  const firstCol = groupBy === 'class' ? 'Clase IFC' : 'Planta';
+  const firstCol = groupBy === 'class' ? t('csv.colClass') : t('csv.colStorey');
   const lines: string[] = [
-    [firstCol, 'Elementos', 'Longitud (m)', 'Área (m²)', 'Volumen (m³)']
+    [
+      firstCol,
+      t('csv.colElements'),
+      t('csv.colLength'),
+      t('csv.colArea'),
+      t('csv.colVolume')
+    ]
       .map(escapeCsvCell)
       .join(',')
   ];
@@ -300,20 +308,20 @@ export function buildMedicionesCsv(
       [
         escapeCsvCell(g.group),
         String(g.count),
-        g.length.toFixed(3),
-        g.area.toFixed(3),
-        g.volume.toFixed(3)
+        formatFixed(g.length, 3),
+        formatFixed(g.area, 3),
+        formatFixed(g.volume, 3)
       ].join(',')
     );
   }
 
   lines.push(
     [
-      'TOTAL',
+      t('csv.totalRow'),
       String(totalCount),
-      totalLength.toFixed(3),
-      totalArea.toFixed(3),
-      totalVolume.toFixed(3)
+      formatFixed(totalLength, 3),
+      formatFixed(totalArea, 3),
+      formatFixed(totalVolume, 3)
     ].join(',')
   );
 
