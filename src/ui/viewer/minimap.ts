@@ -164,3 +164,23 @@ export function viewCone(
   // In screen space an angle smaller than the view's is counterclockwise, which is to the left.
   return { apex, left: corner(screenAngle - half), right: corner(screenAngle + half), heading };
 }
+
+type Cone = NonNullable<ReturnType<typeof viewCone>>;
+
+/**
+ * Keeps the eye on the map. A sheet of `width` x `height` fitted into a square by its longest
+ * side shows `max(width, height)` on both axes, centred; an eye beyond that, or closer than
+ * `inset` to its edge, is moved to the edge, and the cone with it, so it keeps its direction.
+ * `outside` says the camera is off the map: usual when it looks at the building from outside.
+ */
+export function pinCone(cone: Cone, width: number, height: number, inset: number): { cone: Cone; outside: boolean } {
+  const side = Math.max(width, height);
+  const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high);
+  const x = clamp(cone.apex.x, (width - side) / 2 + inset, (width + side) / 2 - inset);
+  const y = clamp(cone.apex.y, (height - side) / 2 + inset, (height + side) / 2 - inset);
+  const dx = x - cone.apex.x;
+  const dy = y - cone.apex.y;
+  if (dx === 0 && dy === 0) return { cone, outside: false };
+  const move = (point: { x: number; y: number }) => ({ x: point.x + dx, y: point.y + dy });
+  return { cone: { ...cone, apex: { x, y }, left: move(cone.left), right: move(cone.right) }, outside: true };
+}

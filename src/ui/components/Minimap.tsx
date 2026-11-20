@@ -7,6 +7,7 @@ import {
   minimapFrame,
   storeyAt,
   svgPlanSheet,
+  pinCone,
   viewCone,
   type MinimapFrame
 } from '../viewer/minimap';
@@ -233,11 +234,14 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
     };
   }, [storeyLevel, storeyName, modelKey, hasBounds, kernel]);
 
-  const cone = pose && eye && plan
-    ? viewCone(plan.frame, eye, pose.target, HORIZONTAL_FOV, Math.max(plan.width, plan.height) * CONE_FRACTION)
-    : null;
   // A screen pixel in the sheet's units: the sheet is fitted to the square by its longest side.
   const eyeRadius = plan ? (3 * Math.max(plan.width, plan.height)) / SIZE : 0;
+  const rawCone = pose && eye && plan
+    ? viewCone(plan.frame, eye, pose.target, HORIZONTAL_FOV, Math.max(plan.width, plan.height) * CONE_FRACTION)
+    : null;
+  // A camera outside the building would fall off the map: show it on the edge, hollow.
+  const pinned = rawCone && plan ? pinCone(rawCone, plan.width, plan.height, 2 * eyeRadius) : null;
+  const cone = pinned?.cone ?? null;
 
   return (
     <div className="minimap-widget" aria-label="Minimapa de planta">
@@ -260,7 +264,7 @@ export const Minimap: React.FC<MinimapProps> = ({ kernel, renderer, models, spat
               vectorEffect="non-scaling-stroke"
             />
             <circle
-              className="minimap-eye"
+              className={pinned?.outside ? 'minimap-eye minimap-eye-outside' : 'minimap-eye'}
               cx={cone.apex.x}
               cy={cone.apex.y}
               r={eyeRadius}

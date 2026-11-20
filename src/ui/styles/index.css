@@ -730,6 +730,13 @@ canvas.bim-viewport {
   stroke-width: 1px;
 }
 
+/* The camera is off the map: the eye sits on the edge, hollow */
+.minimap-eye-outside {
+  fill: #ffffff;
+  stroke: #0284c7;
+  stroke-width: 2px;
+}
+
 .minimap-empty {
   position: absolute;
   inset: 0;

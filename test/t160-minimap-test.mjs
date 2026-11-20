@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   eyeOf,
   minimapFrame,
+  pinCone,
   storeyAt,
   svgPlanSheet,
   toMinimap,
@@ -278,4 +279,22 @@ check('svgPlanSheet recovers the writer margin, and the frame maps model x, y as
   assert.equal(svgPlanSheet('<svg viewBox="0 0 0 4">'), null);
 });
 
-console.log(`\nt160-minimap-test: ${passed}/16 pass`);
+check('pinCone keeps an eye off the map on its edge, the cone moved with it', () => {
+  // A 10 x 4 sheet in a square shows 10 x 10: x from 0 to 10, y from -3 to 7.
+  const cone = { apex: { x: 14, y: 2 }, left: { x: 12, y: 1 }, right: { x: 12, y: 3 }, heading: 4.71 };
+  const east = pinCone(cone, 10, 4, 0.5);
+  assert.equal(east.outside, true);
+  assert.deepEqual(east.cone.apex, { x: 9.5, y: 2 });
+  assert.deepEqual(east.cone.left, { x: 7.5, y: 1 });
+  assert.deepEqual(east.cone.right, { x: 7.5, y: 3 });
+  assert.equal(east.cone.heading, 4.71);
+  // In the letterbox above the sheet but still inside the square: shown where it is.
+  const above = { apex: { x: 5, y: -2 }, left: { x: 4, y: -1 }, right: { x: 6, y: -1 }, heading: 3.14 };
+  assert.deepEqual(pinCone(above, 10, 4, 0.5), { cone: above, outside: false });
+  // Beyond the square's corner: both coordinates pinned.
+  const corner = pinCone({ apex: { x: -5, y: 20 }, left: { x: -4, y: 19 }, right: { x: -6, y: 19 }, heading: 0 }, 10, 4, 0.5);
+  assert.deepEqual(corner.cone.apex, { x: 0.5, y: 6.5 });
+  assert.deepEqual(corner.cone.left, { x: 1.5, y: 5.5 });
+});
+
+console.log(`\nt160-minimap-test: ${passed}/17 pass`);
