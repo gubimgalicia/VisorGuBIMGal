@@ -1,5 +1,8 @@
-// Kernel benchmark (backlog D2). Each measurement is a fresh Node process with a fresh WASM
-// instance, as a Worker holds one model. Times are CPU work in the kernel, no browser or GPU.
+// Kernel benchmark (backlog D2). Each build runs in a worker process that compiles the
+// WebAssembly.Module once, warms up the kernel and slicer paths before timing, and instantiates a
+// fresh WebAssembly.Instance (and fresh linear memory, freeing the old one via GC outside the
+// timed window) for every sample while alternating base and head (ABBA) in lockstep. Times are CPU
+// work in the kernel thread, no browser or GPU.
 //
 //   node scripts/bench/bench.mjs                       this tree's kernel, a table of medians
 //   node scripts/bench/bench.mjs --base-ref <git-ref>  build <git-ref>'s kernel and compare
@@ -7,28 +10,30 @@
 //
 // Options: --runs N (default 5), --threshold 0.10, --min-ms 50, --summary <file> (Markdown,
 // e.g. $GITHUB_STEP_SUMMARY), --extra <file.ifc> (repeatable: real models from a local disk,
-// never committed). Compared runs alternate base and head (ABBA) so machine drift falls on both.
+// never committed), --workload <name> (repeatable substring filter), --head-pkg <dir>.
+// Compared runs alternate base and head (ABBA) so machine drift falls on both.
 // A workload regresses when median(head) / median(base) > 1 + threshold and the difference is
 // over --min-ms. Exit code 1 on any regression, 0 otherwise (including no comparable base).
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
-const HEAD_PKG = path.join(REPO, 'src/infrastructure/kernel/pkg');
 const WORK = path.join(os.tmpdir(), 'gubim-bench');
 mkdirSync(WORK, { recursive: true });
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
 const all = (name) => args.flatMap((a, i) => (a === name ? [args[i + 1]] : []));
+const HEAD_PKG = path.resolve(opt('--head-pkg', path.join(REPO, 'src/infrastructure/kernel/pkg')));
 const RUNS = Number(opt('--runs', 5));
 const THRESHOLD = Number(opt('--threshold', 0.1));
 const MIN_MS = Number(opt('--min-ms', 50));
-// cpu: process CPU time, robust when the machine is busy (default). wall: elapsed time.
+// cpu: thread CPU time, robust when the machine is busy (default). wall: elapsed time.
 const METRIC = opt('--metric', 'cpu');
 if (!['cpu', 'wall'].includes(METRIC)) throw new Error('--metric is cpu or wall');
 const value = (r) => (METRIC === 'cpu' ? r.ms.cpu : r.ms.total);
@@ -65,7 +70,7 @@ if (!args.includes('--no-real') && present.length < pinned.length) {
 }
 const ifcIn = (dir) => readdirSync(path.join(REPO, dir)).filter((f) => f.toLowerCase().endsWith('.ifc')).sort().map((f) => path.join(REPO, dir, f));
 const plan = (elevation) => ({ cut: { kind: 'plan', elevation }, frame: { kind: 'project' }, includeProjection: true, includeHiddenLines: true, includeHatching: true });
-const workloads = [
+const allWorkloads = [
   { name: 'stress 5k walls', files: [stress(5000)] },
   { name: 'stress 20k walls', files: [stress(20000)] },
   { name: 'fixtures x3', files: [...ifcIn('public/samples'), ...ifcIn('test/fixtures'), ...ifcIn('test/fixtures/authored')], repeat: 3 },
@@ -76,17 +81,49 @@ const workloads = [
     .map((m) => ({ name: 'plan drawing clinic', files: [m.file], drawing: plan('mid') })),
   ...all('--extra').map((f) => ({ name: path.basename(f), files: [path.resolve(f)] }))
 ];
-workloads.forEach((w, i) => {
+allWorkloads.forEach((w, i) => {
   w.file = path.join(WORK, `workload-${i}.json`);
   writeFileSync(w.file, JSON.stringify(w));
 });
+const workloadFilters = all('--workload').map((s) => s.toLowerCase());
+const workloads = workloadFilters.length
+  ? allWorkloads.filter((w) => workloadFilters.some((f) => w.name.toLowerCase().includes(f)))
+  : allWorkloads;
+if (!workloads.length) throw new Error(`No workload matched --workload ${workloadFilters.join(', ')}`);
 
-function measure(pkg, w) {
-  const r = spawnSync(process.execPath, ['--experimental-strip-types', path.join(HERE, 'run-one.mjs'), pkg, w.file], { encoding: 'utf8', maxBuffer: 1 << 24 });
-  if (r.status !== 0) throw new Error(`${w.name} failed on ${pkg}:\n${r.stderr.slice(-2000)}`);
-  return JSON.parse(r.stdout.trim().split('\n').pop());
+function startWorker(pkg) {
+  const child = spawn(
+    process.execPath,
+    ['--expose-gc', '--experimental-strip-types', path.join(HERE, 'run-one.mjs'), pkg, '--worker'],
+    { stdio: ['pipe', 'pipe', 'pipe'] }
+  );
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  const rl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
+  const it = rl[Symbol.asyncIterator]();
+  const ask = async (cmd, label) => {
+    child.stdin.write(cmd + '\n');
+    const { value: line, done } = await it.next();
+    if (done || line === undefined) throw new Error(`${label} failed on ${pkg}:\n${stderr.slice(-2000)}`);
+    return line;
+  };
+  return {
+    async warm(w) { await ask(`warm ${w.file}`, w.name); },
+    async load(w) { await ask(`load ${w.file}`, w.name); },
+    async run(w) { return JSON.parse(await ask('run', w.name)); },
+    close() {
+      child.stdin.write('quit\n');
+      child.stdin.end();
+    }
+  };
 }
-const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+// Contention noise on a deterministic CPU benchmark is one-sided (background bursts, SMT sibling
+// traffic and clock drops only add positive delay, never speed a run above uncontended execution).
+// Keeping the fastest ceil(n / 2) runs rejects upper-tail contention spikes while preserving 100 %
+// of any real slowdown across all runs of a slower build.
+const lowerHalf = (xs) => [...xs].sort((a, b) => a - b).slice(0, Math.min(xs.length, (xs.length >> 1) | 1));
+const median = (xs) => { const s = lowerHalf(xs); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const spread = (xs) => (Math.max(...xs) - Math.min(...xs)) / median(xs);
 const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${Math.round(n)} ms`);
 
@@ -129,35 +166,65 @@ if (baseRef) {
 
 // ---------- Runs ----------
 const results = workloads.map(() => ({ base: [], head: [] }));
-for (let run = 0; run < RUNS; run++) {
-  workloads.forEach((w, i) => {
-    // ABBA: alternate which build goes first, so drift does not favour one.
-    const order = basePkg ? (run % 2 === 0 ? ['base', 'head'] : ['head', 'base']) : ['head'];
-    for (const which of order) results[i][which].push(measure(which === 'base' ? basePkg : HEAD_PKG, w));
-  });
-  log(`run ${run + 1}/${RUNS} done`);
+const hw = startWorker(HEAD_PKG);
+const bw = basePkg ? startWorker(basePkg) : null;
+
+// Warm the compiled WebAssembly.Module once per worker on the fixture matrix (and the plan slicer
+// when any selected workload draws a plan) so background V8 TurboFan tier-up completes before timing.
+const needsDrawingWarm = workloads.some((w) => Boolean(w.drawing));
+const warmWorkloads = allWorkloads.filter(
+  (w) => w.name === 'fixtures x3' || (needsDrawingWarm && w.name === 'plan drawing 5k walls')
+);
+for (const warmWorkload of warmWorkloads) {
+  if (bw) await bw.warm(warmWorkload);
+  await hw.warm(warmWorkload);
 }
 
-// A workload that looks slower is measured again with twice the runs before it counts, so a
-// noisy moment on a shared runner does not fail the build on its own.
-if (basePkg) {
-  workloads.forEach((w, i) => {
+for (let i = 0; i < workloads.length; i++) {
+  const w = workloads[i];
+  if (bw) await bw.load(w);
+  await hw.load(w);
+
+  const runPair = async (pairIndex) => {
+    if (!bw) {
+      results[i].head.push(await hw.run(w));
+      return;
+    }
+    // ABBA: alternate which build goes first in each pair, so drift does not favour one.
+    if (pairIndex % 2 === 0) {
+      results[i].base.push(await bw.run(w));
+      results[i].head.push(await hw.run(w));
+    } else {
+      results[i].head.push(await hw.run(w));
+      results[i].base.push(await bw.run(w));
+    }
+  };
+
+  for (let run = 0; run < RUNS; run++) {
+    await runPair(run);
+  }
+
+  // A workload that looks slower is measured again with twice the runs before it counts, so a
+  // noisy moment on a shared runner does not fail the build on its own.
+  if (bw) {
     const h = median(results[i].head.map(value));
     const b = median(results[i].base.map(value));
-    if (!(h / b > 1 + THRESHOLD && h - b > MIN_MS)) return;
-    log(`${w.name} looks ${((h / b - 1) * 100).toFixed(1)} % slower: measuring again`);
-    for (let run = 0; run < 2 * RUNS; run++) {
-      for (const which of run % 2 === 0 ? ['head', 'base'] : ['base', 'head']) {
-        results[i][which].push(measure(which === 'base' ? basePkg : HEAD_PKG, w));
+    if (h / b > 1 + THRESHOLD && h - b > MIN_MS) {
+      log(`${w.name} looks ${((h / b - 1) * 100).toFixed(1)} % slower: measuring again`);
+      for (let run = 0; run < 2 * RUNS; run++) {
+        await runPair(RUNS + run);
       }
     }
-  });
+  }
+  log(`workload ${i + 1}/${workloads.length} (${w.name}) done`);
 }
+if (bw) bw.close();
+hw.close();
 
 let regressions = 0;
 md(basePkg ? `### Kernel benchmark: this commit against ${baseLabel}` : '### Kernel benchmark');
 md('');
-md(`Median of ${RUNS} fresh-process runs per build${basePkg ? ', alternating ABBA' : ''}. Metric: ${METRIC === 'cpu' ? 'process CPU time' : 'elapsed time'}. Fails above +${Math.round(THRESHOLD * 100)} % and ${MIN_MS} ms.`);
+md(`Median of ${RUNS} warmed fresh-instance runs per build${basePkg ? ', alternating ABBA' : ''}. Metric: ${METRIC === 'cpu' ? 'process CPU time' : 'elapsed time'}. Fails above +${Math.round(THRESHOLD * 100)} % and ${MIN_MS} ms.`);
 md('');
 md(basePkg ? '| Workload | Base | This | Change | Spread | Peak WASM | Output |' : '| Workload | Median | Spread | Peak WASM | Breakdown |');
 md(basePkg ? '|---|---|---|---|---|---|---|' : '|---|---|---|---|---|');
