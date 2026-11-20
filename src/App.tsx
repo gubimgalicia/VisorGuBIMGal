@@ -43,6 +43,7 @@ import {
 } from './ui/viewer/csvExport';
 import { applySavedView, captureSavedView, savedViewWithoutModel, type SavedView } from './ui/viewer/savedViews';
 import { MeasureOverlay } from './ui/components/MeasureOverlay';
+import { Minimap } from './ui/components/Minimap';
 import { MeasureController } from './ui/viewer/MeasureController';
 import { pickFace, VERTEX_RADIUS } from './domain/measure/snap';
 import { NO_SECTION, sceneBounds, sectionPlanes, type SectionState } from './ui/viewer/section';
@@ -88,6 +89,7 @@ export default function App() {
   const [, setRendererError] = useState<string | null>(null);
   const [activeBackend, setActiveBackend] = useState<'webgpu' | 'webgl2' | null>(null);
   const [displayRule, setDisplayRule] = useState<DisplayRule>(SHOW_ALL);
+  const [showMinimap, setShowMinimap] = useState<boolean>(false);
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [nextSavedViewIndex, setNextSavedViewIndex] = useState<number>(1);
   const [isExportingCsv, setIsExportingCsv] = useState<boolean>(false);
@@ -116,6 +118,22 @@ export default function App() {
   const ifcClasses = useMemo(() => classCounts(Object.values(spatialTrees)), [spatialTrees]);
 
   const measure = useMemo(() => new MeasureController(renderer, kernel), []);
+
+  // After-frame signal for the minimap: the renderer's handlers stay the viewer's.
+  const minimapFrames = useMemo(() => {
+    const listeners = new Set<() => void>();
+    return {
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      notify: () => {
+        for (const listener of listeners) listener();
+      }
+    };
+  }, []);
 
   const [section, setSection] = useState<SectionState>(NO_SECTION);
   const [isPickingFace, setIsPickingFace] = useState<boolean>(false);
@@ -695,11 +713,12 @@ export default function App() {
 
   const handleViewportFrame = useCallback(() => {
     measure.frame();
+    minimapFrames.notify();
     if (snapshotWaitersRef.current.length > 0) {
       const waiters = snapshotWaitersRef.current.splice(0);
       for (const w of waiters) w();
     }
-  }, [measure]);
+  }, [measure, minimapFrames]);
 
   const resolveRefToGuid = useCallback(async (ref: ElementRef): Promise<string | null> => {
     const key = `${ref.modelId}:${ref.expressId}`;
@@ -1102,6 +1121,15 @@ export default function App() {
             isWorking={isWorking}
           >
             <MeasureOverlay controller={measure} renderer={renderer} />
+            {showMinimap && (
+              <Minimap
+                kernel={kernel}
+                renderer={renderer}
+                models={models}
+                spatialTrees={spatialTrees}
+                frames={minimapFrames}
+              />
+            )}
           </BimViewer>
 
           {models.length > 0 && (
@@ -1118,6 +1146,8 @@ export default function App() {
                 onCancelGlb={handleCancelGlb}
                 isExportingGlb={isExportingGlb}
                 glbProgress={glbProgress}
+                showMinimap={showMinimap}
+                onToggleMinimap={() => setShowMinimap((prev) => !prev)}
               />
               <SectionBar
                 section={section}

@@ -5,7 +5,77 @@
 // Nothing here draws: the frame fits a plan bounds into a pixel box, and the view cone turns the
 // camera's eye, target and field of view into a triangle on that plan.
 
+import type { CameraPose } from '../../domain/kernel/RendererPort';
+
 const TAU = Math.PI * 2;
+
+/** The writer's blank strip around a plan: 2 % of its longest side, never less than a centimetre. */
+const SVG_MARGIN_FRACTION = 0.02;
+const SVG_MARGIN_MIN = 0.01;
+
+/**
+ * The storey whose level is the highest at or below `z` — the camera's eye height — or the
+ * lowest storey when `z` is below every one of them, or null without a usable storey.
+ * `storeyLevels` in planDepth.ts gives the storeys of the open models.
+ */
+export function storeyAt(
+  z: number,
+  storeys: ReadonlyArray<{ name: string; level: number }>
+): { name: string; level: number } | null {
+  if (!Number.isFinite(z)) return null;
+  let below: { name: string; level: number } | null = null;
+  let lowest: { name: string; level: number } | null = null;
+  for (const storey of storeys) {
+    if (!storey || !Number.isFinite(storey.level)) continue;
+    if (!lowest || storey.level < lowest.level) lowest = storey;
+    if (storey.level <= z && (!below || storey.level > below.level)) below = storey;
+  }
+  return below ?? lowest;
+}
+
+/**
+ * The camera's eye in model coordinates (metres, IFC Z-up), from the target, the distance and
+ * the two angles. It is the formula of `Camera.getEye` in src/infrastructure/renderer/Camera.ts:
+ * azimuth turns from +X towards +Y, elevation rises from the X-Y plane towards +Z.
+ */
+export function eyeOf(pose: CameraPose): [number, number, number] {
+  const cosPhi = Math.cos(pose.elevation);
+  const sinPhi = Math.sin(pose.elevation);
+  const cosTheta = Math.cos(pose.azimuth);
+  const sinTheta = Math.sin(pose.azimuth);
+  return [
+    pose.target[0] + pose.distance * cosPhi * cosTheta,
+    pose.target[1] + pose.distance * cosPhi * sinTheta,
+    pose.target[2] + pose.distance * sinPhi
+  ];
+}
+
+/** The sheet an exported plan draws on, as its viewBox states it. */
+export interface SvgPlanSheet {
+  /** viewBox width, in drawing units: metres for `units: 'm'`. */
+  width: number;
+  /** viewBox height, in drawing units: metres for `units: 'm'`. */
+  height: number;
+  /** The blank strip the writer left around the drawing, same units. */
+  margin: number;
+}
+
+/**
+ * The sheet of an SVG from `exportDrawing`, or null when it has no usable viewBox. The writer in
+ * crates/cad-slicer/src/svg.rs puts `viewBox="0 0 width height"`, where each side is the drawing
+ * plus `margin` twice, and `margin = max(0.02 * longest side, 0.01)`. Solving that for the
+ * viewBox gives the margin back, so the frame derived from it is the writer's own.
+ */
+export function svgPlanSheet(svg: string): SvgPlanSheet | null {
+  const viewBox = /viewBox="([^"]+)"/.exec(svg)?.[1].trim().split(/[\s,]+/).map(Number);
+  if (!viewBox || viewBox.length !== 4) return null;
+  const [, , width, height] = viewBox;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || !(width > 0) || !(height > 0)) return null;
+  const longest = Math.max(width, height);
+  const proportional = (SVG_MARGIN_FRACTION * longest) / (1 + 2 * SVG_MARGIN_FRACTION);
+  const margin = proportional >= SVG_MARGIN_MIN ? proportional : SVG_MARGIN_MIN;
+  return { width, height, margin };
+}
 
 export interface MinimapFrame {
   /** Pixels per metre, the same on both axes. */

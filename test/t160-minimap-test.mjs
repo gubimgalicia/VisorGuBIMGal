@@ -3,7 +3,15 @@
 // south. Hand-computed frames, the inverse round trip, the compass headings and the view cone.
 // node --experimental-strip-types test/t160-minimap-test.mjs
 import assert from 'node:assert/strict';
-import { minimapFrame, toMinimap, toModel, viewCone } from '../src/ui/viewer/minimap.ts';
+import {
+  eyeOf,
+  minimapFrame,
+  storeyAt,
+  svgPlanSheet,
+  toMinimap,
+  toModel,
+  viewCone
+} from '../src/ui/viewer/minimap.ts';
 
 let passed = 0;
 const check = (name, fn) => {
@@ -207,4 +215,67 @@ check('non-finite input returns null', () => {
   assert.equal(viewCone(brokenFrame, eye, [0, 10, 10], Math.PI / 2, 50), null);
 });
 
-console.log(`\nt160-minimap-test: ${passed}/12 pass`);
+// T-161 (C16): the storey under the camera's eye, the eye from a pose, and the sheet an exported
+// plan draws on.
+const storeys = [
+  { name: 'Baja', level: 0 },
+  { name: 'Primera', level: 3 },
+  { name: 'Segunda', level: 6 }
+];
+
+check('storeyAt takes the highest level at or below the eye', () => {
+  assert.deepEqual(storeyAt(4, storeys), { name: 'Primera', level: 3 });
+  assert.deepEqual(storeyAt(6, storeys), { name: 'Segunda', level: 6 });
+  assert.deepEqual(storeyAt(100, storeys), { name: 'Segunda', level: 6 });
+});
+
+check('storeyAt below every storey takes the lowest, and there is no storey without one', () => {
+  assert.deepEqual(storeyAt(-2.5, storeys), { name: 'Baja', level: 0 });
+  // Unsorted input, a storey without a usable level, and no storeys at all.
+  assert.deepEqual(storeyAt(3.5, [storeys[2], storeys[0], storeys[1]]), { name: 'Primera', level: 3 });
+  assert.deepEqual(storeyAt(-1, [{ name: 'sin cota', level: NaN }, storeys[0]]), { name: 'Baja', level: 0 });
+  assert.equal(storeyAt(3, []), null);
+  assert.equal(storeyAt(3, [{ name: 'sin cota', level: Infinity }]), null);
+  assert.equal(storeyAt(Number.NaN, storeys), null);
+});
+
+check('eyeOf follows Camera.getEye, with hand-computed poses', () => {
+  // elevation 0 and azimuth PI/2 move the eye 5 m along +Y; elevation PI/2 moves it 10 m up.
+  const north = eyeOf({ target: [1, 2, 3], distance: 5, azimuth: Math.PI / 2, elevation: 0 });
+  close(north[0], 1, 'north eye x');
+  close(north[1], 7, 'north eye y');
+  close(north[2], 3, 'north eye z');
+  const top = eyeOf({ target: [0, 0, 0], distance: 10, azimuth: 0, elevation: Math.PI / 2 });
+  close(top[0], 0, 'top eye x');
+  close(top[1], 0, 'top eye y');
+  close(top[2], 10, 'top eye z');
+  // 45 degrees in both angles and a distance of 4 put the eye 2 m east, 2 m north and
+  // 2 * sqrt(2) m up from the target.
+  const isometric = eyeOf({ target: [3, -4, 1.5], distance: 4, azimuth: Math.PI / 4, elevation: Math.PI / 4 });
+  close(isometric[0], 5, 'isometric eye x');
+  close(isometric[1], -2, 'isometric eye y');
+  close(isometric[2], 1.5 + 2 * Math.SQRT2, 'isometric eye z');
+  const below = eyeOf({ target: [0, 0, 10], distance: 2, azimuth: 0, elevation: -Math.PI / 2 });
+  close(below[2], 8, 'looking up eye z');
+});
+
+check('svgPlanSheet recovers the writer margin, and the frame maps model x, y as svg.rs does', () => {
+  // A 10 x 6 m drawing: svg.rs leaves 0.2 m (2 %) on every side, so the viewBox is 10.4 x 6.4.
+  const sheet = svgPlanSheet('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10.4 6.4">');
+  assert.ok(sheet, 'sheet expected');
+  close(sheet.margin, 0.2, 'margin');
+  const frame = minimapFrame({ min: { x: 0, y: 0 }, max: { x: 10, y: 6 } }, sheet.width, sheet.height, sheet.margin);
+  close(frame.scale, 1, 'scale in sheet units');
+  // svg.rs places model (0, 0) at (margin, high.y + margin) and model (10, 6) at
+  // (width - margin, margin): the sheet counts y downwards.
+  const low = toMinimap(frame, 0, 0);
+  const high = toMinimap(frame, 10, 6);
+  close(low.x, 0.2, 'south-west x');
+  close(low.y, 6.2, 'south-west y');
+  close(high.x, 10.2, 'north-east x');
+  close(high.y, 0.2, 'north-east y');
+  assert.equal(svgPlanSheet('<svg/>'), null);
+  assert.equal(svgPlanSheet('<svg viewBox="0 0 0 4">'), null);
+});
+
+console.log(`\nt160-minimap-test: ${passed}/16 pass`);
