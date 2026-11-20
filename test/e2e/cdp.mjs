@@ -12,8 +12,13 @@ const DEFAULT_CHROME = {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function launch({ port, profileDir }) {
-  rmSync(profileDir, { recursive: true, force: true });
+  rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   mkdirSync(profileDir, { recursive: true });
+  const cleanupProfile = () => {
+    try {
+      rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch {}
+  };
   const chrome = process.env.CHROME_PATH || DEFAULT_CHROME[process.platform];
   const args = [
     '--headless=new',
@@ -21,6 +26,9 @@ export async function launch({ port, profileDir }) {
     `--user-data-dir=${profileDir}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--disable-component-update',
+    '--disable-background-networking',
+    '--disable-default-apps',
     '--window-size=1400,900',
     '--force-device-scale-factor=1',
     '--enable-unsafe-webgpu',
@@ -30,6 +38,11 @@ export async function launch({ port, profileDir }) {
     'about:blank'
   ];
   const proc = spawn(chrome, args, { stdio: 'ignore' });
+  proc.once('exit', cleanupProfile);
+  process.once('exit', () => {
+    try { proc.kill(); } catch {}
+    cleanupProfile();
+  });
   for (let i = 0; i < 150; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/list`);
@@ -40,6 +53,7 @@ export async function launch({ port, profileDir }) {
     await sleep(100);
   }
   proc.kill();
+  cleanupProfile();
   throw new Error(`Chrome did not start: ${chrome}`);
 }
 
