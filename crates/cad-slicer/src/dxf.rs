@@ -55,12 +55,19 @@ pub fn to_dxf_with(drawing: &Drawing, options: &DxfOptions) -> Vec<u8> {
         });
     }
 
+    let space_layer = (!drawing.spaces.is_empty()).then(|| names.assign("SPACES"));
+    let dim_layout = drawing.dimensions.map(|dims| dims.layout());
+    let dim_layer = dim_layout.is_some().then(|| names.assign("DIMENSIONS"));
+
     let mut out = Writer::default();
     if let Some(comment) = &options.comment {
         out.text(999, comment);
     }
     out.header(drawing);
-    out.layer_table(&layers);
+    out.layer_table(&layers, space_layer.as_deref(), dim_layer.as_deref());
+    if let (Some(layout), Some(layer_name)) = (&dim_layout, &dim_layer) {
+        out.dimension_blocks(layer_name, layout);
+    }
     out.section("ENTITIES");
     for planned in &layers {
         let name_bytes = dxf_bytes(&planned.name, MAX_VALUE);
@@ -82,6 +89,31 @@ pub fn to_dxf_with(drawing: &Drawing, options: &DxfOptions) -> Vec<u8> {
             for segment in &planned.layer.hidden {
                 out.line_bytes(&hidden_bytes, segment.a, segment.b);
             }
+        }
+    }
+    if let Some(space_layer) = &space_layer {
+        let (low, high) = bounds(drawing);
+        let span = (high.0 - low.0).max(high.1 - low.1).max(1.0);
+        let text_height = (span / 60.0).clamp(span * 0.005, span * 0.03);
+        let layer_bytes = dxf_bytes(space_layer, MAX_VALUE);
+        for space in &drawing.spaces {
+            if !space.position.is_finite() {
+                continue;
+            }
+            let name_pos = glam::DVec2::new(space.position.x, space.position.y + text_height * 0.65);
+            let area_pos = glam::DVec2::new(space.position.x, space.position.y - text_height * 0.65);
+            let area_text = format!("{:.2} m²", space.area_m2);
+            out.centered_text(&layer_bytes, name_pos, text_height, &space.name);
+            out.centered_text(&layer_bytes, area_pos, text_height, &area_text);
+        }
+    }
+    if let (Some(layout), Some(layer_name)) = (&dim_layout, &dim_layer) {
+        let layer_bytes = dxf_bytes(layer_name, MAX_VALUE);
+        if let Some(dim) = &layout.horizontal {
+            out.dimension_entity(&layer_bytes, b"*D0", dim);
+        }
+        if let Some(dim) = &layout.vertical {
+            out.dimension_entity(&layer_bytes, b"*D1", dim);
         }
     }
     out.end_section();
@@ -176,14 +208,21 @@ impl Writer {
         }
     }
 
-    fn layer_table(&mut self, layers: &[Planned]) {
+    fn layer_table(
+        &mut self,
+        layers: &[Planned],
+        space_layer: Option<&str>,
+        dim_layer: Option<&str>,
+    ) {
         self.section("TABLES");
         self.linetype_table();
         self.group(0, b"TABLE");
         self.text(2, "LAYER");
-        // A hidden layer is an entry of the table too, so the count covers both kinds.
-        let entries =
-            layers.len() + layers.iter().filter(|planned| planned.hidden.is_some()).count();
+        // A hidden layer is an entry of the table too, so the count covers every kind.
+        let entries = layers.len()
+            + layers.iter().filter(|planned| planned.hidden.is_some()).count()
+            + usize::from(space_layer.is_some())
+            + usize::from(dim_layer.is_some());
         self.integer(70, entries as i64);
         for planned in layers {
             self.layer_entry(&planned.name, 7, "CONTINUOUS");
@@ -191,8 +230,63 @@ impl Writer {
                 self.layer_entry(hidden, 8, "DASHED");
             }
         }
+        if let Some(space_layer) = space_layer {
+            self.layer_entry(space_layer, 3, "CONTINUOUS");
+        }
+        if let Some(dim_layer) = dim_layer {
+            self.layer_entry(dim_layer, 1, "CONTINUOUS");
+        }
         self.group(0, b"ENDTAB");
         self.end_section();
+    }
+
+    fn dimension_blocks(&mut self, layer_name: &str, layout: &crate::dimension::DimensionLayout) {
+        let layer_bytes = dxf_bytes(layer_name, MAX_VALUE);
+        self.section("BLOCKS");
+        for (block_name, dim) in [("*D0", &layout.horizontal), ("*D1", &layout.vertical)] {
+            let Some(dim) = dim else { continue };
+            self.group(0, b"BLOCK");
+            self.group(8, &layer_bytes);
+            self.text(2, block_name);
+            self.integer(70, 1);
+            self.number(10, 0.0);
+            self.number(20, 0.0);
+            self.number(30, 0.0);
+            self.text(3, block_name);
+            for seg in &dim.lines {
+                self.line_bytes(&layer_bytes, seg.a, seg.b);
+            }
+            self.centered_text(&layer_bytes, dim.text_pos, layout.text_height, &dim.text);
+            self.group(0, b"ENDBLK");
+            self.group(8, &layer_bytes);
+        }
+        self.end_section();
+    }
+
+    fn dimension_entity(
+        &mut self,
+        layer: &[u8],
+        block_name: &[u8],
+        dim: &crate::dimension::LinearDimension,
+    ) {
+        self.group(0, b"DIMENSION");
+        self.group(8, layer);
+        self.group(2, block_name);
+        self.number(10, dim.def_point.x);
+        self.number(20, dim.def_point.y);
+        self.number(30, 0.0);
+        self.number(11, dim.text_pos.x);
+        self.number(21, dim.text_pos.y);
+        self.number(31, 0.0);
+        self.integer(70, 0);
+        self.text(1, &dim.text);
+        self.number(13, dim.origin_a.x);
+        self.number(23, dim.origin_a.y);
+        self.number(33, 0.0);
+        self.number(14, dim.origin_b.x);
+        self.number(24, dim.origin_b.y);
+        self.number(34, 0.0);
+        self.number(50, dim.angle_degrees);
     }
 
     fn layer_entry(&mut self, name: &str, colour: u8, linetype: &str) {
@@ -214,6 +308,24 @@ impl Writer {
         push_format_number(&mut self.bytes, to.x);
         self.bytes.extend_from_slice(b"\r\n21\r\n");
         push_format_number(&mut self.bytes, to.y);
+        self.bytes.extend_from_slice(b"\r\n31\r\n0.000000\r\n");
+    }
+
+    fn centered_text(&mut self, layer: &[u8], pos: glam::DVec2, height: f64, value: &str) {
+        self.bytes.extend_from_slice(b"0\r\nTEXT\r\n8\r\n");
+        self.bytes.extend_from_slice(layer);
+        self.bytes.extend_from_slice(b"\r\n10\r\n");
+        push_format_number(&mut self.bytes, pos.x);
+        self.bytes.extend_from_slice(b"\r\n20\r\n");
+        push_format_number(&mut self.bytes, pos.y);
+        self.bytes.extend_from_slice(b"\r\n30\r\n0.000000\r\n40\r\n");
+        push_format_number(&mut self.bytes, height);
+        self.bytes.extend_from_slice(b"\r\n1\r\n");
+        self.bytes.extend_from_slice(&dxf_bytes(value, MAX_VALUE));
+        self.bytes.extend_from_slice(b"\r\n72\r\n1\r\n11\r\n");
+        push_format_number(&mut self.bytes, pos.x);
+        self.bytes.extend_from_slice(b"\r\n21\r\n");
+        push_format_number(&mut self.bytes, pos.y);
         self.bytes.extend_from_slice(b"\r\n31\r\n0.000000\r\n");
     }
 }
@@ -251,6 +363,12 @@ fn bounds(drawing: &Drawing) -> ((f64, f64), (f64, f64)) {
             take(segment.a);
             take(segment.b);
         }
+    }
+    for space in &drawing.spaces {
+        take(space.position);
+    }
+    if let Some(dims) = drawing.dimensions {
+        take(dims.layout().bounds_min);
     }
     if low.0 > high.0 {
         ((0.0, 0.0), (0.0, 0.0))

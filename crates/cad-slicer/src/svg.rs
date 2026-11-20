@@ -39,7 +39,11 @@ pub fn to_svg(drawing: &Drawing) -> String {
 }
 
 pub fn to_svg_with(drawing: &Drawing, options: &SvgOptions) -> String {
-    let (low, high) = bounds(drawing);
+    let (mut low, high) = bounds(drawing);
+    let dim_layout = drawing.dimensions.map(|dims| dims.layout());
+    if let Some(layout) = &dim_layout {
+        low = low.min(layout.bounds_min);
+    }
     let span = (high - low).max_element().max(1e-3);
     let margin = (span * MARGIN_FRACTION).max(0.01);
     let stroke = (span / 1000.0).clamp(0.0005, 0.05);
@@ -144,6 +148,73 @@ pub fn to_svg_with(drawing: &Drawing, options: &SvgOptions) -> String {
         out.push_str("</g>\n");
     }
 
+    if !drawing.spaces.is_empty() {
+        let space_font = (span / 55.0).clamp(0.05, 0.45);
+        out.push_str(&format!(
+            "<g fill=\"#334155\" stroke=\"none\" font-size=\"{}\">\n",
+            number(space_font)
+        ));
+        for space in &drawing.spaces {
+            let Some(pos) = place(space.position) else {
+                continue;
+            };
+            let area_text = format!("{:.2} m²", space.area_m2);
+            let name_half = space.name.chars().count() as f64 * space_font * 0.27;
+            let area_half = area_text.chars().count() as f64 * space_font * 0.27;
+            out.push_str(&format!(
+                "<text x=\"{}\" y=\"{}\">{}</text>\n",
+                number((pos.x - name_half).max(margin)),
+                number(pos.y - space_font * 0.2),
+                xml_text(&space.name)
+            ));
+            out.push_str(&format!(
+                "<text x=\"{}\" y=\"{}\">{}</text>\n",
+                number((pos.x - area_half).max(margin)),
+                number(pos.y + space_font * 1.05),
+                xml_text(&area_text)
+            ));
+        }
+        out.push_str("</g>\n");
+    }
+
+    if let Some(layout) = &dim_layout {
+        let dim_stroke = stroke * 0.7;
+        out.push_str(&format!(
+            "<g fill=\"none\" stroke=\"#334155\" stroke-width=\"{}\">\n",
+            number(dim_stroke)
+        ));
+        for dim in layout.horizontal.iter().chain(layout.vertical.iter()) {
+            for seg in &dim.lines {
+                if let (Some(a), Some(b)) = (place(seg.a), place(seg.b)) {
+                    out.push_str(&format!(
+                        "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n",
+                        number(a.x),
+                        number(a.y),
+                        number(b.x),
+                        number(b.y)
+                    ));
+                }
+            }
+        }
+        out.push_str("</g>\n");
+        out.push_str(&format!(
+            "<g fill=\"#1a1a1a\" stroke=\"none\" font-size=\"{}\">\n",
+            number(layout.text_height)
+        ));
+        for dim in layout.horizontal.iter().chain(layout.vertical.iter()) {
+            if let Some(pos) = place(dim.text_pos) {
+                let half = dim.text.chars().count() as f64 * layout.text_height * 0.27;
+                out.push_str(&format!(
+                    "<text x=\"{}\" y=\"{}\">{}</text>\n",
+                    number((pos.x - half).max(margin)),
+                    number(pos.y + layout.text_height * 0.35),
+                    xml_text(&dim.text)
+                ));
+            }
+        }
+        out.push_str("</g>\n");
+    }
+
     out.push_str("</svg>\n");
     out
 }
@@ -224,6 +295,9 @@ fn bounds(drawing: &Drawing) -> (DVec2, DVec2) {
             take(segment.a);
             take(segment.b);
         }
+    }
+    for space in &drawing.spaces {
+        take(space.position);
     }
     if low.x > high.x {
         (DVec2::ZERO, DVec2::ZERO)

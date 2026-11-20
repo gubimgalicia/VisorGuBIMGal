@@ -3,6 +3,7 @@ import {
   Scissors,
   Download,
   FileCode,
+  FileText,
   CheckCircle,
   RefreshCw,
   MousePointerClick,
@@ -19,6 +20,13 @@ import type {
 import type { ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import { faceCutPlane, type SectionState } from '../viewer/section';
 import { planRange, storeyLevels, type PlanBottom } from '../viewer/planDepth';
+import {
+  PDF_PAPERS,
+  PDF_SCALES,
+  svgToPdf,
+  type PdfPaper,
+  type PdfScale
+} from '../viewer/svgToPdf';
 import { widenForPreview } from './drawingPreview';
 import { formatFixed, formatLength, formatNumber, t } from '../i18n';
 
@@ -51,18 +59,21 @@ type DepthMode = 'auto' | 'none' | 'custom';
 
 type CutPreset = 'plan' | 'section-x' | 'section-y' | 'face';
 
-function downloadExportedDrawing(res: ExportedDrawing): void {
-  const part: BlobPart =
-    typeof res.content === 'string' ? res.content : new Uint8Array(res.content);
-  const blob = new Blob([part], { type: res.mimeType });
+function downloadBytes(content: string | Uint8Array, mimeType: string, filename: string): void {
+  const part: BlobPart = typeof content === 'string' ? content : new Uint8Array(content);
+  const blob = new Blob([part], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = res.filename;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function downloadExportedDrawing(res: ExportedDrawing): void {
+  downloadBytes(res.content, res.mimeType, res.filename);
 }
 
 /** Diagnostics that mean a whole model is not in the drawing. */
@@ -104,6 +115,10 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
   const [bottomStr, setBottomStr] = useState<string>('');
   const [includeHidden, setIncludeHidden] = useState<boolean>(true);
   const [includeHatching, setIncludeHatching] = useState<boolean>(true);
+  const [includeSpaceLabels, setIncludeSpaceLabels] = useState<boolean>(false);
+  const [includeDimensions, setIncludeDimensions] = useState<boolean>(false);
+  const [pdfScale, setPdfScale] = useState<PdfScale>(100);
+  const [pdfPaper, setPdfPaper] = useState<PdfPaper>('A4');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [previewSvg, setPreviewSvg] = useState<string | null>(null);
@@ -246,7 +261,9 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
         frame: { kind: 'project' },
         includeProjection: true,
         includeHiddenLines: includeHidden,
-        includeHatching
+        includeHatching,
+        ...(cutPreset === 'plan' && includeSpaceLabels ? { includeSpaceLabels: true } : {}),
+        ...(cutPreset === 'plan' && includeDimensions ? { includeDimensions: true } : {})
       };
 
       generated = await kernel.generateDrawing(modelIds, options, (stage, pct) => {
@@ -347,11 +364,45 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!currentDrawing) {
+      alert(t('sectionDxf.alertNoDrawing'));
+      return;
+    }
+    try {
+      const baseName = drawingFirstModelFileName
+        ? drawingFirstModelFileName.replace(/\.ifc$/i, '')
+        : 'plano-ifc';
+      const fileName = `${baseName}-${cutPreset}`;
+
+      const res = await kernel.exportDrawing(currentDrawing.drawingId, {
+        format: 'svg',
+        fileName,
+        crsComment: currentDrawing.crsId,
+        units: 'm',
+        showHiddenLines: includeHidden,
+        showHatching: includeHatching
+      });
+
+      const svgText =
+        typeof res.content === 'string' ? res.content : new TextDecoder().decode(res.content);
+      const pdfBytes = svgToPdf(svgText, {
+        scale: pdfScale,
+        paper: pdfPaper,
+        title: fileName,
+        footerLabel: t('sectionDxf.pdfFooter', { scale: pdfScale, paper: pdfPaper })
+      });
+      downloadBytes(pdfBytes, 'application/pdf', `${fileName}.pdf`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : t('sectionDxf.alertExportError'));
+    }
+  };
+
   const resolvedFace = faceCutPlane(section);
 
   return (
     <div style={{ fontSize: '13px' }}>
-      <div style={{ marginBottom: '12px' }}>
+      <div style={{ marginBottom: '8px' }}>
         <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
           {t('sectionDxf.cutTypeLabel')}
         </label>
@@ -378,7 +429,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       </div>
 
       {cutPreset !== 'face' ? (
-        <div style={{ marginBottom: '12px' }}>
+        <div style={{ marginBottom: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <label style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
               {cutPreset === 'plan' ? t('sectionDxf.cutElevationTopLabel') : t('sectionDxf.cutPositionLabel')}
@@ -541,7 +592,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       )}
 
       {cutPreset === 'plan' && (
-        <div style={{ marginBottom: '12px' }}>
+        <div style={{ marginBottom: '8px' }}>
           <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
             {t('sectionDxf.bottomLabel')}
           </label>
@@ -655,7 +706,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       </div>
       )}
 
-      <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#cbd5e1' }}>
           <input
             type="checkbox"
@@ -672,11 +723,39 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
           />
           <span>{t('sectionDxf.includeHatching')}</span>
         </label>
+        {cutPreset === 'plan' && (
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <label
+              title={t('sectionDxf.includeSpaceLabelsTitle')}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#cbd5e1' }}
+            >
+              <input
+                type="checkbox"
+                className="dxf-space-labels"
+                checked={includeSpaceLabels}
+                onChange={(e) => setIncludeSpaceLabels(e.target.checked)}
+              />
+              <span>{t('sectionDxf.includeSpaceLabels')}</span>
+            </label>
+            <label
+              title={t('sectionDxf.includeDimensionsTitle')}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#cbd5e1' }}
+            >
+              <input
+                type="checkbox"
+                className="dxf-dimensions"
+                checked={includeDimensions}
+                onChange={(e) => setIncludeDimensions(e.target.checked)}
+              />
+              <span>{t('sectionDxf.includeDimensions')}</span>
+            </label>
+          </div>
+        )}
       </div>
 
       <button
         className="btn btn-primary dxf-generate-btn"
-        style={{ width: '100%', justifyContent: 'center', padding: '8px' }}
+        style={{ width: '100%', justifyContent: 'center', padding: '7px 8px' }}
         disabled={isGenerating || models.length === 0 || (cutPreset === 'face' && !resolvedFace)}
         onClick={() => void handleGenerate()}
       >
@@ -687,8 +766,8 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       {statusMessage && (
         <div
           style={{
-            marginTop: '10px',
-            padding: '8px',
+            marginTop: '6px',
+            padding: '6px 8px',
             background: 'rgba(15, 23, 42, 0.5)',
             borderRadius: '4px',
             fontSize: '11px',
@@ -705,7 +784,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
 
       {/* SVG Preview container */}
       {previewSvg && (
-        <div style={{ marginTop: '14px' }}>
+        <div style={{ marginTop: '8px' }}>
           <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>
             {t('sectionDxf.previewHeading')}
           </div>
@@ -742,6 +821,57 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             >
               <FileCode size={14} />
               <span>{t('sectionDxf.exportSvg')}</span>
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: '10px',
+              padding: '8px',
+              background: 'rgba(15, 23, 42, 0.45)',
+              borderRadius: '6px',
+              border: '1px solid #334155'
+            }}
+          >
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>
+              {t('sectionDxf.pdfHeading')}
+            </div>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+              <select
+                className="select dxf-pdf-scale"
+                aria-label={t('sectionDxf.pdfScaleLabel')}
+                style={{ flex: 1 }}
+                value={pdfScale}
+                onChange={(e) => setPdfScale(Number(e.target.value) as PdfScale)}
+              >
+                {PDF_SCALES.map((scale) => (
+                  <option key={scale} value={scale}>
+                    {t('sectionDxf.pdfScaleOption', { scale })}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="select dxf-pdf-paper"
+                aria-label={t('sectionDxf.pdfPaperLabel')}
+                style={{ flex: 1 }}
+                value={pdfPaper}
+                onChange={(e) => setPdfPaper(e.target.value as PdfPaper)}
+              >
+                {PDF_PAPERS.map((paper) => (
+                  <option key={paper} value={paper}>
+                    {t('sectionDxf.pdfPaperOption', { paper })}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary dxf-export-pdf-btn"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={() => void handleExportPdf()}
+            >
+              <FileText size={14} />
+              <span>{t('sectionDxf.exportPdf')}</span>
             </button>
           </div>
         </div>

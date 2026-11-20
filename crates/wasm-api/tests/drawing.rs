@@ -439,3 +439,92 @@ fn a_bad_chunk_leaves_other_models_alone() {
     assert!(report.contains("bad-drawing-chunk"), "{report}");
     assert!((line_length(&dxf(&sheet)) - 8.4).abs() < 1e-6);
 }
+
+#[test]
+fn plan_space_labels_emit_building_booleans_space_from_outline_and_duplex_from_quantity() {
+    // building-booleans.ifc: two IfcSpace boxes (9.40 x 7.40 x 3.00 m), one per storey, no
+    // IfcQuantityArea -> falls back to outline area 9.40 * 7.40 = 69.56 m².
+    let words = vec![0.0, 1.5, -1.0, NO_DEPTH, 0.0, 2.0, 0.0]; // flags=2 -> space labels
+    let mut bb = model("test/fixtures/authored/building-booleans.ifc");
+    let mut sheet = SheetStore::new(request(&words));
+    for chunk in chunks(&mut bb, &words, 65536) {
+        sheet.add_chunk(0, &chunk);
+    }
+    assert_eq!(sheet.generate(), "[]");
+    let svg = String::from_utf8(
+        sheet
+            .export(&ExportOptions {
+                svg: true,
+                scale: 1.0,
+                show_hidden: false,
+                show_hatching: false,
+                comment: None,
+            })
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(svg.contains(">guBIM space 1<"), "{svg}");
+    assert!(svg.contains(">69.56 m²<"), "{svg}");
+    assert!(!svg.contains("guBIM space 2"), "storey 2 space is not cut at z=1.5");
+
+    // Duplex_A_20110907.ifc (when present locally): spaces have IfcQuantityArea ('GSA BIM Area').
+    // Space #514 ('A101' / 'Foyer') declares GSA BIM Area = 17.93623674999977 m² -> "17.94 m²".
+    let duplex_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("test/models/bench/Duplex_A_20110907.ifc");
+    if duplex_path.exists() {
+        let mut duplex = LoadedModel::open(fs::read(&duplex_path).unwrap()).unwrap();
+        let mut sheet = SheetStore::new(request(&words));
+        for chunk in chunks(&mut duplex, &words, 65536) {
+            sheet.add_chunk(0, &chunk);
+        }
+        sheet.generate();
+        let svg = String::from_utf8(
+            sheet
+                .export(&ExportOptions {
+                    svg: true,
+                    scale: 1.0,
+                    show_hidden: false,
+                    show_hatching: false,
+                    comment: None,
+                })
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(svg.contains(">A101 Foyer<"), "missing A101 Foyer in Duplex plan");
+        assert!(svg.contains(">17.94 m²<"), "missing quantity area 17.94 m² in Duplex plan");
+    }
+}
+
+#[test]
+fn plan_overall_dimensions_match_building_booleans_bounding_box() {
+    // building-booleans.ifc footprint is 10.00 x 8.00 m.
+    // flags = 6 -> include_space_labels (2) + include_dimensions (4).
+    let words = vec![0.0, 1.5, -1.0, NO_DEPTH, 0.0, 6.0, 0.0];
+    let mut bb = model("test/fixtures/authored/building-booleans.ifc");
+    let mut sheet = SheetStore::new(request(&words));
+    for chunk in chunks(&mut bb, &words, 65536) {
+        sheet.add_chunk(0, &chunk);
+    }
+    assert_eq!(sheet.generate(), "[]");
+    let svg = String::from_utf8(
+        sheet
+            .export(&ExportOptions {
+                svg: true,
+                scale: 1.0,
+                show_hidden: false,
+                show_hatching: false,
+                comment: None,
+            })
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(svg.contains(">10.00 m<"), "missing 10.00 m in SVG: {svg}");
+    assert!(svg.contains(">8.00 m<"), "missing 8.00 m in SVG: {svg}");
+    assert!(svg.contains(">guBIM space 1<"), "missing space label alongside dimensions");
+
+    let dxf_text = String::from_utf8_lossy(&dxf(&sheet)).into_owned();
+    assert!(dxf_text.contains("DIMENSION\r\n"), "missing DIMENSION entity in DXF");
+    assert!(dxf_text.contains("10.00 m\r\n"), "missing 10.00 m in DXF");
+    assert!(dxf_text.contains("8.00 m\r\n"), "missing 8.00 m in DXF");
+}

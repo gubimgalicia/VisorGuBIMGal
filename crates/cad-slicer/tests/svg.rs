@@ -2,14 +2,17 @@
 
 mod common;
 
-use cad_slicer::{Cut, DrawingMesh, DrawingOptions, SvgOptions, draw, to_svg, to_svg_with};
+use cad_slicer::{
+    AreaSource, Cut, DrawingMesh, DrawingOptions, SpaceInput, SvgOptions, draw, draw_with_spaces,
+    to_svg, to_svg_with,
+};
 use common::{cuboid, v};
 
 const ELEMENTS: [&str; 9] = [
     "svg", "g", "path", "line", "polyline", "polygon", "circle", "text", "tspan",
 ];
 
-const ATTRIBUTES: [&str; 13] = [
+const ATTRIBUTES: [&str; 17] = [
     "xmlns",
     "width",
     "height",
@@ -23,6 +26,10 @@ const ATTRIBUTES: [&str; 13] = [
     "d",
     "x",
     "y",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
 ];
 
 /// Every element name the document opens.
@@ -175,4 +182,46 @@ fn a_sheet_opens_at_a_printed_scale() {
     let options = SvgOptions { millimetres_per_unit: 0.01, ..SvgOptions::default() };
     let svg = to_svg_with(&drawing.scaled(1000.0), &options);
     assert!(svg.contains(r#"width="416.0000mm""#), "{}", &svg[..200]);
+}
+
+#[test]
+fn space_labels_render_whitelisted_svg_with_escaped_name_and_area() {
+    let walls = [DrawingMesh::new(1, 1, "Muros", cuboid(v(0.0, 0.0, 0.0), v(10.0, 8.0, 3.0)))];
+    let spaces = [SpaceInput {
+        model_id: 1,
+        element_id: 42,
+        name: "Sala <A> & B".into(),
+        quantity_area_m2: Some(69.56),
+        mesh: cuboid(v(0.3, 0.3, 0.0), v(9.7, 7.7, 3.0)),
+    }];
+    let drawing = draw_with_spaces(&walls, &spaces, &DrawingOptions::cut_only(Cut::Plan { z: 1.5 }));
+    assert_eq!(drawing.spaces.len(), 1);
+    assert_eq!(drawing.spaces[0].area_source, AreaSource::Quantity);
+    let svg = to_svg(&drawing);
+    assert!(svg.contains(">Sala &lt;A&gt; &amp; B<"), "{svg}");
+    assert!(svg.contains(">69.56 m²<"), "{svg}");
+    for name in elements(&svg) {
+        assert!(ELEMENTS.contains(&name.as_str()), "{name} is not whitelisted");
+    }
+    for name in attributes(&svg) {
+        assert!(ATTRIBUTES.contains(&name.as_str()), "attribute {name} is not whitelisted");
+    }
+}
+
+#[test]
+fn overall_dimensions_render_whitelisted_lines_and_bounding_box_text() {
+    let walls = [DrawingMesh::new(1, 1, "Muros", cuboid(v(0.0, 0.0, 0.0), v(10.0, 8.0, 3.0)))];
+    let mut drawing = draw(&walls, &DrawingOptions::cut_only(Cut::Plan { z: 1.5 }));
+    drawing.compute_overall_dimensions();
+    assert!(drawing.dimensions.is_some());
+    let svg = to_svg(&drawing);
+    assert!(svg.contains("<line "), "expected <line> elements for dimensions: {svg}");
+    assert!(svg.contains(">10.00 m<"), "expected width 10.00 m: {svg}");
+    assert!(svg.contains(">8.00 m<"), "expected height 8.00 m: {svg}");
+    for name in elements(&svg) {
+        assert!(ELEMENTS.contains(&name.as_str()), "{name} is not whitelisted");
+    }
+    for name in attributes(&svg) {
+        assert!(ATTRIBUTES.contains(&name.as_str()), "attribute {name} is not whitelisted");
+    }
 }
