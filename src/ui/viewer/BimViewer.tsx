@@ -10,6 +10,7 @@ import type {
   RendererEventHandlers,
   RendererPort
 } from '../../domain/kernel/RendererPort';
+import { t } from '../i18n';
 
 interface BimViewerProps {
   renderer: RendererPort;
@@ -83,7 +84,7 @@ export const BimViewer: React.FC<BimViewerProps> = ({
       })
       .catch((err) => {
         console.error('Error initializing renderer:', err);
-        const msg = err instanceof Error ? err.message : 'Error al inicializar WebGPU';
+        const msg = err instanceof Error ? err.message : t('viewer.initWebGpuError');
         setInitError(msg);
         onInitError?.(msg);
       });
@@ -138,21 +139,21 @@ export const BimViewer: React.FC<BimViewerProps> = ({
         <button
           className="btn btn-ghost btn-icon"
           onClick={() => renderer.setViewPreset('iso')}
-          title="Vista Isométrica"
+          title={t('viewer.presetIsoTitle')}
         >
           <Box size={15} />
         </button>
         <button
           className="btn btn-ghost btn-icon"
           onClick={() => renderer.setViewPreset('top')}
-          title="Vista Planta (Superior)"
+          title={t('viewer.presetTopTitle')}
         >
           <Compass size={15} />
         </button>
         <button
           className="btn btn-ghost btn-icon"
           onClick={() => renderer.setViewPreset('front')}
-          title="Vista Frontal"
+          title={t('viewer.presetFrontTitle')}
         >
           <Eye size={15} />
         </button>
@@ -160,7 +161,7 @@ export const BimViewer: React.FC<BimViewerProps> = ({
         <button
           className="btn btn-ghost btn-icon"
           onClick={() => renderer.fitToView()}
-          title="Encuadrar modelo"
+          title={t('viewer.fitTitle')}
         >
           <RefreshCw size={14} />
         </button>
@@ -168,7 +169,7 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           className="btn btn-ghost btn-icon nav-zoom-sel-btn"
           disabled={!hasSelection}
           onClick={() => onZoomToSelection?.()}
-          title="Zoom a la selección"
+          title={t('viewer.zoomSelectionTitle')}
         >
           <Maximize2 size={14} />
         </button>
@@ -177,27 +178,27 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           className={`btn btn-ghost nav-proj-btn ${projection === 'orthographic' ? 'active' : ''}`}
           aria-pressed={projection === 'orthographic'}
           onClick={handleToggleProjection}
-          title="Alternar proyección Perspectiva / Ortográfica"
+          title={t('viewer.toggleProjectionTitle')}
           style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
         >
-          {projection === 'orthographic' ? 'Orto' : 'Persp'}
+          {projection === 'orthographic' ? t('common.orthoShort') : t('common.perspShort')}
         </button>
         <button
           className={`btn btn-ghost nav-fp-btn ${navMode === 'first-person' ? 'active' : ''}`}
           aria-pressed={navMode === 'first-person'}
           onClick={handleToggleNavMode}
-          title="Modo Primera Persona (WASD / flechas para caminar, arrastrar para mirar)"
+          title={t('viewer.toggleNavModeTitle')}
           style={{ fontSize: '11px', padding: '4px 8px', height: '26px', gap: '4px' }}
         >
           <Footprints size={13} />
-          <span>{navMode === 'first-person' ? '1.ª pers.' : 'Órbita'}</span>
+          <span>{navMode === 'first-person' ? t('viewer.navFirstPerson') : t('viewer.navOrbit')}</span>
         </button>
         <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
         <button
           className={`btn btn-ghost btn-icon perf-toggle-btn ${showPerfMonitor ? 'active' : ''}`}
           aria-pressed={showPerfMonitor}
           onClick={() => setShowPerfMonitor((prev) => !prev)}
-          title="Monitor de rendimiento (GPU, lotes y fotogramas)"
+          title={t('viewer.perfMonitorTitle')}
         >
           <Activity size={14} />
         </button>
@@ -241,10 +242,10 @@ export const BimViewer: React.FC<BimViewerProps> = ({
         <div className="dropzone-overlay">
           <UploadCloud size={48} color="#38bdf8" style={{ marginBottom: '12px' }} />
           <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'white' }}>
-            Suelta el archivo IFC aquí
+            {t('viewer.dropTitle')}
           </h3>
           <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            Se procesará localmente en el navegador mediante WebAssembly
+            {t('viewer.dropSubtitle')}
           </p>
         </div>
       )}
@@ -268,7 +269,7 @@ export const BimViewer: React.FC<BimViewerProps> = ({
           }}
         >
           <h4 style={{ color: '#ef4444', marginBottom: '8px', fontWeight: 600 }}>
-            Error de Inicialización Gráfica
+            {t('viewer.initErrorTitle')}
           </h4>
           <p style={{ fontSize: '12px', color: '#cbd5e1' }}>{initError}</p>
         </div>

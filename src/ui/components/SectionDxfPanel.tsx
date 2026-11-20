@@ -20,6 +20,7 @@ import type { ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import { faceCutPlane, type SectionState } from '../viewer/section';
 import { planRange, storeyLevels, type PlanBottom } from '../viewer/planDepth';
 import { widenForPreview } from './drawingPreview';
+import { formatFixed, formatLength, formatNumber, t } from '../i18n';
 
 interface SectionDxfPanelProps {
   models: ModelRecord[];
@@ -75,14 +76,12 @@ const OMITS_MODEL = new Set([
 /** A drawing that lost lines must not read as a success. */
 function drawingStatus(diagnostics: readonly KernelDiagnostic[]): string {
   const warnings = diagnostics.filter((item) => item.severity !== 'info');
-  if (warnings.length === 0) return 'Plano 2D generado correctamente.';
-  const summary = `Plano 2D generado con ${warnings.length} ${warnings.length === 1 ? 'aviso' : 'avisos'}.`;
+  if (warnings.length === 0) return t('sectionDxf.drawingOk');
+  const summary = t('sectionDxf.drawingWarnings', { count: warnings.length });
   const incomplete = warnings.some(
     (item) => item.code === 'projection-truncated' || item.code === 'projection-skipped'
   );
-  return incomplete
-    ? `${summary} Faltan líneas proyectadas: indica una profundidad de proyección menor.`
-    : summary;
+  return incomplete ? t('sectionDxf.drawingWarningsIncomplete', { summary }) : summary;
 }
 
 export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
@@ -195,12 +194,12 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
     const visibleIds = models.filter((m) => m.visible).map((m) => m.id);
     const modelIds = visibleIds.length > 0 ? visibleIds : models.map((m) => m.id);
     if (modelIds.length === 0) {
-      alert('No hay mallas IFC cargadas para generar el plano 2D.');
+      alert(t('sectionDxf.alertNoMeshes'));
       return;
     }
 
     setIsGenerating(true);
-    setStatusMessage('Calculando corte 2D...');
+    setStatusMessage(t('sectionDxf.statusComputing'));
     const started = performance.now();
 
     let generated: GeneratedDrawing | null = null;
@@ -220,7 +219,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       if (cutPreset === 'face') {
         const resolvedFace = faceCutPlane(section);
         if (!resolvedFace) {
-          setStatusMessage('Selecciona primero una cara del modelo 3D.');
+          setStatusMessage(t('sectionDxf.statusPickFaceFirst'));
           setIsGenerating(false);
           return;
         }
@@ -252,7 +251,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
 
       generated = await kernel.generateDrawing(modelIds, options, (stage, pct) => {
         if (mountedRef.current) {
-          setStatusMessage(`${stage} (${pct}%)`);
+          setStatusMessage(t('sectionDxf.statusStageProgress', { stage, pct }));
         }
       });
 
@@ -293,15 +292,27 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       setDrawingModelIds(drawnIds);
       setCurrentDrawing(generated);
       setPreviewSvg(svgText);
-      const seconds = ((performance.now() - started) / 1000).toFixed(1).replace('.', ',');
-      setStatusMessage(`${drawingStatus(generated.diagnostics)} (${seconds} s)`);
+      const seconds = formatNumber((performance.now() - started) / 1000, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+      setStatusMessage(
+        t('sectionDxf.statusDoneWithDuration', {
+          status: drawingStatus(generated.diagnostics),
+          seconds
+        })
+      );
     } catch (err) {
       if (generated && !mountedRef.current) {
         void kernel.discardDrawing(generated.drawingId);
       }
       if (mountedRef.current) {
         console.error(err);
-        setStatusMessage(`Error: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        setStatusMessage(
+          t('sectionDxf.statusError', {
+            message: err instanceof Error ? err.message : t('common.unknownError')
+          })
+        );
       }
     } finally {
       if (mountedRef.current) {
@@ -312,7 +323,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
 
   const handleExport = async (format: 'dxf' | 'svg') => {
     if (!currentDrawing) {
-      alert('No hay ningún dibujo 2D generado para exportar.');
+      alert(t('sectionDxf.alertNoDrawing'));
       return;
     }
     try {
@@ -332,7 +343,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
 
       downloadExportedDrawing(res);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al exportar');
+      alert(err instanceof Error ? err.message : t('sectionDxf.alertExportError'));
     }
   };
 
@@ -342,7 +353,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
     <div style={{ fontSize: '13px' }}>
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
-          TIPO DE DIBUJO 2D
+          {t('sectionDxf.cutTypeLabel')}
         </label>
         <select
           className="select dxf-cut-preset"
@@ -359,10 +370,10 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             }
           }}
         >
-          <option value="plan">Planta arquitectónica a cota (Z horizontal)</option>
-          <option value="section-x">Sección vertical (Eje X)</option>
-          <option value="section-y">Sección transversal (Eje Y)</option>
-          <option value="face">Corte por una cara (cualquier dirección)</option>
+          <option value="plan">{t('sectionDxf.presetPlan')}</option>
+          <option value="section-x">{t('sectionDxf.presetSectionX')}</option>
+          <option value="section-y">{t('sectionDxf.presetSectionY')}</option>
+          <option value="face">{t('sectionDxf.presetFace')}</option>
         </select>
       </div>
 
@@ -370,9 +381,9 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
         <div style={{ marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <label style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-              {cutPreset === 'plan' ? 'ARRIBA: CORTE (cota, metros)' : 'POSICIÓN DE CORTE (metros)'}
+              {cutPreset === 'plan' ? t('sectionDxf.cutElevationTopLabel') : t('sectionDxf.cutPositionLabel')}
             </label>
-            <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>{position.toFixed(2)} m</span>
+            <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>{formatLength(position, 2)}</span>
           </div>
           <input
             type="number"
@@ -394,17 +405,20 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                   if (storey) setPosition(Number((storey.level + CUT_ABOVE_FLOOR).toFixed(3)));
                 }}
               >
-                <option value="">{storeys.length ? 'Cortar en una planta…' : 'Sin plantas'}</option>
+                <option value="">{storeys.length ? t('sectionDxf.cutAtStoreyPlaceholder') : t('sectionDxf.noStoreys')}</option>
                 {storeys.map((storey, i) => (
                   <option key={`${storey.name}-${i}`} value={i}>
-                    {storey.name} + {CUT_ABOVE_FLOOR.toFixed(2)} m
+                    {t('sectionDxf.storeyPlusOffset', {
+                      name: storey.name,
+                      offset: formatLength(CUT_ABOVE_FLOOR, 2)
+                    })}
                   </option>
                 ))}
               </select>
               <button
                 type="button"
                 className={`btn btn-secondary dxf-pick-top ${pickingHeight === 'top' ? 'active' : ''}`}
-                title="Elegir la cota del corte haciendo clic sobre el modelo 3D"
+                title={t('sectionDxf.pickTopTitle')}
                 disabled={models.length === 0}
                 onClick={() => onPickHeight?.(pickingHeight === 'top' ? null : 'top')}
               >
@@ -426,10 +440,10 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
               <MousePointerClick size={14} />
               <span>
                 {isPickingFace
-                  ? 'Haz clic sobre una cara 3D…'
+                  ? t('sectionDxf.pickingFacePrompt')
                   : section.face
-                    ? 'Elegir otra cara en 3D'
-                    : 'Elegir cara en 3D'}
+                    ? t('sectionDxf.pickAnotherFace3d')
+                    : t('sectionDxf.pickFace3d')}
               </span>
             </button>
             {section.face && (
@@ -444,10 +458,10 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                     flip: !section.flip
                   })
                 }
-                title="Invertir sentido del corte y de la mirada"
+                title={t('sectionDxf.flipFaceTitle')}
               >
                 <FlipVertical2 size={14} />
-                <span>Invertir</span>
+                <span>{t('sectionDxf.invertLabel')}</span>
               </button>
             )}
           </div>
@@ -467,21 +481,27 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                 }}
               >
                 <div>
-                  Origen: ({resolvedFace.origin[0].toFixed(2)}, {resolvedFace.origin[1].toFixed(2)},{' '}
-                  {resolvedFace.origin[2].toFixed(2)}) m
+                  {t('sectionDxf.faceOrigin', {
+                    x: formatFixed(resolvedFace.origin[0], 2),
+                    y: formatFixed(resolvedFace.origin[1], 2),
+                    z: formatFixed(resolvedFace.origin[2], 2)
+                  })}
                 </div>
                 <div>
-                  Mirada: ({resolvedFace.normal[0].toFixed(3)}, {resolvedFace.normal[1].toFixed(3)},{' '}
-                  {resolvedFace.normal[2].toFixed(3)})
+                  {t('sectionDxf.faceNormal', {
+                    x: formatFixed(resolvedFace.normal[0], 3),
+                    y: formatFixed(resolvedFace.normal[1], 3),
+                    z: formatFixed(resolvedFace.normal[2], 3)
+                  })}
                 </div>
               </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <label style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-                    Desplazamiento desde la cara (m)
+                    {t('sectionDxf.faceOffsetLabel')}
                   </label>
                   <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
-                    {section.face.offset.toFixed(2)} m
+                    {formatLength(section.face.offset, 2)}
                   </span>
                 </div>
                 <input
@@ -514,7 +534,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                 color: '#94a3b8'
               }}
             >
-              Pulsa «Elegir cara en 3D» y haz clic sobre cualquier cara del modelo para cortar en su plano.
+              {t('sectionDxf.faceHint')}
             </div>
           )}
         </div>
@@ -523,7 +543,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       {cutPreset === 'plan' && (
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
-            ABAJO: FONDO DEL PLANO
+            {t('sectionDxf.bottomLabel')}
           </label>
           <select
             className="select dxf-bottom-mode"
@@ -531,16 +551,16 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             value={bottomMode}
             onChange={(e) => setBottomMode(e.target.value as BottomMode)}
           >
-            <option value="storey">Suelo de la planta del corte (automático)</option>
-            <option value="height">Una cota</option>
-            <option value="none">Sin fondo: todo lo que hay debajo</option>
+            <option value="storey">{t('sectionDxf.bottomStorey')}</option>
+            <option value="height">{t('sectionDxf.bottomHeight')}</option>
+            <option value="none">{t('sectionDxf.bottomNone')}</option>
           </select>
           {bottomMode === 'height' && (
             <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
               <input
                 type="number"
                 step="0.1"
-                placeholder="Cota del fondo (m)"
+                placeholder={t('sectionDxf.bottomPlaceholder')}
                 className="select dxf-bottom"
                 style={{ flex: 1, minWidth: 0 }}
                 value={bottomStr}
@@ -556,17 +576,20 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                   if (storey) setBottomStr(storey.level.toFixed(3));
                 }}
               >
-                <option value="">{storeys.length ? 'Planta…' : 'Sin plantas'}</option>
+                <option value="">{storeys.length ? t('sectionDxf.storeyPlaceholder') : t('sectionDxf.noStoreys')}</option>
                 {storeys.map((storey, i) => (
                   <option key={`${storey.name}-${i}`} value={i}>
-                    {storey.name} ({storey.level.toFixed(2)} m)
+                    {t('sectionDxf.storeyWithLevel', {
+                      name: storey.name,
+                      level: formatLength(storey.level, 2)
+                    })}
                   </option>
                 ))}
               </select>
               <button
                 type="button"
                 className={`btn btn-secondary dxf-pick-bottom ${pickingHeight === 'bottom' ? 'active' : ''}`}
-                title="Elegir la cota del fondo haciendo clic sobre el modelo 3D"
+                title={t('sectionDxf.pickBottomTitle')}
                 disabled={models.length === 0}
                 onClick={() => onPickHeight?.(pickingHeight === 'bottom' ? null : 'bottom')}
               >
@@ -578,8 +601,17 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             {range.error
               ? range.error
               : range.bottom === null
-                ? 'Franja: todo lo que hay bajo el corte. En modelos grandes puede tardar mucho.'
-                : `Franja: de ${position.toFixed(2)} m a ${range.bottom.toFixed(2)} m (${(range.depth ?? 0).toFixed(2)} m)${range.storey ? `, suelo de «${range.storey.name}»` : bottomMode === 'storey' ? ': no hay ninguna planta bajo el corte' : ''}`}
+                ? t('sectionDxf.rangeUnlimited')
+                : t('sectionDxf.rangeBand', {
+                    top: formatLength(position, 2),
+                    bottom: formatLength(range.bottom, 2),
+                    depth: formatLength(range.depth ?? 0, 2),
+                    suffix: range.storey
+                      ? t('sectionDxf.rangeStoreySuffix', { name: range.storey.name })
+                      : bottomMode === 'storey'
+                        ? t('sectionDxf.rangeNoStoreySuffix')
+                        : ''
+                  })}
           </div>
           <button
             type="button"
@@ -588,7 +620,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             disabled={!!range.error || !models.some((m) => m.bounds)}
             onClick={showRangeIn3d}
           >
-            Ver la franja en 3D
+            {t('sectionDxf.showRange3d')}
           </button>
         </div>
       )}
@@ -596,7 +628,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       {cutPreset !== 'plan' && (
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>
-          Profundidad de proyección
+          {t('sectionDxf.depthLabel')}
         </label>
         <select
           className="select dxf-depth-mode"
@@ -604,16 +636,16 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
           value={depthMode}
           onChange={(e) => setDepthMode(e.target.value as DepthMode)}
         >
-          <option value="auto">Sin límite (automática)</option>
-          <option value="none">Sin límite</option>
-          <option value="custom">Personalizada</option>
+          <option value="auto">{t('sectionDxf.depthAuto')}</option>
+          <option value="none">{t('sectionDxf.depthNone')}</option>
+          <option value="custom">{t('sectionDxf.depthCustom')}</option>
         </select>
         {depthMode === 'custom' && (
           <input
             type="number"
             step="0.1"
             min="0"
-            placeholder="Metros desde el corte"
+            placeholder={t('sectionDxf.depthPlaceholder')}
             className="select dxf-depth"
             style={{ width: '100%' }}
             value={depthStr}
@@ -630,7 +662,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             checked={includeHidden}
             onChange={(e) => setIncludeHidden(e.target.checked)}
           />
-          <span>Incluir líneas ocultas (trazos discontinuos)</span>
+          <span>{t('sectionDxf.includeHidden')}</span>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#cbd5e1' }}>
           <input
@@ -638,7 +670,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
             checked={includeHatching}
             onChange={(e) => setIncludeHatching(e.target.checked)}
           />
-          <span>Generar sombreados / tramas de materiales</span>
+          <span>{t('sectionDxf.includeHatching')}</span>
         </label>
       </div>
 
@@ -649,7 +681,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
         onClick={() => void handleGenerate()}
       >
         {isGenerating ? <RefreshCw size={15} className="spin" /> : <Scissors size={15} />}
-        <span>{isGenerating ? 'Generando plano...' : 'Generar plano 2D'}</span>
+        <span>{isGenerating ? t('sectionDxf.generating') : t('sectionDxf.generate')}</span>
       </button>
 
       {statusMessage && (
@@ -675,7 +707,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
       {previewSvg && (
         <div style={{ marginTop: '14px' }}>
           <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>
-            VISTA PREVIA 2D
+            {t('sectionDxf.previewHeading')}
           </div>
           <div
             className="drawing-preview"
@@ -701,7 +733,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
               onClick={() => void handleExport('dxf')}
             >
               <Download size={14} />
-              <span>Exportar DXF (R12)</span>
+              <span>{t('sectionDxf.exportDxf')}</span>
             </button>
             <button
               className="btn btn-secondary"
@@ -709,7 +741,7 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
               onClick={() => void handleExport('svg')}
             >
               <FileCode size={14} />
-              <span>Exportar SVG</span>
+              <span>{t('sectionDxf.exportSvg')}</span>
             </button>
           </div>
         </div>
