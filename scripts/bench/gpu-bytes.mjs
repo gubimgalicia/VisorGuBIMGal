@@ -1,7 +1,9 @@
 // GPU memory a model's stream takes in the renderers, for one or two kernel builds (backlog A11,
 // docs/09 section 1): vertex buffers as sent, a 4-byte record index per vertex where the batch is
 // f32 (q16 carries it in the position), index buffers padded to 4 bytes as WebGPU needs, and 16
-// bytes per record in the record table. Also counts batches by format.
+// bytes per record in the record table; since A13, each shape once (its vertices and padded
+// indices, and a 32-byte grid), 96 bytes per instance and 16 for its record. Also counts batches
+// by format, and shapes and instances.
 //
 //   node --experimental-strip-types scripts/bench/gpu-bytes.mjs <pkg> [<pkg2>] <file.ifc>...
 import { readFileSync, statSync } from 'node:fs';
@@ -23,7 +25,7 @@ async function load(pkg) {
 function measure(mod, bytes) {
   const model = new mod.Model(bytes);
   model.startStream();
-  const total = { bytes: 0, q16: 0, f32: 0, triangles: 0 };
+  const total = { bytes: 0, q16: 0, f32: 0, triangles: 0, shapes: 0, instances: 0 };
   for (;;) {
     const view = model.nextBatch(65536);
     if (!view) break;
@@ -34,6 +36,13 @@ function measure(mod, bytes) {
     total.bytes += (b.indices.byteLength + 3) & ~3;
     total.bytes += 16 * (b.meshTable.length / 7);
     total[q16 ? 'q16' : 'f32'] += 1;
+    for (const shape of b.shapes) {
+      total.bytes += shape.positions.byteLength + shape.normals.byteLength + ((shape.indices.byteLength + 3) & ~3) + 32;
+      total.shapes += 1;
+    }
+    const instances = b.instanceTable.length / 4;
+    total.bytes += instances * (96 + 16);
+    total.instances += instances;
     total.triangles += b.indices.length / 3;
   }
   model.finishStream();
@@ -43,12 +52,12 @@ function measure(mod, bytes) {
 
 const mods = await Promise.all(pkgs.map(load));
 const mb = (n) => (n / 1e6).toFixed(1);
-console.log(`| Model | Triangles | ${pkgs.map((p) => path.basename(p)).join(' | ')} | Batches q16 / f32 (last) |`);
+console.log(`| Model | Triangles | ${pkgs.map((p) => path.basename(p)).join(' | ')} | Batches q16 / f32, shapes / instances (last) |`);
 console.log(`|---|---|${pkgs.map(() => '---|').join('')}---|`);
 for (const file of files) {
   const bytes = readFileSync(file);
   const results = mods.map((mod) => measure(mod, bytes));
   const last = results.at(-1);
   const cells = results.map((r, i) => (i === 0 ? `${mb(r.bytes)} MB` : `${mb(r.bytes)} MB (${((r.bytes / results[0].bytes - 1) * 100).toFixed(1)} %)`));
-  console.log(`| ${path.basename(file)} | ${last.triangles} | ${cells.join(' | ')} | ${last.q16} / ${last.f32} |`);
+  console.log(`| ${path.basename(file)} | ${last.triangles} | ${cells.join(' | ')} | ${last.q16} / ${last.f32}, ${last.shapes} / ${last.instances} |`);
 }

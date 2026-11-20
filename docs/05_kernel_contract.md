@@ -1,6 +1,6 @@
 # 05 — Contrato del Kernel y del Renderizador
 
-**Estado:** v2, revisión 10: `CONTRACT_VERSION` 2, con vértices comprimidos (A11) y formas compartidas por instancias (A13) en los lotes (secciones 3 y 6), según `docs/09` revisión 4, aceptada por Gemini en T-152 y aprobada por Nick el 2026-11-19. A11 está construida (T-153); A13 está en la sección 7 como conformidad pendiente. La revisión 9 era la revisión 8 con la cota `level` de cada planta en el árbol espacial (sección 4, T-148; aceptada por Gemini en T-149). La revisión 8 era la revisión 7 con la bandera `Closed` de las mallas cerradas (sección 3, T-118). La revisión 7 era la revisión 6 con la caja de cada lote (`box`, sección 3, T-116). La revisión 6 era la revisión 5, que recogía la revisión de DeepSeek a la revisión 4, con dos aclaraciones de redacción de la sección 6 tras la revisión de Gemini. La versión 1 nunca se publicó; la 2 cambia el formato de los lotes, así que también la caché OPFS (`CACHE_FORMAT` 2). La sección 7 lista lo que el código aún no cumple.  
+**Estado:** v2, revisión 10: `CONTRACT_VERSION` 2, con vértices comprimidos (A11) y formas compartidas por instancias (A13) en los lotes (secciones 3 y 6), según `docs/09` revisión 4, aceptada por Gemini en T-152 y aprobada por Nick el 2026-11-19. A11 está construida (T-153) y A13 también (T-158); la sección 7 dice qué prueba de A13 falta. La revisión 9 era la revisión 8 con la cota `level` de cada planta en el árbol espacial (sección 4, T-148; aceptada por Gemini en T-149). La revisión 8 era la revisión 7 con la bandera `Closed` de las mallas cerradas (sección 3, T-118). La revisión 7 era la revisión 6 con la caja de cada lote (`box`, sección 3, T-116). La revisión 6 era la revisión 5, que recogía la revisión de DeepSeek a la revisión 4, con dos aclaraciones de redacción de la sección 6 tras la revisión de Gemini. La versión 1 nunca se publicó; la 2 cambia el formato de los lotes, así que también la caché OPFS (`CACHE_FORMAT` 2). La sección 7 lista lo que el código aún no cumple.  
 **Propósito:** Fuente única de los límites entre kernel, renderizador y aplicación.  
 **Código normativo:** [`src/domain/kernel/`](../src/domain/kernel/), [`DrawingTypes.ts`](../src/domain/drawings/DrawingTypes.ts) y [`ModelRecord.ts`](../src/domain/models/ModelRecord.ts). Si este documento y los tipos discrepan, es un error que debe corregirse.
 
@@ -434,7 +434,7 @@ El código aún no cumple esta revisión en los puntos siguientes.
 | Contrato | Código actual |
 |---|---|
 | `crsComment` | Solo llega al DXF. El SVG no admite comentarios en su lista blanca |
-| Formas e instancias (A13) | El kernel aún no envía `shapes` ni instancias: todos los lotes llevan `shapes` vacío. Los renderizadores todavía no dibujan instancias, y la exportación glTF y `App.tsx` no leen `instanceTable` (`docs/09` §4). `findBatchError` y la caché OPFS ya las validan y guardan |
+| Formas e instancias (A13) | Construidas en T-158. Falta una prueba: una instancia escalada 0,001 debe iluminarse igual que su copia expandida (`docs/09` §5); ningún modelo de prueba tiene esa escala |
 
 ---
 
