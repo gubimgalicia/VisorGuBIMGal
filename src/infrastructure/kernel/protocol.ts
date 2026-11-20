@@ -8,6 +8,7 @@ export type WorkerRequest =
   | { op: 'start-stream' }
   | { op: 'next-batch' }
   | { op: 'details'; expressId: number }
+  | { op: 'snapshots' }
   | { op: 'tree' }
   | { op: 'find'; query: ElementQuery }
   | { op: 'mesh'; expressId: number }

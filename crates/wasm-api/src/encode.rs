@@ -2,6 +2,7 @@
 
 use crate::json::{Object, ToJson, to_json};
 use ifc_geometry::Diagnostic as GeometryDiagnostic;
+use std::collections::BTreeMap;
 use spatial_tree::{
     AttributeValue, CoordinateReference, Diagnostic, ElementDetails, MaterialConstituent,
     MaterialInfo, MaterialLayer, MaterialProfile, ModelSummary, PropertyItem, PropertySet,
@@ -244,6 +245,82 @@ impl ToJson for PropertySet {
             .field("properties", &self.properties)
             .end();
     }
+}
+
+/// What the properties panel shows for one single value: typed values are stripped down to their
+/// scalar, `.T.` and `.F.` become `true` and `false`, and an absent or unknown value shows nothing.
+fn scalar_text(value: &AttributeValue) -> Option<String> {
+    Some(match value {
+        AttributeValue::Null => return None,
+        AttributeValue::Number(number) if !number.is_finite() => return None,
+        AttributeValue::Number(number) => number.to_string(),
+        AttributeValue::Text(text) => text.clone(),
+        AttributeValue::Enum(name) => match name.as_str() {
+            "T" => "true".to_string(),
+            "F" => "false".to_string(),
+            "U" => return None,
+            other => other.to_string(),
+        },
+        AttributeValue::Ref(id) => format!("#{id}"),
+        AttributeValue::Typed { value, .. } => return scalar_text(value),
+        AttributeValue::List(items) => joined(items),
+    })
+}
+
+/// The cell text of one property, unit included exactly as the properties panel joins it.
+fn property_text(item: &PropertyItem) -> String {
+    let mut text = match &item.value {
+        PropertyValue::Single(value) => match scalar_text(value) {
+            Some(text) => text,
+            None => return "-".to_string(),
+        },
+        other => display(other),
+    };
+    if let Some(unit) = &item.unit {
+        text.push(' ');
+        text.push_str(unit);
+    }
+    text
+}
+
+/// One element of `elementSnapshotsJson`: the properties panel's values, keyed by set and name.
+struct Snapshot<'a>(&'a ElementDetails);
+
+impl ToJson for Snapshot<'_> {
+    fn write_json(&self, out: &mut String) {
+        let details = self.0;
+        Object::new(out)
+            .field("globalId", details.global_id.as_deref().unwrap_or_default())
+            .field("expressId", &details.express_id)
+            .field("ifcType", &details.type_name)
+            .some("name", &details.name)
+            .field("properties", &SnapshotProperties(&details.property_sets))
+            .end();
+    }
+}
+
+/// A JSON object, so a repeated key keeps the value `element_details` reaches last.
+struct SnapshotProperties<'a>(&'a [PropertySet]);
+
+impl ToJson for SnapshotProperties<'_> {
+    fn write_json(&self, out: &mut String) {
+        let mut values = BTreeMap::new();
+        for set in self.0 {
+            for item in &set.properties {
+                values.insert(format!("{}.{}", set.name, item.name), property_text(item));
+            }
+        }
+        let mut object = Object::new(out);
+        for (key, value) in &values {
+            object = object.field(key, value);
+        }
+        object.end();
+    }
+}
+
+/// The snapshots for `diffModels`, ascending by expressId as the geometry stream gives them.
+pub(crate) fn snapshots_json(details: &[ElementDetails]) -> String {
+    to_json(&details.iter().map(Snapshot).collect::<Vec<_>>())
 }
 
 /// The contract's layer has one label. The material says more than the layer's own name.
