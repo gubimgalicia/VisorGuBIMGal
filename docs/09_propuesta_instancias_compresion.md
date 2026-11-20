@@ -269,6 +269,11 @@ El corte y los planos (`cad-slicer`), `elementMesh`, la medición, el ajuste a v
   2. Un mínimo de triángulos por forma, en torno a 32.
   3. Medir otra vez en una GPU dedicada antes de decidir.
 - **Propuesta 1 probada en WebGL2** (52 bytes por instancia, matriz normal con `inverse` en el sombreador): fontanería de la clínica 38,4 → 27,6 ms, Esplanades 14,9 → 11,6 ms, con las 5 suites del navegador en verde en WebGL2 y sin adaptador. WebGPU sigue con 96 bytes.
+- **Propuestas 1 y 2 juntas en WebGL2** (52 bytes y mínimo de 32 triángulos), frente a sin instancias: fontanería de la clínica 27,1 frente a 19,9 ms (15,5 frente a 139,7 MB), Esplanades 3,6 frente a 2,2 ms (4,9 frente a 5,7 MB), arquitectura de la clínica 3,1 frente a 2,6 ms (8,9 frente a 12,9 MB). Sigue costando tiempo de fotograma; la memoria se gana sobre todo en la fontanería.
+- **Lo que no explica el coste restante** (fontanería, 27 frente a 20 ms):
+  - Con instancias el fotograma procesa 9,0 millones de vértices, frente a 8,2 sin ellas: solo un 9 % más.
+  - Cambiar `inverse` por tres productos vectoriales no cambia el tiempo (27,3 ms), así que el cálculo del sombreador no es el cuello de botella.
+  - Quedan como sospechosos los 1066 dibujos instanciados (unas 6,5 copias cada uno) y la lectura de un segundo flujo de atributos. Distinguirlos requiere un perfilador de GPU o una GPU dedicada.
 - **Mandos en el código** (`crates/wasm-api/src/batches.rs`): `MIN_INSTANCE_TRIANGLES` (0) y `MIN_BATCH_INSTANCES` (1). Con esos valores la salida es idéntica byte a byte a la de la revisión 4 (`check-identical`, ahora también con formas e instancias).
 - Decide Nick, tras la revisión de Gemini.
 
