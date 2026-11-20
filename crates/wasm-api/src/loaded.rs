@@ -2,7 +2,7 @@
 
 use crate::batches::{Batch, GeometryStream};
 use crate::drawing::{DrawingRequest, DrawingStream};
-use crate::encode::{complete_json, diagnostics_json};
+use crate::encode::{complete_json, diagnostics_json, snapshots_json};
 use crate::json::to_json;
 use crate::shape::element_shape;
 pub use crate::shape::ElementShape;
@@ -121,6 +121,19 @@ impl LoadedModel {
 
     pub fn element_details_json(&self, express_id: u32) -> Option<String> {
         self.data.element_details(express_id).map(|details| to_json(&details))
+    }
+
+    /// One snapshot per product the geometry stream draws, ascending: the input of `diffModels`.
+    pub fn element_snapshots_json(&self) -> String {
+        let Ok(evaluator) = ModelEvaluator::new(self.file) else {
+            return "[]".to_string();
+        };
+        let details: Vec<_> = evaluator
+            .element_ids()
+            .into_iter()
+            .filter_map(|id| self.data.element_details(id))
+            .collect();
+        snapshots_json(&details)
     }
 
     /// `field` is an `ElementQuery['field']` of the contract; `None` for any other.

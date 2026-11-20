@@ -401,6 +401,8 @@ async function handle(request: WorkerRequest): Promise<{ value: unknown; transfe
       const json = current().model.elementDetailsJson(request.expressId);
       return { value: json ? JSON.parse(json) : null, transfer: [] };
     }
+    case 'snapshots':
+      return { value: JSON.parse(current().model.elementSnapshotsJson()), transfer: [] };
     case 'tree': {
       if (tree === undefined) {
         const json = current().model.spatialTreeJson() ?? null;

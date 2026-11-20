@@ -129,6 +129,12 @@ impl Model {
         self.inner.element_details_json(express_id)
     }
 
+    /// The products the stream draws, with their properties as the panel shows them.
+    #[wasm_bindgen(js_name = elementSnapshotsJson)]
+    pub fn element_snapshots_json(&self) -> String {
+        self.inner.element_snapshots_json()
+    }
+
     /// Ascending expressIds. See `KernelPort.findElements`.
     #[wasm_bindgen(js_name = findElements)]
     pub fn find_elements(

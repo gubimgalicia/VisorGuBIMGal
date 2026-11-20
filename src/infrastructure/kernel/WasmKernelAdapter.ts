@@ -1,4 +1,5 @@
 import type { ElementRef, ModelId } from '../../domain/models/ModelRecord';
+import type { ElementSnapshot } from '../../domain/compare/modelDiff';
 import type { DrawingExportConfig, DrawingOptions } from '../../domain/drawings/DrawingTypes';
 import {
   KernelError,
@@ -214,6 +215,17 @@ export class WasmKernelAdapter implements KernelPort {
       return details && { ...details, modelId };
     } catch (error) {
       if (isClosed(error)) return null;
+      throw error;
+    }
+  }
+
+  async getElementSnapshots(modelId: ModelId): Promise<ElementSnapshot[]> {
+    const worker = this.workers.get(modelId);
+    if (!worker) return [];
+    try {
+      return await worker.call<ElementSnapshot[]>({ op: 'snapshots' });
+    } catch (error) {
+      if (isClosed(error)) return [];
       throw error;
     }
   }

@@ -8,6 +8,7 @@ import type {
   SelectedElementDetails
 } from '../models/ModelRecord';
 import type { DrawingExportConfig, DrawingFrame, DrawingOptions } from '../drawings/DrawingTypes';
+import type { ElementSnapshot } from '../compare/modelDiff';
 import type { GeometryBatch } from './GeometryBatch';
 
 export type { AttributeValue };
@@ -187,6 +188,12 @@ export interface KernelPort {
   streamGeometry(modelId: ModelId): AsyncIterable<GeometryEvent>;
 
   getElementDetails(ref: ElementRef): Promise<ElementDetails | null>;
+
+  /**
+   * One snapshot per product the geometry stream draws, ascending expressId, with the same
+   * property values the properties panel shows. The input of `diffModels`.
+   */
+  getElementSnapshots(modelId: ModelId): Promise<ElementSnapshot[]>;
 
   getSpatialTree(modelId: ModelId): Promise<SpatialTree | null>;
 
