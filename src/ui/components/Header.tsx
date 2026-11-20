@@ -14,6 +14,7 @@ import {
 import type { ViewPreset } from '../../domain/kernel/RendererPort';
 import noticeText from '../../../NOTICE.md?raw';
 import { GeometryCacheControl } from './GeometryCacheControl';
+import { t } from '../i18n';
 
 interface HeaderProps {
   onOpenFile: (file: File) => void;
@@ -72,17 +73,17 @@ export const Header: React.FC<HeaderProps> = ({
           className={`status-badge ${backend ? 'ready' : 'error'}`}
           title={
             backend === 'webgpu'
-              ? 'WebGPU disponible y activo'
+              ? t('header.backendTitleWebGpu')
               : backend === 'webgl2'
-              ? 'WebGL2 disponible y activo'
-              : 'Aceleración gráfica 3D no disponible en este navegador'
+              ? t('header.backendTitleWebGl2')
+              : t('header.backendTitleNone')
           }
         >
           {backend === 'webgpu'
-            ? '● WebGPU Activo'
+            ? t('header.backendBadgeWebGpu')
             : backend === 'webgl2'
-            ? '● WebGL2 Activo'
-            : '● Sin aceleración 3D'}
+            ? t('header.backendBadgeWebGl2')
+            : t('header.backendBadgeNone')}
         </span>
 
         {/* View presets */}
@@ -90,28 +91,28 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => onSetPreset('iso')}
-            title="Vista Isométrica 3D"
+            title={t('header.presetIsoTitle')}
           >
             <Box size={16} />
           </button>
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => onSetPreset('top')}
-            title="Vista Superior / Planta"
+            title={t('header.presetTopTitle')}
           >
             <Compass size={16} />
           </button>
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => onSetPreset('front')}
-            title="Vista Frontal"
+            title={t('header.presetFrontTitle')}
           >
             <Eye size={16} />
           </button>
           <button
             className="btn btn-ghost btn-icon"
             onClick={onFitView}
-            title="Encuadrar todo (Fit)"
+            title={t('header.fitAllTitle')}
           >
             <RefreshCw size={15} />
           </button>
@@ -125,10 +126,10 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() =>
               onLoadSample(
                 `${import.meta.env.BASE_URL}samples/SimpleWall.ifc`,
-                'SimpleWall (39 KB)'
+                t('header.sampleSimpleWallName')
               )
             }
-            title="Cargar modelo de prueba SimpleWall (39 KB)"
+            title={t('header.sampleSimpleWallTitle')}
           >
             <span>SimpleWall</span>
           </button>
@@ -138,10 +139,10 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() =>
               onLoadSample(
                 `${import.meta.env.BASE_URL}samples/ManySimpleWalls.ifc`,
-                'ManySimpleWalls (584 KB)'
+                t('header.sampleManyWallsName')
               )
             }
-            title="Cargar modelo de prueba ManySimpleWalls (584 KB)"
+            title={t('header.sampleManyWallsTitle')}
           >
             <span>ManySimpleWalls</span>
           </button>
@@ -161,27 +162,27 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload size={15} />
-          <span>{isWorking ? 'Cargando…' : 'Abrir IFC'}</span>
+          <span>{isWorking ? t('header.loadingEllipsis') : t('header.openIfc')}</span>
         </button>
 
         {/* GIS Toggle */}
         <button
           className={`btn ${isGisExpanded ? 'btn-primary' : 'btn-secondary'}`}
           onClick={onToggleGis}
-          title="Alternar panel GIS Leaflet"
+          title={t('header.gisTitle')}
         >
           <MapPin size={15} />
-          <span>GIS 2D</span>
+          <span>{t('header.gisLabel')}</span>
         </button>
 
         {/* Acerca de Button */}
         <button
           className="btn btn-secondary"
           onClick={() => setShowAbout(true)}
-          title="Acerca de VisorGuBIMGal (avisos y licencias)"
+          title={t('header.aboutTitle')}
         >
           <Info size={15} />
-          <span>Acerca de</span>
+          <span>{t('header.aboutLabel')}</span>
         </button>
       </div>
 
@@ -230,12 +231,12 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '14px', color: '#f8fafc' }}>
                 <Info size={16} color="#38bdf8" />
-                <span>Acerca de VisorGuBIMGal</span>
+                <span>{t('header.aboutModalTitle')}</span>
               </div>
               <button
                 className="btn btn-ghost btn-icon"
                 onClick={() => setShowAbout(false)}
-                title="Cerrar"
+                title={t('common.close')}
                 style={{ padding: '4px' }}
               >
                 <X size={18} />
@@ -274,7 +275,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <GeometryCacheControl />
               <button className="btn btn-secondary" onClick={() => setShowAbout(false)}>
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>

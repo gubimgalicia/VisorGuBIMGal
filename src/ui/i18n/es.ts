@@ -135,6 +135,7 @@ export const es = {
   },
   cache: {
     unavailable: 'Caché de geometría no disponible en este navegador.',
+    megabytes: '{value} MB',
     summary: {
       one: 'Caché de geometría: {count} modelo, {size}.',
       other: 'Caché de geometría: {count} modelos, {size}.'

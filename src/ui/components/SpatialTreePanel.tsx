@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Folder, Building, Layers, Box, Focus, EyeOff
 import type { ElementRef, ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import type { SpatialElement, SpatialNode, SpatialTree } from '../../domain/kernel/KernelPort';
 import type { DisplayTarget } from '../viewer/displayRule';
+import { t } from '../i18n';
 
 interface SpatialTreePanelProps {
   models: ModelRecord[];
@@ -47,8 +48,9 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
       >
         <Box size={11} />
         <span>
-          Elemento #{elem.expressId}
-          {elem.name ? ` · ${elem.name}` : ''}
+          {elem.name
+            ? t('tree.elementLabelWithName', { id: elem.expressId, name: elem.name })
+            : t('tree.elementLabel', { id: elem.expressId })}
         </span>
       </div>
     );
@@ -57,7 +59,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
   const renderSpatialNode = (modelId: ModelId, node: SpatialNode) => {
     const nodeKey = `${modelId}-node-${node.expressId}`;
     const isExpanded = !!expandedNodes[nodeKey];
-    const label = node.name || `Planta #${node.expressId}`;
+    const label = node.name || t('tree.storeyFallback', { id: node.expressId });
     const target: DisplayTarget = { by: 'spatial', modelId, expressId: node.expressId, name: label };
 
     return (
@@ -76,7 +78,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
           {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <Layers size={13} color="#10b981" />
           <span className="tree-spatial-label">
-            {label} ({node.elements.length} elem.)
+            {t('tree.spatialCount', { label, count: node.elements.length })}
           </span>
           <button
             type="button"
@@ -85,7 +87,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
               event.stopPropagation();
               onIsolate(target);
             }}
-            title="Aislar"
+            title={t('common.isolate')}
           >
             <Focus size={12} />
           </button>
@@ -96,7 +98,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
               event.stopPropagation();
               onHide(target);
             }}
-            title="Ocultar"
+            title={t('common.hide')}
           >
             <EyeOff size={12} />
           </button>
@@ -108,7 +110,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
             {node.elements.slice(0, 50).map((elem) => renderElementRow(modelId, elem))}
             {node.elements.length > 50 && (
               <div style={{ color: '#64748b', fontSize: '11px', padding: '2px 6px' }}>
-                ... y {node.elements.length - 50} elementos más
+                {t('common.ellipsisAndMore', { count: node.elements.length - 50 })}
               </div>
             )}
           </div>
@@ -120,7 +122,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
   if (models.length === 0) {
     return (
       <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-        No hay modelos para mostrar el árbol espacial.
+        {t('tree.empty')}
       </div>
     );
   }
@@ -171,7 +173,7 @@ export const SpatialTreePanel: React.FC<SpatialTreePanelProps> = ({
                         <ChevronRight size={12} />
                       )}
                       <Folder size={13} color="#f59e0b" />
-                      <span>{rootNode.name || 'Proyecto'}</span>
+                      <span>{rootNode.name || t('tree.projectFallback')}</span>
                     </div>
                   </div>
                 )}

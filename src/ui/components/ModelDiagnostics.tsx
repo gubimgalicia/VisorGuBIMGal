@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import type { KernelDiagnostic } from '../../domain/kernel/KernelPort';
 import type { ElementRef, ModelId } from '../../domain/models/ModelRecord';
+import { t } from '../i18n';
 
 interface ModelDiagnosticsProps {
   modelId: ModelId;
@@ -14,11 +15,11 @@ const ENTRIES_PER_GROUP = 20;
 
 const SEVERITIES = ['error', 'warning', 'info'] as const;
 
-const NOUNS: Record<KernelDiagnostic['severity'], [string, string]> = {
-  error: ['error', 'errores'],
-  warning: ['aviso', 'avisos'],
-  info: ['nota', 'notas']
-};
+const SEVERITY_KEYS = {
+  error: 'diagnostics.severityError',
+  warning: 'diagnostics.severityWarning',
+  info: 'diagnostics.severityInfo'
+} as const;
 
 const COLORS: Record<KernelDiagnostic['severity'], string> = {
   error: 'var(--danger)',
@@ -70,8 +71,8 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({ modelId, dia
   // Severity comes from the Worker as data: a value outside the three still shows, uncounted.
   const worst = counts[0]?.severity ?? 'info';
   const summary =
-    counts.map(({ severity, count }) => `${count} ${NOUNS[severity][count === 1 ? 0 : 1]}`).join(' · ') ||
-    `${diagnostics.length} diagnósticos`;
+    counts.map(({ severity, count }) => t(SEVERITY_KEYS[severity], { count })).join(' · ') ||
+    t('diagnostics.summaryFallback', { count: diagnostics.length });
 
   return (
     <div className="model-diagnostics">
@@ -80,7 +81,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({ modelId, dia
         className="model-diagnostics-toggle"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        title={open ? 'Ocultar diagnósticos de carga' : 'Ver diagnósticos de carga'}
+        title={open ? t('diagnostics.hideTitle') : t('diagnostics.showTitle')}
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <AlertTriangle size={12} color={COLORS[worst]} />
@@ -101,7 +102,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({ modelId, dia
                     type="button"
                     className="model-diagnostics-element"
                     onClick={() => onSelectElement({ modelId, expressId: item.expressId! })}
-                    title="Seleccionar el elemento"
+                    title={t('diagnostics.selectElementTitle')}
                   >
                     #{item.expressId}
                   </button>
@@ -110,7 +111,9 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({ modelId, dia
               </div>
             ))}
             {group.items.length > ENTRIES_PER_GROUP && (
-              <div className="model-diagnostics-more">y {group.items.length - ENTRIES_PER_GROUP} más</div>
+              <div className="model-diagnostics-more">
+                {t('common.andMore', { count: group.items.length - ENTRIES_PER_GROUP })}
+              </div>
             )}
           </div>
         ))}

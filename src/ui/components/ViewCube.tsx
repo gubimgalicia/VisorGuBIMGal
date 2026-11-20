@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CameraPose, ViewPreset } from '../../domain/kernel/RendererPort';
 import { computeViewCubeTransform } from '../../infrastructure/renderer/Camera';
+import { t } from '../i18n';
 
 export { computeViewCubeTransform };
 
@@ -48,7 +49,7 @@ export const ViewCube: React.FC<ViewCubeProps> = ({ pose, onSelectPreset }) => {
   return (
     <div
       className="view-cube-widget"
-      aria-label="Cubo de vistas 3D"
+      aria-label={t('viewCube.ariaLabel')}
       style={{
         position: 'absolute',
         top: '12px',
@@ -90,54 +91,54 @@ export const ViewCube: React.FC<ViewCubeProps> = ({ pose, onSelectPreset }) => {
             className="view-cube-face view-cube-face-front"
             style={faceStyle(`translateZ(${CUBE_HALF}px)`, 'rgba(30, 58, 138, 0.82)')}
             onClick={() => onSelectPreset('front')}
-            title="Vista Sur (Frontal)"
+            title={t('viewCube.titleSouth')}
           >
-            SUR
+            {t('viewCube.faceSouthLabel')}
           </button>
           <button
             type="button"
             className="view-cube-face view-cube-face-back"
             style={faceStyle(`rotateY(180deg) translateZ(${CUBE_HALF}px)`, 'rgba(30, 41, 59, 0.88)')}
             onClick={() => onSelectPreset('back')}
-            title="Vista Norte (Posterior)"
+            title={t('viewCube.titleNorth')}
           >
-            NORTE
+            {t('viewCube.faceNorthLabel')}
           </button>
           <button
             type="button"
             className="view-cube-face view-cube-face-right"
             style={faceStyle(`rotateY(90deg) translateZ(${CUBE_HALF}px)`, 'rgba(15, 118, 110, 0.82)')}
             onClick={() => onSelectPreset('right')}
-            title="Vista Este (Derecha)"
+            title={t('viewCube.titleEast')}
           >
-            ESTE
+            {t('viewCube.faceEastLabel')}
           </button>
           <button
             type="button"
             className="view-cube-face view-cube-face-left"
             style={faceStyle(`rotateY(-90deg) translateZ(${CUBE_HALF}px)`, 'rgba(30, 41, 59, 0.88)')}
             onClick={() => onSelectPreset('left')}
-            title="Vista Oeste (Izquierda)"
+            title={t('viewCube.titleWest')}
           >
-            OESTE
+            {t('viewCube.faceWestLabel')}
           </button>
           <button
             type="button"
             className="view-cube-face view-cube-face-top"
             style={faceStyle(`rotateX(90deg) translateZ(${CUBE_HALF}px)`, 'rgba(3, 105, 161, 0.88)')}
             onClick={() => onSelectPreset('top')}
-            title="Vista Superior (Planta)"
+            title={t('viewCube.titleTop')}
           >
-            SUP
+            {t('viewCube.faceTopLabel')}
           </button>
           <button
             type="button"
             className="view-cube-face view-cube-face-bottom"
             style={faceStyle(`rotateX(-90deg) translateZ(${CUBE_HALF}px)`, 'rgba(15, 23, 42, 0.92)')}
             onClick={() => onSelectPreset('bottom')}
-            title="Vista Inferior"
+            title={t('viewCube.titleBottom')}
           >
-            INF
+            {t('viewCube.faceBottomLabel')}
           </button>
         </div>
       </div>
@@ -150,26 +151,26 @@ export const ViewCube: React.FC<ViewCubeProps> = ({ pose, onSelectPreset }) => {
           gap: '3px'
         }}
       >
-        <button type="button" className="vc-btn-iso" style={pillStyle} onClick={() => onSelectPreset('iso')} title="Vista Isométrica">
-          Iso
+        <button type="button" className="vc-btn-iso" style={pillStyle} onClick={() => onSelectPreset('iso')} title={t('viewCube.titleIso')}>
+          {t('viewCube.pillIso')}
         </button>
-        <button type="button" className="vc-btn-top" style={pillStyle} onClick={() => onSelectPreset('top')} title="Vista Superior (Planta)">
-          Sup
+        <button type="button" className="vc-btn-top" style={pillStyle} onClick={() => onSelectPreset('top')} title={t('viewCube.titleTop')}>
+          {t('viewCube.pillTop')}
         </button>
-        <button type="button" className="vc-btn-front" style={pillStyle} onClick={() => onSelectPreset('front')} title="Vista Sur (Frontal)">
-          Sur
+        <button type="button" className="vc-btn-front" style={pillStyle} onClick={() => onSelectPreset('front')} title={t('viewCube.titleSouth')}>
+          {t('viewCube.pillFront')}
         </button>
-        <button type="button" className="vc-btn-right" style={pillStyle} onClick={() => onSelectPreset('right')} title="Vista Este (Derecha)">
-          Este
+        <button type="button" className="vc-btn-right" style={pillStyle} onClick={() => onSelectPreset('right')} title={t('viewCube.titleEast')}>
+          {t('viewCube.pillRight')}
         </button>
-        <button type="button" className="vc-btn-bottom" style={pillStyle} onClick={() => onSelectPreset('bottom')} title="Vista Inferior">
-          Inf
+        <button type="button" className="vc-btn-bottom" style={pillStyle} onClick={() => onSelectPreset('bottom')} title={t('viewCube.titleBottom')}>
+          {t('viewCube.pillBottom')}
         </button>
-        <button type="button" className="vc-btn-back" style={pillStyle} onClick={() => onSelectPreset('back')} title="Vista Norte (Posterior)">
-          Norte
+        <button type="button" className="vc-btn-back" style={pillStyle} onClick={() => onSelectPreset('back')} title={t('viewCube.titleNorth')}>
+          {t('viewCube.pillBack')}
         </button>
-        <button type="button" className="vc-btn-left" style={pillStyle} onClick={() => onSelectPreset('left')} title="Vista Oeste (Izquierda)">
-          Oeste
+        <button type="button" className="vc-btn-left" style={pillStyle} onClick={() => onSelectPreset('left')} title={t('viewCube.titleWest')}>
+          {t('viewCube.pillLeft')}
         </button>
       </div>
     </div>
