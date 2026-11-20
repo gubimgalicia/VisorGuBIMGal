@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { drawingRequest, frameModels } from '../src/infrastructure/kernel/drawingRequest.ts';
 import { initSync, kernelVersion, Model, Sheet } from '../src/infrastructure/kernel/pkg/wasm_api.js';
+import { inspectPdf, paperSizePt, svgToPdf } from '../src/ui/viewer/svgToPdf.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const refDir = join(root, 'test/drawings/ref');
@@ -750,6 +751,254 @@ for (const { name, fixture, options } of CASES) {
 }
 
 for (const { model } of modelCache.values()) {
+  // Keep cached models open until C15 checks finish below.
+  void model;
+}
+
+// ---------- C15 checks (T-166): space labels, overall dimensions, vector PDF ----------
+function extractSvgTexts(svgText) {
+  return Array.from(svgText.matchAll(/<text\b[^>]*>([^<]*)<\/text>/g), (m) => m[1]);
+}
+
+function extractDxfDimensionTexts(dxfBytes) {
+  const lines = new TextDecoder('latin1').decode(dxfBytes).split('\r\n');
+  const dims = [];
+  let inEntities = false;
+  for (let i = 0; i + 1 < lines.length; i += 2) {
+    const code = Number(lines[i].trim());
+    const val = lines[i + 1];
+    if (code === 0 && val === 'SECTION' && lines[i + 3] === 'ENTITIES') {
+      inEntities = true;
+      i += 2;
+      continue;
+    }
+    if (code === 0 && val === 'ENDSEC') {
+      inEntities = false;
+      continue;
+    }
+    if (inEntities && code === 0 && val === 'DIMENSION') {
+      let layer = '';
+      let text = '';
+      let block = '';
+      let j = i + 2;
+      while (j + 1 < lines.length && Number(lines[j].trim()) !== 0) {
+        const c = Number(lines[j].trim());
+        const v = lines[j + 1];
+        if (c === 8) layer = v;
+        else if (c === 1) text = v;
+        else if (c === 2) block = v;
+        j += 2;
+      }
+      dims.push({ layer, text, block });
+    }
+  }
+  return dims;
+}
+
+function generateAnnotatedPlan(fixture, elevation, extra = {}) {
+  const { model } = getModel(fixture);
+  const options = {
+    cut: { kind: 'plan', elevation },
+    frame: { kind: 'project' },
+    includeProjection: false,
+    includeHiddenLines: false,
+    includeHatching: false,
+    ...extra
+  };
+  const sheet = new Sheet(new Float64Array(drawingRequest(options)));
+  model.startDrawing(new Float64Array(drawingRequest(options)));
+  for (;;) {
+    const chunk = model.nextDrawingChunk(MAX_TRIANGLES_PER_CHUNK);
+    if (!chunk) break;
+    sheet.addChunk(0, chunk);
+  }
+  model.finishDrawing();
+  sheet.generate();
+  const svgBytes = sheet.export(true, 1, false, false, undefined);
+  const dxfBytes = sheet.export(false, 1, false, false, undefined);
+  sheet.free();
+  return {
+    svg: new TextDecoder().decode(svgBytes),
+    dxfBytes
+  };
+}
+
+let c15Checks = 0;
+function checkC15(name, fn) {
+  c15Checks += 1;
+  try {
+    const detail = fn();
+    console.log(`PASS ${name.padEnd(34)} ${detail}`);
+  } catch (err) {
+    failures += 1;
+    console.error(`FAIL ${name}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+if (!update) {
+  const expectedBb = JSON.parse(
+    readFileSync(join(root, 'test/fixtures/authored/building-booleans.expected.json'), 'utf8')
+  );
+  const bbL1 = generateAnnotatedPlan('test/fixtures/authored/building-booleans.ifc', 1.5, {
+    includeSpaceLabels: true,
+    includeDimensions: true
+  });
+  const bbL2 = generateAnnotatedPlan('test/fixtures/authored/building-booleans.ifc', 4.8, {
+    includeSpaceLabels: true,
+    includeDimensions: false
+  });
+
+  // Independent space calculation from building-booleans.expected.json:
+  // outer walls sit on [0..10] x [0..8] with 0.30 m thickness -> clear internal box is
+  // [0.30..9.70] x [0.30..7.70] = 9.40 m x 7.40 m = 69.56 m² per storey, 2 IfcSpace total.
+  checkC15('c15-space-labels-building-booleans', () => {
+    const expectedTotalSpaces = expectedBb.counts.IfcSpace.value;
+    const expectedSpace1 = expectedBb.elements.spaces[0];
+    const clearW = expectedSpace1.bbox.x_max.value - expectedSpace1.bbox.x_min.value;
+    const clearH = expectedSpace1.bbox.y_max.value - expectedSpace1.bbox.y_min.value;
+    const independentArea = clearW * clearH;
+
+    const l1Texts = extractSvgTexts(bbL1.svg);
+    const l2Texts = extractSvgTexts(bbL2.svg);
+    const l1Areas = l1Texts.filter((s) => s.endsWith(' m²'));
+    const l2Areas = l2Texts.filter((s) => s.endsWith(' m²'));
+    const totalCutSpaces = l1Areas.length + l2Areas.length;
+    if (totalCutSpaces !== expectedTotalSpaces) {
+      throw new Error(`expected ${expectedTotalSpaces} spaces across L1+L2, got ${totalCutSpaces}`);
+    }
+    if (!l1Texts.includes(expectedSpace1.name)) {
+      throw new Error(`missing space name "${expectedSpace1.name}" in SVG texts: ${JSON.stringify(l1Texts)}`);
+    }
+    const parsedArea = parseFloat(l1Areas[0]);
+    if (!Number.isFinite(parsedArea) || Math.abs(parsedArea - independentArea) > 0.01) {
+      throw new Error(
+        `area ${l1Areas[0]} differs by more than 0.01 m² from independent ${independentArea.toFixed(4)} m²`
+      );
+    }
+    const dxfLatin1 = new TextDecoder('latin1').decode(bbL1.dxfBytes);
+    if (!dxfLatin1.includes('SPACES\r\n') || !dxfLatin1.includes(`${expectedSpace1.name}\r\n`)) {
+      throw new Error('DXF missing SPACES layer or space name TEXT entity');
+    }
+    if (!dxfLatin1.includes('69.56 m\u00b2\r\n')) {
+      throw new Error('DXF missing CP1252 "69.56 m²" TEXT entity');
+    }
+    return `spaces=${totalCutSpaces} (L1:${l1Areas.length}, L2:${l2Areas.length}) "${expectedSpace1.name}"=${parsedArea.toFixed(2)} m² (expected ${independentArea.toFixed(2)} m²)`;
+  });
+
+  const duplexFixture = 'test/models/bench/Duplex_A_20110907.ifc';
+  if (existsSync(join(root, duplexFixture))) {
+    checkC15('c15-space-labels-duplex-quantity', () => {
+      // Independent check directly from STEP text: locate IfcSpace ('A101' / 'Foyer'), follow
+      // IFCRELDEFINESBYPROPERTIES -> IFCELEMENTQUANTITY -> IFCQUANTITYAREA.
+      const stepText = readFileSync(join(root, duplexFixture), 'utf8');
+      const spaceMatch = /^#(\d+)\s*=\s*IFCSPACE\([^;]*'A101'[^;]*'Foyer'[^;]*\);/m.exec(stepText);
+      if (!spaceMatch) throw new Error('could not locate IfcSpace A101 Foyer in Duplex STEP');
+      const spaceId = spaceMatch[1];
+      let expectedArea = null;
+      for (const rel of stepText.matchAll(/IFCRELDEFINESBYPROPERTIES\([^;]*\(([^()]*)\)\s*,\s*#(\d+)\s*\);/g)) {
+        const targets = rel[1].split(',').map((s) => s.trim());
+        if (!targets.includes(`#${spaceId}`)) continue;
+        const defRe = new RegExp(`^#${rel[2]}\\s*=\\s*IFCELEMENTQUANTITY\\([^;]*\\(([^()]*)\\)\\s*\\);`, 'm');
+        const defMatch = defRe.exec(stepText);
+        if (!defMatch) continue;
+        for (const qRef of defMatch[1].split(',').map((s) => s.trim().replace(/^#/, ''))) {
+          const qRe = new RegExp(`^#${qRef}\\s*=\\s*IFCQUANTITYAREA\\([^,]*,[^,]*,[^,]*,\\s*([0-9.]+)`, 'm');
+          const qMatch = qRe.exec(stepText);
+          if (qMatch) {
+            expectedArea = Number(qMatch[1]);
+            break;
+          }
+        }
+        if (expectedArea !== null) break;
+      }
+      if (expectedArea === null) throw new Error(`could not locate IFCQUANTITYAREA for #${spaceId} in Duplex STEP`);
+      const duplexPlan = generateAnnotatedPlan(duplexFixture, 1.5, {
+        includeSpaceLabels: true,
+        includeDimensions: false
+      });
+      const texts = extractSvgTexts(duplexPlan.svg);
+      const areaLabels = texts.filter((s) => s.endsWith(' m²'));
+      if (areaLabels.length < 10) {
+        throw new Error(`expected >= 10 ground-floor spaces in Duplex, got ${areaLabels.length}`);
+      }
+      const foyerIdx = texts.indexOf('A101 Foyer');
+      if (foyerIdx < 0) throw new Error('missing "A101 Foyer" in Duplex SVG');
+      const gotArea = parseFloat(texts[foyerIdx + 1] ?? '');
+      if (!Number.isFinite(gotArea) || Math.abs(gotArea - expectedArea) > 0.01) {
+        throw new Error(`A101 Foyer area ${gotArea} differs from STEP IfcQuantityArea ${expectedArea}`);
+      }
+      return `spaces=${areaLabels.length} "A101 Foyer"=${gotArea.toFixed(2)} m² (STEP #${spaceId} ${expectedArea.toFixed(4)} m²)`;
+    });
+  }
+
+  checkC15('c15-overall-dimensions-bbox', () => {
+    const walls = expectedBb.elements.walls;
+    const minX = Math.min(...walls.map((w) => w.bbox.x_min.value));
+    const maxX = Math.max(...walls.map((w) => w.bbox.x_max.value));
+    const minY = Math.min(...walls.map((w) => w.bbox.y_min.value));
+    const maxY = Math.max(...walls.map((w) => w.bbox.y_max.value));
+    const wantW = `${(maxX - minX).toFixed(2)} m`;
+    const wantH = `${(maxY - minY).toFixed(2)} m`;
+
+    const svgTexts = extractSvgTexts(bbL1.svg);
+    if (!bbL1.svg.includes('<line ')) throw new Error('SVG missing <line> elements for dimensions');
+    if (!svgTexts.includes(wantW) || !svgTexts.includes(wantH)) {
+      throw new Error(`SVG missing expected dimensions ${wantW} / ${wantH}, got ${JSON.stringify(svgTexts)}`);
+    }
+    const dxfDims = extractDxfDimensionTexts(bbL1.dxfBytes);
+    if (dxfDims.length !== 2) {
+      throw new Error(`expected 2 DXF DIMENSION entities, got ${dxfDims.length}`);
+    }
+    const dimTexts = dxfDims.map((d) => d.text);
+    if (!dimTexts.includes(wantW) || !dimTexts.includes(wantH)) {
+      throw new Error(`DXF DIMENSION texts ${JSON.stringify(dimTexts)} do not match ${wantW}, ${wantH}`);
+    }
+    const dxfLatin1 = new TextDecoder('latin1').decode(bbL1.dxfBytes);
+    if (!dxfLatin1.includes('*D0\r\n') || !dxfLatin1.includes('*D1\r\n')) {
+      throw new Error('DXF missing *D0 / *D1 dimension blocks');
+    }
+    return `SVG & DXF DIMENSION = ${wantW} x ${wantH} (blocks ${dxfDims.map((d) => d.block).join(', ')})`;
+  });
+
+  checkC15('c15-pdf-vector-a4-and-a3', () => {
+    const results = [];
+    for (const [paper, scale] of [
+      ['A4', 100],
+      ['A3', 50]
+    ]) {
+      const pdfBytes = svgToPdf(bbL1.svg, {
+        scale,
+        paper,
+        title: 'building-booleans-plan',
+        footerLabel: `Escala 1:${scale} · ${paper} horizontal`
+      });
+      const parsed = inspectPdf(pdfBytes);
+      if (!parsed.hasPdfHeader) throw new Error(`${paper}: missing %PDF- header (${parsed.header})`);
+      if (!parsed.hasXref || !parsed.xrefValid) throw new Error(`${paper}: invalid or missing xref table`);
+      if (!parsed.hasEof) throw new Error(`${paper}: missing %%EOF`);
+      if (!parsed.mediaBox) throw new Error(`${paper}: missing /MediaBox`);
+      const want = paperSizePt(paper);
+      if (
+        Math.abs(parsed.mediaBox[2] - want.widthPt) > 0.05 ||
+        Math.abs(parsed.mediaBox[3] - want.heightPt) > 0.05
+      ) {
+        throw new Error(
+          `${paper}: MediaBox ${parsed.mediaBox.join(' ')} does not match ${want.widthPt.toFixed(2)}x${want.heightPt.toFixed(2)} pt`
+        );
+      }
+      if (!parsed.contentStream.includes('(guBIM space 1) Tj')) {
+        throw new Error(`${paper}: missing space label in PDF stream`);
+      }
+      if (!parsed.contentStream.includes('(10.00 m) Tj') || !parsed.contentStream.includes('(8.00 m) Tj')) {
+        throw new Error(`${paper}: missing overall dimensions in PDF stream`);
+      }
+      results.push(`${paper} 1:${scale} (${parsed.mediaBox[2].toFixed(1)}x${parsed.mediaBox[3].toFixed(1)} pt, ${pdfBytes.length} B)`);
+    }
+    return results.join('; ');
+  });
+}
+
+for (const { model } of modelCache.values()) {
   model.free();
 }
 
@@ -758,11 +1007,12 @@ if (reportEntries.length > 0) {
   console.log(`HTML report written to ${htmlPath}`);
 }
 
+const totalChecks = CASES.length + c15Checks;
 console.log(
   failures === 0
     ? update
       ? `updated all ${CASES.length} drawing references`
-      : `all ${CASES.length} drawing cases pass`
-    : `${failures} of ${CASES.length} drawing cases failed`
+      : `all ${CASES.length} drawing cases + ${c15Checks} C15 checks (${totalChecks} total) pass`
+    : `${failures} of ${totalChecks} drawing checks failed`
 );
 process.exit(failures === 0 ? 0 : 1);
