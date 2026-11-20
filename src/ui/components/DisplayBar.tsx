@@ -123,22 +123,6 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
         </button>
       </div>
 
-      {onToggleMinimap && (
-        <div className="display-bar-row">
-          <button
-            type="button"
-            className={`btn btn-ghost minimap-toggle-btn ${showMinimap ? 'active' : ''}`}
-            aria-pressed={showMinimap}
-            onClick={onToggleMinimap}
-            title="Minimapa de planta con la posición y la mirada de la cámara"
-            style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '3px 6px' }}
-          >
-            <MapIcon size={13} />
-            <span>Minimapa</span>
-          </button>
-        </div>
-      )}
-
       {onExportGlb && (
         <div className="display-bar-row">
           <span className="display-bar-label">
@@ -146,6 +130,18 @@ export const DisplayBar: React.FC<DisplayBarProps> = ({
               ? `GLB (${glbProgress.completed}/${glbProgress.total})`
               : 'Escena 3D'}
           </span>
+          {/* In this row, not a row of its own: the panel floats over the model, so it stays short. */}
+          {onToggleMinimap && (
+            <button
+              type="button"
+              className={`btn btn-ghost btn-icon minimap-toggle-btn ${showMinimap ? 'active' : ''}`}
+              aria-pressed={showMinimap}
+              onClick={onToggleMinimap}
+              title="Minimapa de planta con la posición y la mirada de la cámara"
+            >
+              <MapIcon size={14} />
+            </button>
+          )}
           {isExportingGlb && onCancelGlb ? (
             <button
               type="button"
