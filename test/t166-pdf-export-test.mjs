@@ -5,9 +5,13 @@
 // Usage: node --experimental-strip-types test/t166-pdf-export-test.mjs
 import assert from 'node:assert/strict';
 import {
+  checkPdfScaleFit,
   inspectPdf,
   PAPER_DIMENSIONS_MM,
   paperSizePt,
+  PDF_FOOTER_MM,
+  PDF_MARGIN_MM,
+  printableAreaMm,
   PT_PER_MM,
   svgToPdf
 } from '../src/ui/viewer/svgToPdf.ts';
@@ -102,6 +106,43 @@ check('WinAnsiEncoding encodes m² and Spanish accents and escapes parentheses c
   // ² = 0xB2 = octal \262
   assert.ok(contentStream.includes('(69.56 m\\262) Tj'), `missing WinAnsi m²:\n${contentStream}`);
   assert.ok(contentStream.includes('(10.00 m) Tj'), 'missing dimension text');
+});
+
+check('checkPdfScaleFit detects paper overflow on A4 and A3 across 1:50, 1:100 and 1:200', () => {
+  const a4Frame = printableAreaMm('A4');
+  const a3Frame = printableAreaMm('A3');
+  assert.equal(a4Frame.widthMm, 297 - 2 * PDF_MARGIN_MM);
+  assert.equal(a4Frame.heightMm, 210 - 2 * PDF_MARGIN_MM - PDF_FOOTER_MM);
+  assert.equal(a3Frame.widthMm, 420 - 2 * PDF_MARGIN_MM);
+  assert.equal(a3Frame.heightMm, 297 - 2 * PDF_MARGIN_MM - PDF_FOOTER_MM);
+
+  // 10.4 x 8.4 m -> at 1:50 is 208 x 168 mm: fits A4 (277 x 182 mm) and A3 (400 x 269 mm)
+  const small50 = checkPdfScaleFit(SAMPLE_SVG, 50, 'A4');
+  assert.equal(small50.fits, true);
+  assert.ok(Math.abs(small50.drawingWidthMm - 208) < 1e-6);
+  assert.ok(Math.abs(small50.drawingHeightMm - 168) < 1e-6);
+
+  // 20 x 15 m plan -> at 1:50 is 400 x 300 mm (overflows both A4 and A3 height 269 mm);
+  // at 1:100 is 200 x 150 mm (fits A4 and A3).
+  const mediumSvg = '<svg viewBox="0 0 20 15"></svg>';
+  assert.equal(checkPdfScaleFit(mediumSvg, 50, 'A4').fits, false);
+  assert.equal(checkPdfScaleFit(mediumSvg, 50, 'A3').fits, false);
+  assert.equal(checkPdfScaleFit(mediumSvg, 100, 'A4').fits, true);
+  assert.equal(checkPdfScaleFit(mediumSvg, 100, 'A3').fits, true);
+
+  // 35 x 20 m plan -> at 1:100 is 350 x 200 mm (overflows A4 277x182, fits A3 400x269);
+  // at 1:200 is 175 x 100 mm (fits A4).
+  const largeSvg = '<svg viewBox="0 0 35 20"></svg>';
+  assert.equal(checkPdfScaleFit(largeSvg, 50, 'A3').fits, false);
+  assert.equal(checkPdfScaleFit(largeSvg, 100, 'A4').fits, false);
+  assert.equal(checkPdfScaleFit(largeSvg, 100, 'A3').fits, true);
+  assert.equal(checkPdfScaleFit(largeSvg, 200, 'A4').fits, true);
+
+  // Exact printable boundary fits; +0.1 mm overflows.
+  const exactA4 = `<svg viewBox="0 0 ${(a4Frame.widthMm / 10).toFixed(4)} ${(a4Frame.heightMm / 10).toFixed(4)}"></svg>`;
+  const overA4 = `<svg viewBox="0 0 ${((a4Frame.widthMm + 0.1) / 10).toFixed(4)} ${(a4Frame.heightMm / 10).toFixed(4)}"></svg>`;
+  assert.equal(checkPdfScaleFit(exactA4, 100, 'A4').fits, true);
+  assert.equal(checkPdfScaleFit(overA4, 100, 'A4').fits, false);
 });
 
 console.log(`\nt166-pdf-export-test: ${passed}/${passed} pass`);
