@@ -3,6 +3,11 @@ node_modules/
 .pnp
 .pnp.js
 
+# Rust
+target/
+src-tauri/gen/
+src/infrastructure/kernel/pkg/
+
 # Production build
 dist/
 build/
@@ -48,3 +53,6 @@ playwright-report/
 .eslintcache
 .cache/
 scratch/
+
+# Downloaded IFC models for tests and the benchmark: never committed (scripts/fetch-models.mjs)
+test/models/

@@ -1,0 +1,10 @@
+[package]
+name = "step-parser"
+description = "Streaming ISO 10303-21 (STEP) lexer and expressId index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

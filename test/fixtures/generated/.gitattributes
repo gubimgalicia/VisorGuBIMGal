@@ -1,0 +1,5 @@
+# Generated fixtures: keep the LF line endings the generators write so a
+# rerun reproduces the committed .ifc byte for byte on any platform.
+*.ifc text eol=lf
+*.json text eol=lf
+*.mjs text eol=lf

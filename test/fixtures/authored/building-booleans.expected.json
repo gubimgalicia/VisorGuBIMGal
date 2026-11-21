@@ -1,0 +1,2346 @@
+{
+  "file": "building-booleans.ifc",
+  "schema": "IFC4X3_ADD2",
+  "authoring": {
+    "tool": "Blender 5.0 with IfcOpenShell 0.8.4",
+    "author": "guBIM",
+    "licence": "MIT OR Apache-2.0"
+  },
+  "units": {
+    "length": "m",
+    "area": "m2",
+    "volume": "m3",
+    "angle": "rad",
+    "count": "1"
+  },
+  "tolerance_note": "Every numeric quantity carries its own tolerance. Lengths and coordinates are in metres in the IFC project coordinate system (no georeferencing). Closed-form box volumes are exact to 1e-9 m3; the 1e-3 m3 tolerance on net wall volumes and space volumes allows for 32-bit float vertex positions in the viewer. Bounding boxes are exact to 1e-6 m.",
+  "computation": {
+    "walls": "Each wall is an IfcExtrudedAreaSolid of an IfcRectangleProfileDef, so its gross volume is dx x dy x dz. Net volume subtracts width x height x 0.30 m for every IfcOpeningElement that voids the wall; openings pass through the full wall thickness.",
+    "slabs": "Ground and intermediate slabs are 10 x 8 x 0.20 m boxes. The roof is the same box with an IfcBooleanClippingResult against an IfcHalfSpaceSolid whose plane runs from (9, z=6.40) to (10, z=6.20): the removed wedge is 0.5 x 1.00 x 0.20 x 8.00 = 0.80 m3, leaving 15.20 m3.",
+    "mapped_items": "One IfcRepresentationMap holds the 0.40 x 0.40 x 1.20 m box; five IfcMappedItem entities reference it from five IfcBuildingElementProxy elements. All instances use an identity mapping target, so each instance volume is the source box volume.",
+    "spaces": "Each IfcSpace is the 9.40 x 7.40 x 3.00 m clear volume inside the 0.30 m walls, one per storey.",
+    "colours": "Five IfcMaterial entities carry an IfcMaterialDefinitionRepresentation with an IfcSurfaceStyle; the same style is also assigned directly to each shape representation so that both material-based and item-based colour readers see it.",
+    "counts": "Counts of the entities authored below."
+  },
+  "counts": {
+    "IfcProject": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcSite": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcBuilding": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "two storeys"
+    },
+    "IfcBuildingStorey": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "elevations 0.0 and 3.2 m"
+    },
+    "IfcSpace": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one per storey"
+    },
+    "IfcWall": {
+      "value": 8,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "four per storey"
+    },
+    "IfcSlab": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "ground, intermediate and roof"
+    },
+    "IfcOpeningElement": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one door and four windows"
+    },
+    "IfcDoor": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "fills the door opening"
+    },
+    "IfcWindow": {
+      "value": 4,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "fills the four window openings"
+    },
+    "IfcBuildingElementProxy": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "five instances of one map"
+    },
+    "IfcMappedItem": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "all sharing one representation map"
+    },
+    "IfcRepresentationMap": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the bollard source representation"
+    },
+    "IfcBooleanClippingResult": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the roof"
+    },
+    "IfcHalfSpaceSolid": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the roof clipping plane"
+    },
+    "IfcRelVoidsElement": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "wall to opening"
+    },
+    "IfcRelFillsElement": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "opening to door/window"
+    },
+    "IfcMaterial": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "brick, concrete, wood, glass, steel"
+    },
+    "IfcSurfaceStyle": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one colour per material"
+    },
+    "IfcRelContainedInSpatialStructure": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one per storey"
+    },
+    "IfcRelAggregates": {
+      "value": 5,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "project-site, site-building, building-storeys and storey-space"
+    }
+  },
+  "levels": [
+    {
+      "name": "guBIM level 1",
+      "elevation": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcBuildingStorey.Elevation"
+      }
+    },
+    {
+      "name": "guBIM level 2",
+      "elevation": {
+        "value": 3.2,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcBuildingStorey.Elevation"
+      }
+    }
+  ],
+  "elements": {
+    "walls": [
+      {
+        "name": "guBIM south wall L1",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 9.0,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [
+          {
+            "name": "guBIM door opening L1",
+            "x0": {
+              "value": 2.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "x1": {
+              "value": 3.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "x0 + width"
+            },
+            "z0": {
+              "value": 0.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "z1": {
+              "value": 2.1,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "z0 + height"
+            },
+            "width": {
+              "value": 1.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "height": {
+              "value": 2.1,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "volume": {
+              "value": 0.63,
+              "unit": "m3",
+              "tolerance": 1e-09,
+              "note": "width x height x 0.30 m wall thickness; the opening passes through the whole wall"
+            }
+          },
+          {
+            "name": "guBIM window opening S1",
+            "x0": {
+              "value": 5.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "x1": {
+              "value": 6.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "x0 + width"
+            },
+            "z0": {
+              "value": 1.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "z1": {
+              "value": 2.3,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "z0 + height"
+            },
+            "width": {
+              "value": 1.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "height": {
+              "value": 1.3,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "volume": {
+              "value": 0.624,
+              "unit": "m3",
+              "tolerance": 1e-09,
+              "note": "width x height x 0.30 m wall thickness; the opening passes through the whole wall"
+            }
+          }
+        ],
+        "net_volume": {
+          "value": 7.746,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM north wall L1",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 9.0,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [
+          {
+            "name": "guBIM window opening N1",
+            "x0": {
+              "value": 3.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "x1": {
+              "value": 4.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "x0 + width"
+            },
+            "z0": {
+              "value": 1.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "z1": {
+              "value": 2.3,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "z0 + height"
+            },
+            "width": {
+              "value": 1.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "height": {
+              "value": 1.3,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "volume": {
+              "value": 0.624,
+              "unit": "m3",
+              "tolerance": 1e-09,
+              "note": "width x height x 0.30 m wall thickness; the opening passes through the whole wall"
+            }
+          }
+        ],
+        "net_volume": {
+          "value": 8.376,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 8.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM west wall L1",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [],
+        "net_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM east wall L1",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [],
+        "net_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 9.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM south wall L2",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 9.0,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [
+          {
+            "name": "guBIM window opening S2",
+            "x0": {
+              "value": 2.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "x1": {
+              "value": 3.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "x0 + width"
+            },
+            "z0": {
+              "value": 4.2,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "z1": {
+              "value": 5.5,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "z0 + height"
+            },
+            "width": {
+              "value": 1.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "height": {
+              "value": 1.3,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "volume": {
+              "value": 0.624,
+              "unit": "m3",
+              "tolerance": 1e-09,
+              "note": "width x height x 0.30 m wall thickness; the opening passes through the whole wall"
+            }
+          }
+        ],
+        "net_volume": {
+          "value": 8.376,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 3.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 6.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM north wall L2",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 9.0,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [
+          {
+            "name": "guBIM window opening N2",
+            "x0": {
+              "value": 5.0,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "x1": {
+              "value": 6.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "x0 + width"
+            },
+            "z0": {
+              "value": 4.2,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "z1": {
+              "value": 5.5,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "z0 + height"
+            },
+            "width": {
+              "value": 1.6,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "height": {
+              "value": 1.3,
+              "unit": "m",
+              "tolerance": 1e-09,
+              "note": "design parameter"
+            },
+            "volume": {
+              "value": 0.624,
+              "unit": "m3",
+              "tolerance": 1e-09,
+              "note": "width x height x 0.30 m wall thickness; the opening passes through the whole wall"
+            }
+          }
+        ],
+        "net_volume": {
+          "value": 8.376,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 8.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 3.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 6.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM west wall L2",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [],
+        "net_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 3.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 6.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      },
+      {
+        "name": "guBIM east wall L2",
+        "ifc_class": "IfcWall",
+        "gross_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "dx x dy x dz box"
+        },
+        "openings": [],
+        "net_volume": {
+          "value": 6.66,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "gross volume minus the volumes of all openings in this wall, computed in closed form; the 1e-3 m3 tolerance allows for 32-bit float vertices"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 9.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "y_max": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_min": {
+            "value": 3.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          },
+          "z_max": {
+            "value": 6.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "axis-aligned box from the design parameters"
+          }
+        }
+      }
+    ],
+    "slabs": [
+      {
+        "name": "guBIM ground slab",
+        "ifc_class": "IfcSlab",
+        "volume": {
+          "value": 16.0,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "dx x dy x dz box"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "y_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "y_max": {
+            "value": 8.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "z_min": {
+            "value": -0.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "z_max": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          }
+        }
+      },
+      {
+        "name": "guBIM intermediate slab",
+        "ifc_class": "IfcSlab",
+        "volume": {
+          "value": 16.0,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "dx x dy x dz box"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "y_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "y_max": {
+            "value": 8.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "z_min": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "z_max": {
+            "value": 3.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          }
+        }
+      },
+      {
+        "name": "guBIM roof slab",
+        "ifc_class": "IfcSlab",
+        "volume": {
+          "value": 15.2,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "10 x 8 x 0.20 = 16.00 m3 minus the upper wedge cut by the clipping plane: 0.5 x 1.00 m x 0.20 m x 8.00 m = 0.80 m3, so 15.20 m3"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "x_max": {
+            "value": 10.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "y_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "y_max": {
+            "value": 8.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "z_min": {
+            "value": 6.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          },
+          "z_max": {
+            "value": 6.4,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "the clipping plane passes through the top edge at x=9 and the bottom edge at x=10, so the axis-aligned bounding box is unchanged"
+          }
+        }
+      }
+    ],
+    "openings": [
+      {
+        "name": "guBIM door opening L1",
+        "ifc_class": "IfcOpeningElement",
+        "voids": "guBIM south wall L1",
+        "filling": "guBIM door 1",
+        "filling_class": "IfcDoor",
+        "x0": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "x1": {
+          "value": 3.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "x0 + width"
+        },
+        "y0": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "outer wall face"
+        },
+        "y1": {
+          "value": 0.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "inner wall face"
+        },
+        "z0": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "z1": {
+          "value": 2.1,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "z0 + height"
+        },
+        "volume": {
+          "value": 0.63,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "width x 0.30 m thickness x height"
+        }
+      },
+      {
+        "name": "guBIM window opening S1",
+        "ifc_class": "IfcOpeningElement",
+        "voids": "guBIM south wall L1",
+        "filling": "guBIM window 1",
+        "filling_class": "IfcWindow",
+        "x0": {
+          "value": 5.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "x1": {
+          "value": 6.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "x0 + width"
+        },
+        "y0": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "outer wall face"
+        },
+        "y1": {
+          "value": 0.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "inner wall face"
+        },
+        "z0": {
+          "value": 1.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "z1": {
+          "value": 2.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "z0 + height"
+        },
+        "volume": {
+          "value": 0.624,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "width x 0.30 m thickness x height"
+        }
+      },
+      {
+        "name": "guBIM window opening N1",
+        "ifc_class": "IfcOpeningElement",
+        "voids": "guBIM north wall L1",
+        "filling": "guBIM window 2",
+        "filling_class": "IfcWindow",
+        "x0": {
+          "value": 3.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "x1": {
+          "value": 4.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "x0 + width"
+        },
+        "y0": {
+          "value": 7.7,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "outer wall face"
+        },
+        "y1": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "inner wall face"
+        },
+        "z0": {
+          "value": 1.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "z1": {
+          "value": 2.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "z0 + height"
+        },
+        "volume": {
+          "value": 0.624,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "width x 0.30 m thickness x height"
+        }
+      },
+      {
+        "name": "guBIM window opening S2",
+        "ifc_class": "IfcOpeningElement",
+        "voids": "guBIM south wall L2",
+        "filling": "guBIM window 3",
+        "filling_class": "IfcWindow",
+        "x0": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "x1": {
+          "value": 3.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "x0 + width"
+        },
+        "y0": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "outer wall face"
+        },
+        "y1": {
+          "value": 0.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "inner wall face"
+        },
+        "z0": {
+          "value": 4.2,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "z1": {
+          "value": 5.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "z0 + height"
+        },
+        "volume": {
+          "value": 0.624,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "width x 0.30 m thickness x height"
+        }
+      },
+      {
+        "name": "guBIM window opening N2",
+        "ifc_class": "IfcOpeningElement",
+        "voids": "guBIM north wall L2",
+        "filling": "guBIM window 4",
+        "filling_class": "IfcWindow",
+        "x0": {
+          "value": 5.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "x1": {
+          "value": 6.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "x0 + width"
+        },
+        "y0": {
+          "value": 7.7,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "outer wall face"
+        },
+        "y1": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "inner wall face"
+        },
+        "z0": {
+          "value": 4.2,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "z1": {
+          "value": 5.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "z0 + height"
+        },
+        "volume": {
+          "value": 0.624,
+          "unit": "m3",
+          "tolerance": 1e-09,
+          "note": "width x 0.30 m thickness x height"
+        }
+      }
+    ],
+    "fillings": [
+      {
+        "name": "guBIM door 1",
+        "ifc_class": "IfcDoor",
+        "fills": "guBIM door opening L1",
+        "width": {
+          "value": 1.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 2.1,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.06,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0.06 m panel centred in the wall"
+        },
+        "volume": {
+          "value": 0.126,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "width x 0.06 m panel thickness x height"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 2.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "x_max": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_min": {
+            "value": 0.12,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_max": {
+            "value": 0.18,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_max": {
+            "value": 2.1,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          }
+        }
+      },
+      {
+        "name": "guBIM window 1",
+        "ifc_class": "IfcWindow",
+        "fills": "guBIM window opening S1",
+        "width": {
+          "value": 1.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 1.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.06,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0.06 m panel centred in the wall"
+        },
+        "volume": {
+          "value": 0.12480000000000001,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "width x 0.06 m panel thickness x height"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 5.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "x_max": {
+            "value": 6.6,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_min": {
+            "value": 0.12,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_max": {
+            "value": 0.18,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_min": {
+            "value": 1.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_max": {
+            "value": 2.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          }
+        }
+      },
+      {
+        "name": "guBIM window 2",
+        "ifc_class": "IfcWindow",
+        "fills": "guBIM window opening N1",
+        "width": {
+          "value": 1.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 1.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.06,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0.06 m panel centred in the wall"
+        },
+        "volume": {
+          "value": 0.12480000000000001,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "width x 0.06 m panel thickness x height"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "x_max": {
+            "value": 4.6,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_min": {
+            "value": 7.82,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_max": {
+            "value": 7.880000000000001,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_min": {
+            "value": 1.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_max": {
+            "value": 2.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          }
+        }
+      },
+      {
+        "name": "guBIM window 3",
+        "ifc_class": "IfcWindow",
+        "fills": "guBIM window opening S2",
+        "width": {
+          "value": 1.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 1.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.06,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0.06 m panel centred in the wall"
+        },
+        "volume": {
+          "value": 0.12480000000000001,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "width x 0.06 m panel thickness x height"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 2.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "x_max": {
+            "value": 3.6,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_min": {
+            "value": 0.12,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_max": {
+            "value": 0.18,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_min": {
+            "value": 4.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_max": {
+            "value": 5.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          }
+        }
+      },
+      {
+        "name": "guBIM window 4",
+        "ifc_class": "IfcWindow",
+        "fills": "guBIM window opening N2",
+        "width": {
+          "value": 1.6,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 1.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.06,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0.06 m panel centred in the wall"
+        },
+        "volume": {
+          "value": 0.12480000000000001,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "width x 0.06 m panel thickness x height"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 5.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "x_max": {
+            "value": 6.6,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_min": {
+            "value": 7.82,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "y_max": {
+            "value": 7.880000000000001,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_min": {
+            "value": 4.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          },
+          "z_max": {
+            "value": 5.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "panel centred in the 0.30 m wall"
+          }
+        }
+      }
+    ],
+    "proxies": [
+      {
+        "name": "guBIM bollard 1",
+        "ifc_class": "IfcBuildingElementProxy",
+        "instance_of": "standalone bollard representation map",
+        "position": {
+          "x": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "y": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "z": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          }
+        },
+        "size": {
+          "width": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "depth": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "height": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          }
+        },
+        "volume": {
+          "value": 0.19200000000000003,
+          "unit": "m3",
+          "tolerance": 1e-06,
+          "note": "0.40 x 0.40 x 1.20 box, identical for all five instances of the same representation map"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "x_max": {
+            "value": 1.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_min": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_max": {
+            "value": 1.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_max": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          }
+        }
+      },
+      {
+        "name": "guBIM bollard 2",
+        "ifc_class": "IfcBuildingElementProxy",
+        "instance_of": "standalone bollard representation map",
+        "position": {
+          "x": {
+            "value": 3.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "y": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "z": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          }
+        },
+        "size": {
+          "width": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "depth": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "height": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          }
+        },
+        "volume": {
+          "value": 0.19200000000000003,
+          "unit": "m3",
+          "tolerance": 1e-06,
+          "note": "0.40 x 0.40 x 1.20 box, identical for all five instances of the same representation map"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 3.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "x_max": {
+            "value": 3.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_min": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_max": {
+            "value": 1.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_max": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          }
+        }
+      },
+      {
+        "name": "guBIM bollard 3",
+        "ifc_class": "IfcBuildingElementProxy",
+        "instance_of": "standalone bollard representation map",
+        "position": {
+          "x": {
+            "value": 5.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "y": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "z": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          }
+        },
+        "size": {
+          "width": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "depth": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "height": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          }
+        },
+        "volume": {
+          "value": 0.19200000000000003,
+          "unit": "m3",
+          "tolerance": 1e-06,
+          "note": "0.40 x 0.40 x 1.20 box, identical for all five instances of the same representation map"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 5.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "x_max": {
+            "value": 5.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_min": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_max": {
+            "value": 1.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_max": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          }
+        }
+      },
+      {
+        "name": "guBIM bollard 4",
+        "ifc_class": "IfcBuildingElementProxy",
+        "instance_of": "standalone bollard representation map",
+        "position": {
+          "x": {
+            "value": 7.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "y": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "z": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          }
+        },
+        "size": {
+          "width": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "depth": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "height": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          }
+        },
+        "volume": {
+          "value": 0.19200000000000003,
+          "unit": "m3",
+          "tolerance": 1e-06,
+          "note": "0.40 x 0.40 x 1.20 box, identical for all five instances of the same representation map"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 7.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "x_max": {
+            "value": 7.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_min": {
+            "value": 1.5,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_max": {
+            "value": 1.9,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_max": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          }
+        }
+      },
+      {
+        "name": "guBIM bollard 5",
+        "ifc_class": "IfcBuildingElementProxy",
+        "instance_of": "standalone bollard representation map",
+        "position": {
+          "x": {
+            "value": 5.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "y": {
+            "value": 6.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          },
+          "z": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "object placement origin"
+          }
+        },
+        "size": {
+          "width": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "depth": {
+            "value": 0.4,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          },
+          "height": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-09,
+            "note": "mapped representation"
+          }
+        },
+        "volume": {
+          "value": 0.19200000000000003,
+          "unit": "m3",
+          "tolerance": 1e-06,
+          "note": "0.40 x 0.40 x 1.20 box, identical for all five instances of the same representation map"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 5.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "x_max": {
+            "value": 5.4,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_min": {
+            "value": 6.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "y_max": {
+            "value": 6.4,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          },
+          "z_max": {
+            "value": 1.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "instance placement plus the mapped source box"
+          }
+        }
+      }
+    ],
+    "spaces": [
+      {
+        "name": "guBIM space 1",
+        "ifc_class": "IfcSpace",
+        "storey": "guBIM level 1",
+        "area": {
+          "value": 69.56,
+          "unit": "m2",
+          "tolerance": 1e-06,
+          "note": "9.40 x 7.40 m clear internal rectangle"
+        },
+        "volume": {
+          "value": 208.68,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "9.40 x 7.40 x 3.00 m clear internal box"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "x_max": {
+            "value": 9.700000000000001,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "y_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "y_max": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "z_max": {
+            "value": 3.0,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          }
+        }
+      },
+      {
+        "name": "guBIM space 2",
+        "ifc_class": "IfcSpace",
+        "storey": "guBIM level 2",
+        "area": {
+          "value": 69.56,
+          "unit": "m2",
+          "tolerance": 1e-06,
+          "note": "9.40 x 7.40 m clear internal rectangle"
+        },
+        "volume": {
+          "value": 208.68,
+          "unit": "m3",
+          "tolerance": 0.001,
+          "note": "9.40 x 7.40 x 3.00 m clear internal box"
+        },
+        "bbox": {
+          "x_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "x_max": {
+            "value": 9.700000000000001,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "y_min": {
+            "value": 0.3,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "y_max": {
+            "value": 7.7,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "z_min": {
+            "value": 3.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          },
+          "z_max": {
+            "value": 6.2,
+            "unit": "m",
+            "tolerance": 1e-06,
+            "note": "clear internal box between the wall faces"
+          }
+        }
+      }
+    ]
+  },
+  "materials": [
+    {
+      "name": "guBIM brick",
+      "category": "brick",
+      "r": {
+        "value": 0.72,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Red"
+      },
+      "g": {
+        "value": 0.29,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Green"
+      },
+      "b": {
+        "value": 0.2,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Blue"
+      },
+      "transparency": {
+        "value": 0.0,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcSurfaceStyleShading Transparency"
+      },
+      "assigned_to": [
+        "guBIM south wall L1",
+        "guBIM north wall L1",
+        "guBIM west wall L1",
+        "guBIM east wall L1",
+        "guBIM south wall L2",
+        "guBIM north wall L2",
+        "guBIM west wall L2",
+        "guBIM east wall L2"
+      ]
+    },
+    {
+      "name": "guBIM concrete",
+      "category": "concrete",
+      "r": {
+        "value": 0.75,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Red"
+      },
+      "g": {
+        "value": 0.75,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Green"
+      },
+      "b": {
+        "value": 0.73,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Blue"
+      },
+      "transparency": {
+        "value": 0.0,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcSurfaceStyleShading Transparency"
+      },
+      "assigned_to": [
+        "guBIM ground slab",
+        "guBIM intermediate slab",
+        "guBIM roof slab"
+      ]
+    },
+    {
+      "name": "guBIM wood",
+      "category": "wood",
+      "r": {
+        "value": 0.55,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Red"
+      },
+      "g": {
+        "value": 0.36,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Green"
+      },
+      "b": {
+        "value": 0.18,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Blue"
+      },
+      "transparency": {
+        "value": 0.0,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcSurfaceStyleShading Transparency"
+      },
+      "assigned_to": [
+        "guBIM door 1"
+      ]
+    },
+    {
+      "name": "guBIM glass",
+      "category": "glass",
+      "r": {
+        "value": 0.45,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Red"
+      },
+      "g": {
+        "value": 0.72,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Green"
+      },
+      "b": {
+        "value": 0.85,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Blue"
+      },
+      "transparency": {
+        "value": 0.25,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcSurfaceStyleShading Transparency"
+      },
+      "assigned_to": [
+        "guBIM window 1",
+        "guBIM window 2",
+        "guBIM window 3",
+        "guBIM window 4"
+      ]
+    },
+    {
+      "name": "guBIM steel",
+      "category": "steel",
+      "r": {
+        "value": 0.35,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Red"
+      },
+      "g": {
+        "value": 0.38,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Green"
+      },
+      "b": {
+        "value": 0.4,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcColourRgb Blue"
+      },
+      "transparency": {
+        "value": 0.0,
+        "unit": "1",
+        "tolerance": 1e-09,
+        "note": "IfcSurfaceStyleShading Transparency"
+      },
+      "assigned_to": [
+        "guBIM bollard 1",
+        "guBIM bollard 2",
+        "guBIM bollard 3",
+        "guBIM bollard 4",
+        "guBIM bollard 5"
+      ]
+    }
+  ],
+  "totals": {
+    "wall_net_volume": {
+      "value": 59.514,
+      "unit": "m3",
+      "tolerance": 0.001,
+      "note": "sum of the eight net wall volumes"
+    },
+    "opening_volume": {
+      "value": 3.126,
+      "unit": "m3",
+      "tolerance": 1e-09,
+      "note": "sum of the five opening volumes"
+    },
+    "slab_volume": {
+      "value": 47.2,
+      "unit": "m3",
+      "tolerance": 0.001,
+      "note": "16 + 16 + 15.20 m3"
+    },
+    "filling_volume": {
+      "value": 0.6252,
+      "unit": "m3",
+      "tolerance": 0.0001,
+      "note": "sum of the door and four window panels"
+    },
+    "proxy_volume": {
+      "value": 0.96,
+      "unit": "m3",
+      "tolerance": 1e-06,
+      "note": "five identical 0.192 m3 boxes"
+    },
+    "element_volume": {
+      "value": 108.2992,
+      "unit": "m3",
+      "tolerance": 0.001,
+      "note": "net walls + slabs + door/window panels + five proxies; IfcSpace volumes are not counted"
+    }
+  }
+}

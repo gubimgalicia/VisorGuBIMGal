@@ -44,6 +44,8 @@ kernel-bim/
 
 ## 4. Contrato de Intercambio de Memoria con WebGPU
 
+> **Sustituida por [`05_kernel_contract.md`](./05_kernel_contract.md) sección 6.** Las vistas directas sobre la memoria WASM se invalidan cuando esta crece. Se conserva el esquema original como referencia.
+
 ```rust
 // Fachada expuesta a TypeScript para transferencia zero-copy
 #[wasm_bindgen]

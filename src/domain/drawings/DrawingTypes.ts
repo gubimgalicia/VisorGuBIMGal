@@ -1,19 +1,43 @@
-export type DrawingCutType = 'floorplan' | 'section-x' | 'section-z';
+// Metres in the drawing frame, IFC Z-up. Plans look towards -Z, and 'positive' looks along +axis.
+// For 'plane', `origin` is a point on the cut plane and `normal` is the look direction into the model.
+// `depth` is measured from the plane along the look direction and limits projection only; omit for no limit.
+export type DrawingCut =
+  | { kind: 'plan'; elevation: number; depth?: number }
+  | {
+      kind: 'section';
+      axis: 'x' | 'y';
+      position: number;
+      look: 'positive' | 'negative';
+      depth?: number;
+    }
+  | {
+      kind: 'plane';
+      origin: readonly [number, number, number];
+      normal: readonly [number, number, number];
+      depth?: number;
+    };
 
-export interface SectionCutOptions {
-  cutType: DrawingCutType;
-  position: number;       // Elevation for floor plan, X or Z position for section
-  includeHiddenLines: boolean;
-  includeProjection: boolean;
-  includeEdges: boolean;
-  mergeLines: boolean;
+// 'project': absolute model coordinates, taken as shared by every model, as the 3D view does.
+// 'map': each model through its localToMap. Models without one are skipped with a diagnostic.
+export type DrawingFrame = { kind: 'project' } | { kind: 'map' };
+
+export interface DrawingOptions {
+  cut: DrawingCut;
+  frame: DrawingFrame;
+  includeProjection: boolean;     // Visible and hidden lines, which come from one pass
+  includeHiddenLines: boolean;    // Requires includeProjection
+  includeHatching: boolean;
+  /** Plan cuts only: write each cut IfcSpace's name and area (m²) inside its outline. */
+  includeSpaceLabels?: boolean;
+  /** Overall bounding-box dimensions on two sides of the drawing. */
+  includeDimensions?: boolean;
 }
 
 export interface DrawingExportConfig {
   format: 'dxf' | 'svg';
   fileName: string;
   crsComment?: string;
-  units: 'm' | 'mm';
-  showHiddenLines: boolean;
+  units: 'm' | 'mm';              // Scales the exported coordinates
+  showHiddenLines: boolean;       // Export can omit what was generated, never add to it
   showHatching: boolean;
 }

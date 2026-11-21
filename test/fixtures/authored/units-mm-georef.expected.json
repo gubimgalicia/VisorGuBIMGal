@@ -1,0 +1,778 @@
+{
+  "file": "units-mm-georef.ifc",
+  "schema": "IFC4X3_ADD2",
+  "authoring": {
+    "tool": "Blender 5.0 with IfcOpenShell 0.8.4",
+    "author": "guBIM",
+    "licence": "MIT OR Apache-2.0"
+  },
+  "units": {
+    "length": "m",
+    "area": "m2",
+    "volume": "m3",
+    "angle": "rad",
+    "count": "1",
+    "ifc_project_length_unit": "mm (IfcSIUnit LENGTHUNIT, Prefix MILLI, Name METRE)",
+    "note": "The IFC file stores lengths in millimetres.  Every length, coordinate, bounding box and volume in this file is reported in metres, i.e. the IFC length value divided by 1000."
+  },
+  "tolerance_note": "Every numeric quantity carries its own tolerance. Expected values are in metres after the IFC millimetre-to-metre conversion.  Volumes and bounding boxes are closed-form products of the design dimensions, exact to 1e-9; the 1e-6 m tolerances allow for viewer float precision.  World coordinates apply IfcMapConversion with Scale = 0.001 and no rotation.",
+  "georeference": {
+    "projected_crs": "EPSG:25829",
+    "eastings": {
+      "value": 536500.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcMapConversion.Eastings"
+    },
+    "northings": {
+      "value": 4747500.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcMapConversion.Northings"
+    },
+    "orthogonal_height": {
+      "value": 260.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcMapConversion.OrthogonalHeight"
+    },
+    "x_axis_abscissa": {
+      "value": 1.0,
+      "unit": "1",
+      "tolerance": 1e-12,
+      "note": "map east is local +X (no rotation)"
+    },
+    "x_axis_ordinate": {
+      "value": 0.0,
+      "unit": "1",
+      "tolerance": 1e-12,
+      "note": "map north is local +Y (no rotation)"
+    },
+    "scale": {
+      "value": 0.001,
+      "unit": "1",
+      "tolerance": 1e-12,
+      "note": "IfcMapConversion.Scale: local millimetres to CRS metres"
+    },
+    "note": "map_easting = 536500 + 0.001 * local_x_mm = 536500 + local_x_m; map_northing = 4747500 + local_y_m; map_height = 260 + local_z_m."
+  },
+  "computation": {
+    "units": "All six boxes were designed in millimetres.  Dividing each IFC length by 1000 gives metres; no other unit conversion is needed because area and volume units are square and cubic metres.",
+    "volumes": "Each element is an IfcExtrudedAreaSolid of an IfcRectangleProfileDef, so its volume is exactly x * y * z of the design box.  The four walls sit between the floor and roof slabs and do not overlap each other (west and east walls span only the clear 4.50 m between the south and north walls).",
+    "bbox": "Each box has an axis-aligned placement at its centre in plan and at its base in Z, and a rectangle profile centred on that placement.  The bounding box is therefore centre +/- half size in X and Y and base..base+height in Z.",
+    "georeference": "IfcMapConversion has no rotation, so each local (x, y, z) in millimetres maps to (536500 + 0.001*x, 4747500 + 0.001*y, 260 + 0.001*z) in metres.  This is the same factor as the millimetre-to-metre unit conversion, on purpose: the fixture checks that Scale is applied to the local coordinates before translation.",
+    "extent": "The roof overhangs the walls by 0.20 m on all four sides, so the model extent is x = -0.20..8.20 m, y = -0.20..5.20 m, z = 0.00..3.40 m."
+  },
+  "counts": {
+    "IfcProject": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcSite": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcBuilding": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcBuildingStorey": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "single storey"
+    },
+    "IfcWall": {
+      "value": 4,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "four perimeter walls"
+    },
+    "IfcSlab": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "floor and roof"
+    },
+    "IfcExtrudedAreaSolid": {
+      "value": 6,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one box per element"
+    },
+    "IfcRectangleProfileDef": {
+      "value": 6,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one profile per solid"
+    },
+    "IfcMapConversion": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "scaled georeference"
+    },
+    "IfcProjectedCRS": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "EPSG:25829"
+    },
+    "IfcRelContainedInSpatialStructure": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "all six elements in the storey"
+    },
+    "IfcRelAggregates": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "project > site > building > storey"
+    }
+  },
+  "elements": [
+    {
+      "name": "guBIM floor slab",
+      "ifc_class": "IfcSlab",
+      "predefined_type": "FLOOR",
+      "storey": "guBIM ground floor",
+      "size": {
+        "x": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "y": {
+          "value": 5.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "z": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        }
+      },
+      "volume": {
+        "value": 8.0,
+        "unit": "m3",
+        "tolerance": 1e-09,
+        "note": "x * y * z of the design box in metres"
+      },
+      "bbox": {
+        "x_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "x_max": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_max": {
+          "value": 5.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_max": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        }
+      },
+      "centre_world": {
+        "easting": {
+          "value": 536504.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "536500 + 0.001 * local x_mm"
+        },
+        "northing": {
+          "value": 4747502.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "4747500 + 0.001 * local y_mm"
+        },
+        "height": {
+          "value": 260.1,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "260 + 0.001 * local z_mm"
+        }
+      }
+    },
+    {
+      "name": "guBIM south wall",
+      "ifc_class": "IfcWall",
+      "predefined_type": "SOLIDWALL",
+      "storey": "guBIM ground floor",
+      "size": {
+        "x": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "y": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "z": {
+          "value": 3.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        }
+      },
+      "volume": {
+        "value": 6.0,
+        "unit": "m3",
+        "tolerance": 1e-09,
+        "note": "x * y * z of the design box in metres"
+      },
+      "bbox": {
+        "x_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "x_max": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_max": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_min": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_max": {
+          "value": 3.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        }
+      },
+      "centre_world": {
+        "easting": {
+          "value": 536504.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "536500 + 0.001 * local x_mm"
+        },
+        "northing": {
+          "value": 4747500.125,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "4747500 + 0.001 * local y_mm"
+        },
+        "height": {
+          "value": 261.7,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "260 + 0.001 * local z_mm"
+        }
+      }
+    },
+    {
+      "name": "guBIM north wall",
+      "ifc_class": "IfcWall",
+      "predefined_type": "SOLIDWALL",
+      "storey": "guBIM ground floor",
+      "size": {
+        "x": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "y": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "z": {
+          "value": 3.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        }
+      },
+      "volume": {
+        "value": 6.0,
+        "unit": "m3",
+        "tolerance": 1e-09,
+        "note": "x * y * z of the design box in metres"
+      },
+      "bbox": {
+        "x_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "x_max": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_min": {
+          "value": 4.75,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_max": {
+          "value": 5.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_min": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_max": {
+          "value": 3.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        }
+      },
+      "centre_world": {
+        "easting": {
+          "value": 536504.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "536500 + 0.001 * local x_mm"
+        },
+        "northing": {
+          "value": 4747504.875,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "4747500 + 0.001 * local y_mm"
+        },
+        "height": {
+          "value": 261.7,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "260 + 0.001 * local z_mm"
+        }
+      }
+    },
+    {
+      "name": "guBIM west wall",
+      "ifc_class": "IfcWall",
+      "predefined_type": "SOLIDWALL",
+      "storey": "guBIM ground floor",
+      "size": {
+        "x": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "y": {
+          "value": 4.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "z": {
+          "value": 3.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        }
+      },
+      "volume": {
+        "value": 3.375,
+        "unit": "m3",
+        "tolerance": 1e-09,
+        "note": "x * y * z of the design box in metres"
+      },
+      "bbox": {
+        "x_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "x_max": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_min": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_max": {
+          "value": 4.75,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_min": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_max": {
+          "value": 3.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        }
+      },
+      "centre_world": {
+        "easting": {
+          "value": 536500.125,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "536500 + 0.001 * local x_mm"
+        },
+        "northing": {
+          "value": 4747502.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "4747500 + 0.001 * local y_mm"
+        },
+        "height": {
+          "value": 261.7,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "260 + 0.001 * local z_mm"
+        }
+      }
+    },
+    {
+      "name": "guBIM east wall",
+      "ifc_class": "IfcWall",
+      "predefined_type": "SOLIDWALL",
+      "storey": "guBIM ground floor",
+      "size": {
+        "x": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "y": {
+          "value": 4.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "z": {
+          "value": 3.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        }
+      },
+      "volume": {
+        "value": 3.375,
+        "unit": "m3",
+        "tolerance": 1e-09,
+        "note": "x * y * z of the design box in metres"
+      },
+      "bbox": {
+        "x_min": {
+          "value": 7.75,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "x_max": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_min": {
+          "value": 0.25,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_max": {
+          "value": 4.75,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_min": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_max": {
+          "value": 3.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        }
+      },
+      "centre_world": {
+        "easting": {
+          "value": 536507.875,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "536500 + 0.001 * local x_mm"
+        },
+        "northing": {
+          "value": 4747502.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "4747500 + 0.001 * local y_mm"
+        },
+        "height": {
+          "value": 261.7,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "260 + 0.001 * local z_mm"
+        }
+      }
+    },
+    {
+      "name": "guBIM roof slab",
+      "ifc_class": "IfcSlab",
+      "predefined_type": "ROOF",
+      "storey": "guBIM ground floor",
+      "size": {
+        "x": {
+          "value": 8.4,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "y": {
+          "value": 5.4,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        },
+        "z": {
+          "value": 0.2,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design dimension, mm / 1000"
+        }
+      },
+      "volume": {
+        "value": 9.072000000000001,
+        "unit": "m3",
+        "tolerance": 1e-09,
+        "note": "x * y * z of the design box in metres"
+      },
+      "bbox": {
+        "x_min": {
+          "value": -0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "x_max": {
+          "value": 8.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_min": {
+          "value": -0.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "y_max": {
+          "value": 5.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_min": {
+          "value": 3.2,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        },
+        "z_max": {
+          "value": 3.4,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "placement centre +/- half size, mm / 1000"
+        }
+      },
+      "centre_world": {
+        "easting": {
+          "value": 536504.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "536500 + 0.001 * local x_mm"
+        },
+        "northing": {
+          "value": 4747502.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "4747500 + 0.001 * local y_mm"
+        },
+        "height": {
+          "value": 263.3,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "260 + 0.001 * local z_mm"
+        }
+      }
+    }
+  ],
+  "model_extent_local": {
+    "x_min": {
+      "value": -0.2,
+      "unit": "m",
+      "tolerance": 1e-06,
+      "note": "outer envelope including the roof overhang"
+    },
+    "x_max": {
+      "value": 8.2,
+      "unit": "m",
+      "tolerance": 1e-06,
+      "note": "outer envelope including the roof overhang"
+    },
+    "y_min": {
+      "value": -0.2,
+      "unit": "m",
+      "tolerance": 1e-06,
+      "note": "outer envelope including the roof overhang"
+    },
+    "y_max": {
+      "value": 5.2,
+      "unit": "m",
+      "tolerance": 1e-06,
+      "note": "outer envelope including the roof overhang"
+    },
+    "z_min": {
+      "value": 0.0,
+      "unit": "m",
+      "tolerance": 1e-06,
+      "note": "outer envelope including the roof overhang"
+    },
+    "z_max": {
+      "value": 3.4,
+      "unit": "m",
+      "tolerance": 1e-06,
+      "note": "outer envelope including the roof overhang"
+    }
+  },
+  "model_extent_world": {
+    "easting_min": {
+      "value": 536499.8,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "536500 + 0.001 * local x_min_mm"
+    },
+    "easting_max": {
+      "value": 536508.2,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "536500 + 0.001 * local x_max_mm"
+    },
+    "northing_min": {
+      "value": 4747499.8,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "4747500 + 0.001 * local y_min_mm"
+    },
+    "northing_max": {
+      "value": 4747505.2,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "4747500 + 0.001 * local y_max_mm"
+    },
+    "height_min": {
+      "value": 260.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "260 + 0.001 * local z_min_mm"
+    },
+    "height_max": {
+      "value": 263.4,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "260 + 0.001 * local z_max_mm"
+    }
+  },
+  "totals": {
+    "wall_volume": {
+      "value": 18.75,
+      "unit": "m3",
+      "tolerance": 1e-09,
+      "note": "2 * 8.00 * 0.25 * 3.00 + 2 * 4.50 * 0.25 * 3.00"
+    },
+    "slab_volume": {
+      "value": 17.072,
+      "unit": "m3",
+      "tolerance": 1e-09,
+      "note": "floor 8.00 * 5.00 * 0.20 + roof 8.40 * 5.40 * 0.20"
+    },
+    "element_volume": {
+      "value": 35.822,
+      "unit": "m3",
+      "tolerance": 1e-09,
+      "note": "sum of the six element volumes"
+    }
+  }
+}

@@ -1,44 +1,76 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Upload,
   Layers,
   MapPin,
   Box,
   Eye,
-  FileDown,
   RefreshCw,
-  Compass
+  Compass,
+  Info,
+  X
 } from 'lucide-react';
-import { BimEngine } from '../../infrastructure/ifclite/BimEngine';
+import type { OpenedFileSource } from '../../domain/files/FilePort';
+import type { ViewPreset } from '../../domain/kernel/RendererPort';
+import { filePort } from '../../infrastructure/composition';
+import noticeText from '../../../NOTICE.md?raw';
+import { GeometryCacheControl } from './GeometryCacheControl';
+import { t } from '../i18n';
 
 interface HeaderProps {
-  onOpenFile: (file: File) => void;
+  onOpenFile: (file: OpenedFileSource) => void;
+  onOpenFiles?: (files: readonly OpenedFileSource[]) => void;
   onLoadSample: (samplePath: string, name: string) => void;
-  onSetPreset: (preset: 'iso' | 'top' | 'front' | 'side') => void;
+  onSetPreset: (preset: ViewPreset) => void;
   onFitView: () => void;
   isGisExpanded: boolean;
   onToggleGis: () => void;
   isWorking: boolean;
+  activeBackend?: 'webgpu' | 'webgl2' | null;
+  isWebGpuAvailable?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenFile,
+  onOpenFiles,
   onLoadSample,
   onSetPreset,
   onFitView,
   isGisExpanded,
   onToggleGis,
-  isWorking
+  isWorking,
+  activeBackend,
+  isWebGpuAvailable
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const isWebGpu = BimEngine.isWebGpuSupported();
+  const [showAbout, setShowAbout] = useState(false);
+  const backend =
+    activeBackend !== undefined
+      ? activeBackend
+      : (isWebGpuAvailable ?? (typeof navigator !== 'undefined' && 'gpu' in navigator))
+      ? 'webgpu'
+      : null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onOpenFile(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) {
+      if (onOpenFiles) {
+        onOpenFiles(files);
+      } else {
+        onOpenFile(files[0]);
+      }
       e.target.value = '';
     }
+  };
+
+  const handleOpenClick = async () => {
+    if (filePort.usesNativePicker) {
+      const picked = await filePort.pickIfcFile();
+      if (picked) onOpenFile(picked);
+      return;
+    }
+    fileInputRef.current?.click();
   };
 
   return (
@@ -49,18 +81,26 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         <div>
           <span className="brand-title">VisorGuBIMGal</span>
-          <span style={{ margin: '0 8px', color: '#475569' }}>|</span>
-          <span className="brand-badge">IFClite + GIS</span>
         </div>
       </div>
 
       <div className="header-actions">
-        {/* WebGPU Status Indicator */}
+        {/* WebGPU / WebGL2 Status Indicator */}
         <span
-          className={`status-badge ${isWebGpu ? 'ready' : 'error'}`}
-          title={isWebGpu ? 'WebGPU disponible y activo' : 'WebGPU no disponible en este navegador'}
+          className={`status-badge ${backend ? 'ready' : 'error'}`}
+          title={
+            backend === 'webgpu'
+              ? t('header.backendTitleWebGpu')
+              : backend === 'webgl2'
+              ? t('header.backendTitleWebGl2')
+              : t('header.backendTitleNone')
+          }
         >
-          {isWebGpu ? '● WebGPU Activo' : '● Sin WebGPU'}
+          {backend === 'webgpu'
+            ? t('header.backendBadgeWebGpu')
+            : backend === 'webgl2'
+            ? t('header.backendBadgeWebGl2')
+            : t('header.backendBadgeNone')}
         </span>
 
         {/* View presets */}
@@ -68,28 +108,28 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => onSetPreset('iso')}
-            title="Vista Isométrica 3D"
+            title={t('header.presetIsoTitle')}
           >
             <Box size={16} />
           </button>
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => onSetPreset('top')}
-            title="Vista Superior / Planta"
+            title={t('header.presetTopTitle')}
           >
             <Compass size={16} />
           </button>
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => onSetPreset('front')}
-            title="Vista Frontal"
+            title={t('header.presetFrontTitle')}
           >
             <Eye size={16} />
           </button>
           <button
             className="btn btn-ghost btn-icon"
             onClick={onFitView}
-            title="Encuadrar todo (Fit)"
+            title={t('header.fitAllTitle')}
           >
             <RefreshCw size={15} />
           </button>
@@ -103,10 +143,10 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() =>
               onLoadSample(
                 `${import.meta.env.BASE_URL}samples/SimpleWall.ifc`,
-                'SimpleWall (39 KB)'
+                t('header.sampleSimpleWallName')
               )
             }
-            title="Cargar modelo de prueba SimpleWall (39 KB)"
+            title={t('header.sampleSimpleWallTitle')}
           >
             <span>SimpleWall</span>
           </button>
@@ -116,10 +156,10 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() =>
               onLoadSample(
                 `${import.meta.env.BASE_URL}samples/ManySimpleWalls.ifc`,
-                'ManySimpleWalls (584 KB)'
+                t('header.sampleManyWallsName')
               )
             }
-            title="Cargar modelo de prueba ManySimpleWalls (584 KB)"
+            title={t('header.sampleManyWallsTitle')}
           >
             <span>ManySimpleWalls</span>
           </button>
@@ -130,28 +170,136 @@ export const Header: React.FC<HeaderProps> = ({
           ref={fileInputRef}
           type="file"
           accept=".ifc"
+          multiple
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
         <button
           className="btn btn-primary"
           disabled={isWorking}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => void handleOpenClick()}
         >
           <Upload size={15} />
-          <span>{isWorking ? 'Cargando…' : 'Abrir IFC'}</span>
+          <span>{isWorking ? t('header.loadingEllipsis') : t('header.openIfc')}</span>
         </button>
 
         {/* GIS Toggle */}
         <button
           className={`btn ${isGisExpanded ? 'btn-primary' : 'btn-secondary'}`}
           onClick={onToggleGis}
-          title="Alternar panel GIS Leaflet"
+          title={t('header.gisTitle')}
         >
           <MapPin size={15} />
-          <span>GIS 2D</span>
+          <span>{t('header.gisLabel')}</span>
+        </button>
+
+        {/* Acerca de Button */}
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowAbout(true)}
+          title={t('header.aboutTitle')}
+        >
+          <Info size={15} />
+          <span>{t('header.aboutLabel')}</span>
         </button>
       </div>
+
+      {/* Acerca de modal panel */}
+      {showAbout && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}
+          onClick={() => setShowAbout(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              maxWidth: '680px',
+              width: '100%',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderBottom: '1px solid #1e293b',
+                backgroundColor: '#1e293b'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '14px', color: '#f8fafc' }}>
+                <Info size={16} color="#38bdf8" />
+                <span>{t('header.aboutModalTitle')}</span>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={() => setShowAbout(false)}
+                title={t('common.close')}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div
+              style={{
+                padding: '16px',
+                overflowY: 'auto',
+                fontSize: '12px',
+                lineHeight: 1.6,
+                color: '#cbd5e1'
+              }}
+            >
+              <pre
+                style={{
+                  fontFamily: 'var(--font-mono, monospace)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  margin: 0
+                }}
+              >
+                {noticeText}
+              </pre>
+            </div>
+            <div
+              style={{
+                padding: '10px 16px',
+                borderTop: '1px solid #1e293b',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                backgroundColor: '#0f172a'
+              }}
+            >
+              <GeometryCacheControl />
+              <button className="btn btn-secondary" onClick={() => setShowAbout(false)}>
+                {t('common.close')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </header>
   );
 };

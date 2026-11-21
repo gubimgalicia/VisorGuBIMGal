@@ -20,6 +20,17 @@ export interface GeoLocation {
   lng: number;
 }
 
+/** `[lat, lng]`, or null when proj4 does not know the CRS or the point is not on it. */
+export function mapToLatLng(crsId: string, eastings: number, northings: number): [number, number] | null {
+  if (!proj4.defs(crsId)) return null;
+  try {
+    const [lng, lat] = proj4(crsId, 'EPSG:4326', [eastings, northings]);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+  } catch {
+    return null;
+  }
+}
+
 export function utm29NToLatLng(eastings: number, northings: number): GeoLocation {
   try {
     const [lng, lat] = proj4('EPSG:25829', 'EPSG:4326', [eastings, northings]);

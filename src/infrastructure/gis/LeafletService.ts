@@ -11,8 +11,13 @@ export interface MapMarkerData {
 export class LeafletService {
   private map: L.Map | null = null;
   private markersLayer: L.LayerGroup | null = null;
+  private tileLayers: L.TileLayer[] = [];
 
-  initialize(container: HTMLElement, onMapClick?: (lat: number, lng: number) => void): L.Map {
+  initialize(
+    container: HTMLElement,
+    onMapClick?: (lat: number, lng: number) => void,
+    onTileStatus?: (ok: boolean) => void
+  ): L.Map {
     if (this.map) {
       this.map.remove();
     }
@@ -22,15 +27,6 @@ export class LeafletService {
       zoom: 12,
       zoomControl: true
     });
-
-    // Sleek Dark Tile layer
-    const darkTiles = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      {
-        attribution: '&copy; <a href="https://carto.com/">CARTO</a>, &copy; <a href="https://osm.org/">OSM</a>',
-        maxZoom: 19
-      }
-    );
 
     // OpenStreetMap standard
     const osmTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -46,14 +42,21 @@ export class LeafletService {
       attribution: '&copy; Instituto Geográfico Nacional de España'
     });
 
-    darkTiles.addTo(map);
+    this.tileLayers = [pnoaWms, osmTiles];
+    if (onTileStatus) {
+      for (const layer of this.tileLayers) {
+        layer.on('tileload', () => onTileStatus(true));
+        layer.on('tileerror', () => onTileStatus(false));
+      }
+    }
+
+    pnoaWms.addTo(map);
 
     L.control
       .layers(
         {
-          'Carto Voyager': darkTiles,
-          OpenStreetMap: osmTiles,
-          'Ortofoto PNOA (IGN)': pnoaWms
+          'Ortofoto PNOA (IGN)': pnoaWms,
+          OpenStreetMap: osmTiles
         },
         undefined,
         { position: 'topright' }
@@ -107,10 +110,17 @@ export class LeafletService {
     this.map?.invalidateSize();
   }
 
+  redrawTiles(): void {
+    for (const layer of this.tileLayers) {
+      layer.redraw();
+    }
+  }
+
   destroy(): void {
     this.map?.remove();
     this.map = null;
     this.markersLayer = null;
+    this.tileLayers = [];
   }
 }
 

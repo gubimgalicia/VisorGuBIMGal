@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+step-parser = { path = "crates/step-parser" }
+ifc-schema = { path = "crates/ifc-schema" }
+spatial-tree = { path = "crates/spatial-tree" }
+ifc-geometry = { path = "crates/ifc-geometry" }
+cad-slicer = { path = "crates/cad-slicer" }
+clash-detector = { path = "crates/clash-detector" }
+glam = "0.34"
+earcut = "0.4"
+# Must match the wasm-bindgen CLI exactly (D-008).
+wasm-bindgen = "=0.2.130"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[profile.release]
+lto = true
+codegen-units = 1

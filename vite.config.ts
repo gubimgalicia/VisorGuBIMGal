@@ -1,38 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const isolationHeaders = {
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
-};
-
-function fixIfcLiteWorkersPlugin() {
-  return {
-    name: 'fix-ifc-lite-workers',
-    transform(code: string, id: string) {
-      if (id.includes('@ifc-lite') && code.includes('geometry.worker.ts')) {
-        return {
-          code: code.replace(/geometry\.worker\.ts/g, 'geometry.worker.js'),
-          map: null,
-        };
-      }
-    },
-  };
-}
+const isDesktop =
+  process.env.GUBIM_DESKTOP === '1' || Boolean(process.env.TAURI_ENV_PLATFORM);
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/VisorGuBIMGal/' : '/',
-  plugins: [react(), fixIfcLiteWorkersPlugin()],
+  base: isDesktop ? './' : process.env.NODE_ENV === 'production' ? '/VisorGuBIMGal/' : '/',
+  plugins: [react()],
+  server: {
+    watch: {
+      ignored: ['**/target/**', '**/handoff/**', '**/src-tauri/target/**'],
+    },
+  },
   worker: {
     format: 'es',
-  },
-  optimizeDeps: {
-    exclude: ['@ifc-lite/wasm'],
-  },
-  server: {
-    headers: isolationHeaders,
-  },
-  preview: {
-    headers: isolationHeaders,
   },
 });

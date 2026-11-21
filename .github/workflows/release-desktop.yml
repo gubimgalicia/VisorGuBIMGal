@@ -1,0 +1,54 @@
+name: Release Desktop (Windows)
+
+# E6: builds an unsigned Windows NSIS installer ONLY on version tags (never on branch pushes/PRs).
+# Code signing (paid certificate) is intentionally deferred to the project owner.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
+        with:
+          tool: wasm-bindgen@0.2.130
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Build unsigned Windows installer (NSIS)
+        run: npm run desktop:build
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visorgubimgal-windows-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: src-tauri/target/release/bundle/nsis/*.exe
+          draft: true
+          generate_release_notes: true

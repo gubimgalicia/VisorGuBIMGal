@@ -1,0 +1,1007 @@
+{
+  "file": "bridge.ifc",
+  "schema": "IFC4X3_ADD2",
+  "authoring": {
+    "tool": "Blender 5.0 with IfcOpenShell 0.8.4",
+    "author": "guBIM",
+    "licence": "MIT OR Apache-2.0"
+  },
+  "units": {
+    "length": "m",
+    "area": "m2",
+    "volume": "m3",
+    "angle": "rad",
+    "count": "1"
+  },
+  "tolerance_note": "Every numeric quantity carries its own tolerance; lengths are in metres in the IFC project coordinate system (no georeferencing). Alignment coordinates and pier positions are exact to the closed forms within 1e-6 m; the deck bounding box uses 0.05 m to cover the 10 m chord approximation of the curved 10 m band.",
+  "computation": {
+    "horizontal": "x(s) and y(s) are the closed-form integrals of cos(heading) and sin(heading): a straight line for 0..100, x = 100 + R sin((s-100)/R) and y = R (1 - cos((s-100)/R)) for the 200 m left arc, then a straight line at heading 0.5 rad. Checked against composite 8-point Gauss-Legendre integration with 10 m intervals (agreement better than 1e-9 m). Nothing uses IfcOpenShell geometry.",
+    "vertical": "The vertical layout is a single constant 0 % gradient, so z(s) = 0 everywhere.",
+    "deck": "One IfcSectionedSolidHorizontal on the horizontal IfcCompositeCurve: a 10.00 x 1.00 m rectangle profile with its top at the alignment elevation, cross-sections every 10 m from 0 to 400 m. Each IfcAxis2PlacementLinear sets Axis to global up and RefDirection to the horizontal left normal, because IFC 4.3 defines the profile X axis as RefDirection and the profile Y axis as Axis. Volume = 10 x 1 x 400 = 4000 m3 ideal; the chord approximation of the 200 m arc gives about 3999.87 m3.",
+    "deck_bbox": "A constant-width band swept along the alignment has its extreme plan coordinates on one of its two edge curves. Both edges are sampled every 0.1 m; the 0.05 m tolerance covers the 10 m chord sagitta (about 0.031 m at R = 405 m).",
+    "piers": "Each pier is an IfcColumn with a 2 x 2 m rectangle profile extruded 8 m along local +Z. Its object placement puts the local origin at the alignment point on the pier station, z = -9, with local X along the tangent, so the pier is yawed by the alignment heading. The axis-aligned bbox half extents of a 2 x 2 square yawed by h are |cos h| + |sin h| in both X and Y.",
+    "counts": "Counts of the entities authored below."
+  },
+  "counts": {
+    "IfcProject": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcSite": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcBridge": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "GIRDER, contains the deck and piers"
+    },
+    "IfcAlignment": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one alignment with horizontal basis curve and gradient curve"
+    },
+    "IfcAlignmentHorizontal": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignmentVertical": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcSlab": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the bridge deck"
+    },
+    "IfcColumn": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the three piers"
+    },
+    "IfcSectionedSolidHorizontal": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the deck solid"
+    },
+    "IfcExtrudedAreaSolid": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one extrusion per pier"
+    },
+    "IfcRectangleProfileDef": {
+      "value": 4,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one deck profile plus one per pier"
+    },
+    "IfcRelContainedInSpatialStructure": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "alignment, deck and piers in the bridge"
+    },
+    "IfcRelAggregates": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "project -> site -> bridge"
+    }
+  },
+  "alignment": {
+    "total_length": {
+      "value": 400.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "100 + 200 + 100"
+    },
+    "turning_direction": "left (counter-clockwise, heading increases)",
+    "segments": [
+      {
+        "index": 1,
+        "type": "LINE",
+        "start_station": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight); positive means a left turn"
+        },
+        "start_x": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        }
+      },
+      {
+        "index": 2,
+        "type": "CIRCULARARC",
+        "start_station": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 300.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 200.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 400.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight); positive means a left turn"
+        },
+        "start_x": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 291.7702154416812,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 48.9669752438509,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        }
+      },
+      {
+        "index": 3,
+        "type": "LINE",
+        "start_station": {
+          "value": 300.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 400.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight); positive means a left turn"
+        },
+        "start_x": {
+          "value": 291.7702154416812,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 48.9669752438509,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 379.5284716307185,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 96.9095291042712,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        }
+      }
+    ],
+    "stations": [
+      {
+        "station": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "LINE"
+      },
+      {
+        "station": {
+          "value": 50.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 50.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "LINE"
+      },
+      {
+        "station": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "CIRCULARARC"
+      },
+      {
+        "station": {
+          "value": 150.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 149.86989335409106,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 3.1209331082683978,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.125,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "CIRCULARARC"
+      },
+      {
+        "station": {
+          "value": 200.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 198.96158370180916,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 12.435031315742107,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "CIRCULARARC"
+      },
+      {
+        "station": {
+          "value": 250.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 246.50901163441904,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 27.796951235074285,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.375,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "CIRCULARARC"
+      },
+      {
+        "station": {
+          "value": 300.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 291.7702154416812,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 48.9669752438509,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "LINE"
+      },
+      {
+        "station": {
+          "value": 350.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 335.64934353619986,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 72.93825217406105,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "LINE"
+      },
+      {
+        "station": {
+          "value": 400.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "distance along the horizontal alignment"
+        },
+        "x": {
+          "value": 379.5284716307185,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of cos(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "y": {
+          "value": 96.9095291042712,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "closed-form integral of sin(heading); checked against 8-point Gauss-Legendre integration"
+        },
+        "z": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "constant 0 % vertical alignment over the whole bridge"
+        },
+        "heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form: 0 on the lines, (s-100)/400 on the arc"
+        },
+        "segment": "LINE"
+      }
+    ]
+  },
+  "elements": {
+    "deck": {
+      "name": "guBIM bridge deck",
+      "ifc_class": "IfcSlab",
+      "length": {
+        "value": 400.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "horizontal alignment length; the deck is flat"
+      },
+      "width": {
+        "value": 10.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter"
+      },
+      "thickness": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter"
+      },
+      "plan_area": {
+        "value": 4000.0,
+        "unit": "m2",
+        "tolerance": 0.5,
+        "note": "width x horizontal length (ideal arc band)"
+      },
+      "volume": {
+        "value": 4000.0,
+        "unit": "m3",
+        "tolerance": 0.5,
+        "note": "10 x 1 x 400 = 4000 m3 ideal; the 10 m chord sections shorten the curved centre line by about 0.13 m, hence the 0.5 m3 tolerance"
+      },
+      "bbox_local": {
+        "x_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.05,
+          "note": "minimum over both band edges sampled every 0.1 m"
+        },
+        "x_max": {
+          "value": 381.9255993237395,
+          "unit": "m",
+          "tolerance": 0.05,
+          "note": "maximum over both band edges sampled every 0.1 m"
+        },
+        "y_min": {
+          "value": -5.0,
+          "unit": "m",
+          "tolerance": 0.05,
+          "note": "minimum over both band edges sampled every 0.1 m"
+        },
+        "y_max": {
+          "value": 101.29744191372306,
+          "unit": "m",
+          "tolerance": 0.05,
+          "note": "maximum over both band edges sampled every 0.1 m"
+        },
+        "z_min": {
+          "value": -1.0,
+          "unit": "m",
+          "tolerance": 0.05,
+          "note": "top at z=0, soffit 1 m below"
+        },
+        "z_max": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.05,
+          "note": "deck top at z=0"
+        }
+      }
+    },
+    "piers": [
+      {
+        "name": "guBIM pier 1",
+        "ifc_class": "IfcColumn",
+        "station": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter, distance along the alignment"
+        },
+        "centre_x": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "alignment x(s) at the pier station"
+        },
+        "centre_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "alignment y(s) at the pier station"
+        },
+        "centre_z": {
+          "value": -5.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "mid-height of the pier"
+        },
+        "heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "alignment tangent heading; the pier is yawed to it"
+        },
+        "width": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "depth": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "base_z": {
+          "value": -9.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "top of deck soffit (-1) minus 8 m"
+        },
+        "top_z": {
+          "value": -1.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "deck soffit, in contact with the deck"
+        },
+        "volume": {
+          "value": 32.0,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "2 x 2 x 8, closed form; 1e-4 m3 allows for 32-bit float vertex positions in the viewer"
+        },
+        "bbox_local": {
+          "x_min": {
+            "value": 99.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_x minus (|cos h|*1 + |sin h|*1)"
+          },
+          "x_max": {
+            "value": 101.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_x plus (|cos h|*1 + |sin h|*1)"
+          },
+          "y_min": {
+            "value": -1.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_y minus (|sin h|*1 + |cos h|*1)"
+          },
+          "y_max": {
+            "value": 1.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_y plus (|sin h|*1 + |cos h|*1)"
+          },
+          "z_min": {
+            "value": -9.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "pier base"
+          },
+          "z_max": {
+            "value": -1.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "pier top at the deck soffit"
+          }
+        }
+      },
+      {
+        "name": "guBIM pier 2",
+        "ifc_class": "IfcColumn",
+        "station": {
+          "value": 200.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter, distance along the alignment"
+        },
+        "centre_x": {
+          "value": 198.96158370180916,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "alignment x(s) at the pier station"
+        },
+        "centre_y": {
+          "value": 12.435031315742107,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "alignment y(s) at the pier station"
+        },
+        "centre_z": {
+          "value": -5.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "mid-height of the pier"
+        },
+        "heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "alignment tangent heading; the pier is yawed to it"
+        },
+        "width": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "depth": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "base_z": {
+          "value": -9.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "top of deck soffit (-1) minus 8 m"
+        },
+        "top_z": {
+          "value": -1.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "deck soffit, in contact with the deck"
+        },
+        "volume": {
+          "value": 32.0,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "2 x 2 x 8, closed form; 1e-4 m3 allows for 32-bit float vertex positions in the viewer"
+        },
+        "bbox_local": {
+          "x_min": {
+            "value": 197.745267320844,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_x minus (|cos h|*1 + |sin h|*1)"
+          },
+          "x_max": {
+            "value": 200.17790008277433,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_x plus (|cos h|*1 + |sin h|*1)"
+          },
+          "y_min": {
+            "value": 11.218714934776939,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_y minus (|sin h|*1 + |cos h|*1)"
+          },
+          "y_max": {
+            "value": 13.651347696707274,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_y plus (|sin h|*1 + |cos h|*1)"
+          },
+          "z_min": {
+            "value": -9.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "pier base"
+          },
+          "z_max": {
+            "value": -1.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "pier top at the deck soffit"
+          }
+        }
+      },
+      {
+        "name": "guBIM pier 3",
+        "ifc_class": "IfcColumn",
+        "station": {
+          "value": 300.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter, distance along the alignment"
+        },
+        "centre_x": {
+          "value": 291.7702154416812,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "alignment x(s) at the pier station"
+        },
+        "centre_y": {
+          "value": 48.9669752438509,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "alignment y(s) at the pier station"
+        },
+        "centre_z": {
+          "value": -5.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "mid-height of the pier"
+        },
+        "heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "alignment tangent heading; the pier is yawed to it"
+        },
+        "width": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "depth": {
+          "value": 2.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "height": {
+          "value": 8.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "base_z": {
+          "value": -9.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "top of deck soffit (-1) minus 8 m"
+        },
+        "top_z": {
+          "value": -1.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "deck soffit, in contact with the deck"
+        },
+        "volume": {
+          "value": 32.0,
+          "unit": "m3",
+          "tolerance": 0.0001,
+          "note": "2 x 2 x 8, closed form; 1e-4 m3 allows for 32-bit float vertex positions in the viewer"
+        },
+        "bbox_local": {
+          "x_min": {
+            "value": 290.41320734118665,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_x minus (|cos h|*1 + |sin h|*1)"
+          },
+          "x_max": {
+            "value": 293.1272235421758,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_x plus (|cos h|*1 + |sin h|*1)"
+          },
+          "y_min": {
+            "value": 47.60996714335632,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_y minus (|sin h|*1 + |cos h|*1)"
+          },
+          "y_max": {
+            "value": 50.32398334434547,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "centre_y plus (|sin h|*1 + |cos h|*1)"
+          },
+          "z_min": {
+            "value": -9.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "pier base"
+          },
+          "z_max": {
+            "value": -1.0,
+            "unit": "m",
+            "tolerance": 0.001,
+            "note": "pier top at the deck soffit"
+          }
+        }
+      }
+    ]
+  }
+}

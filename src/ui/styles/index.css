@@ -10,8 +10,8 @@
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 * {
@@ -165,6 +165,358 @@ body {
   border-color: var(--accent-color);
 }
 
+/* Text field */
+.input {
+  background-color: var(--bg-secondary);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+}
+
+.input:focus {
+  border-color: var(--accent-color);
+}
+
+/* Search panel */
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.search-row {
+  display: flex;
+  gap: 4px;
+}
+
+.search-row .input {
+  flex: 1;
+}
+
+.search-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-count {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.search-busy {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.search-error {
+  color: #f87171;
+  font-size: 11px;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.search-result:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.search-result.selected {
+  background-color: #0284c7;
+  color: white;
+}
+
+.search-result-type {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-result.selected .search-result-type {
+  color: inherit;
+}
+
+.search-result-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-more {
+  color: #64748b;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* Compare panel */
+.compare-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.compare-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.compare-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compare-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.compare-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.compare-field .select {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.compare-hint {
+  color: var(--warning);
+  font-size: 11px;
+}
+
+.compare-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.compare-error {
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  font-size: 11px;
+}
+
+.compare-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.compare-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.compare-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.compare-change-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.compare-kind-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-kind-badge.zero {
+  background-color: rgba(100, 116, 139, 0.12);
+  border-color: rgba(100, 116, 139, 0.25);
+  color: var(--text-muted);
+}
+
+.compare-duplicates {
+  color: #fbbf24;
+  font-size: 11px;
+}
+
+.compare-no-diff {
+  padding: 14px 10px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.compare-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compare-group {
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.compare-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.compare-group-header:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.compare-entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compare-entry {
+  padding: 5px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: rgba(30, 41, 59, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.compare-entry:hover {
+  background-color: rgba(51, 65, 85, 0.75);
+}
+
+.compare-entry.selected {
+  background-color: rgba(2, 132, 199, 0.28);
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.compare-entry-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.compare-entry-name {
+  color: #f1f5f9;
+  font-weight: 500;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-entry-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.compare-entry-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compare-entry-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.compare-entry-tag {
+  padding: 0 5px;
+  border-radius: 3px;
+  background-color: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+  font-size: 10px;
+}
+
+.compare-entry-sub {
+  color: var(--text-muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-more {
+  color: #64748b;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
 /* Main workspace */
 .workspace {
   display: flex;
@@ -185,6 +537,14 @@ body {
 .sidebar-left {
   width: 320px;
   border-right: 1px solid var(--border-color);
+}
+
+.sidebar-left .tab-btn {
+  padding: 6px 4px;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .sidebar-right {
@@ -270,6 +630,7 @@ body {
 /* Viewport Center */
 .viewport-center {
   flex: 1;
+  min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -277,6 +638,7 @@ body {
 
 .canvas-container {
   flex: 1;
+  min-height: 0;
   position: relative;
   width: 100%;
   height: 100%;
@@ -290,11 +652,17 @@ canvas.bim-viewport {
 }
 
 /* Floating overlay toolbar on viewport */
+/* Between the controls column on the left (12 + 250 px) and the view cube on the right (168 px),
+   centred there; it wraps to a second row rather than slide under either. */
 .viewport-overlay-toolbar {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 270px;
+  right: 176px;
+  width: fit-content;
+  margin: 0 auto;
+  flex-wrap: wrap;
+  justify-content: center;
   background-color: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -307,8 +675,246 @@ canvas.bim-viewport {
   z-index: 10;
 }
 
+/* Isolate, hide and ghost controls, then the 3D section, top left of the viewport */
+.viewport-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+}
+
+.display-bar,
+.section-bar,
+.measure-bar,
+.saved-views-bar {
+  background-color: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.section-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent-color);
+}
+
+.section-value {
+  width: 64px;
+  font-size: 11px;
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-axis-label {
+  width: 14px;
+  padding-left: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.section-bar .btn.active {
+  color: var(--accent-color);
+  background-color: rgba(56, 189, 248, 0.15);
+}
+
+.display-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.display-bar-row .select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.display-bar-label {
+  flex: 1;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.display-bar-separator {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.display-bar .btn.active {
+  color: var(--accent-color);
+  background-color: rgba(56, 189, 248, 0.15);
+}
+
+.display-bar-status {
+  padding: 2px 6px 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.measure-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.measure-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.measure-kind {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.measure-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-views-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.saved-view-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 2px;
+}
+
+.saved-view-apply {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-view-apply:hover {
+  background-color: rgba(56, 189, 248, 0.15);
+  color: var(--accent-color);
+}
+
+/* Over the canvas, under the tool bars, and never in the way of the pointer. */
+.measure-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.measure-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.measure-line {
+  stroke: #facc15;
+  stroke-width: 2;
+}
+
+.measure-dashed {
+  stroke-dasharray: 5 4;
+}
+
+.measure-draft {
+  stroke: #fde68a;
+}
+
+.measure-fill {
+  fill: rgba(250, 204, 21, 0.18);
+  stroke: none;
+}
+
+.measure-point {
+  fill: #facc15;
+  stroke: #0f172a;
+  stroke-width: 1;
+}
+
+.measure-snap {
+  fill: none;
+  stroke: #22d3ee;
+  stroke-width: 2;
+}
+
+.measure-label {
+  position: absolute;
+  transform: translate(-50%, -130%);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(250, 204, 21, 0.6);
+  color: #f8fafc;
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-spatial-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-spatial-action {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tree-spatial-row:hover .tree-spatial-action,
+.tree-spatial-action:focus-visible {
+  opacity: 1;
+}
+
+.tree-spatial-action:hover {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
 /* GIS Split Panel */
 .gis-drawer {
+  flex: none;
   height: 260px;
   border-top: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
@@ -321,6 +927,98 @@ canvas.bim-viewport {
   flex: 1;
   width: 100%;
   height: 100%;
+}
+
+/* The SVG's size is in metres of model, so it takes the box's size instead */
+.drawing-preview svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Floor-plan minimap in the bottom right corner of the 3D view; it only shows, never takes a click */
+.minimap-widget {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 11;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.minimap-map {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* The exported SVG's viewBox is in model units, so it takes the map's size instead */
+.minimap-plan,
+.minimap-plan svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.minimap-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.minimap-cone {
+  fill: rgba(2, 132, 199, 0.2);
+  stroke: #0284c7;
+  stroke-width: 1.5px;
+}
+
+.minimap-eye {
+  fill: #0284c7;
+  stroke: #0f172a;
+  stroke-width: 1px;
+}
+
+/* The camera is off the map: the eye sits on the edge, hollow */
+.minimap-eye-outside {
+  fill: #ffffff;
+  stroke: #0284c7;
+  stroke-width: 2px;
+}
+
+.minimap-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.minimap-storey {
+  margin-top: 4px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.minimap-error {
+  color: #f87171;
 }
 
 /* Cards & Lists */
@@ -367,6 +1065,70 @@ canvas.bim-viewport {
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
+}
+
+/* Load diagnostics in a model card */
+.model-diagnostics {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.model-diagnostics-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.model-diagnostics-toggle:hover {
+  color: var(--text-main);
+}
+
+.model-diagnostics-group {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border-color);
+}
+
+.model-diagnostics-code {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  margin-bottom: 2px;
+}
+
+.model-diagnostics-item {
+  display: flex;
+  gap: 6px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.model-diagnostics-element {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-color);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.model-diagnostics-element:hover {
+  text-decoration: underline;
+}
+
+.model-diagnostics-more {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* Property Set Card */
@@ -449,4 +1211,356 @@ canvas.bim-viewport {
 .status-badge.error {
   background-color: rgba(239, 68, 68, 0.2);
   color: #f87171;
+}
+.perf-monitor-hud {
+  position: absolute;
+  top: 142px;
+  right: 12px;
+  min-width: 210px;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-main);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  z-index: 15;
+  pointer-events: none;
+}
+
+.perf-monitor-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #38bdf8;
+  margin-bottom: 4px;
+}
+
+.perf-monitor-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1.5px 0;
+}
+
+.perf-monitor-label {
+  color: var(--text-muted);
+}
+
+.perf-monitor-val {
+  font-family: var(--font-mono);
+  color: var(--text-main);
+}
+
+/* Clash detection panel (C22, T-168) */
+.clash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clash-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.clash-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clash-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clash-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.clash-set-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--border-color);
+}
+
+.clash-set-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.clash-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.clash-progress {
+  font-size: 11px;
+  color: #38bdf8;
+}
+
+.clash-error {
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+  font-size: 11px;
+}
+
+.clash-notice {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background-color: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  font-size: 11px;
+}
+
+.clash-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clash-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--border-color);
+}
+
+.clash-summary-stats {
+  font-size: 11px;
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+}
+
+.clash-filter-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.clash-pill {
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.7);
+  color: #cbd5e1;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.clash-pill.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  color: #f8fafc;
+}
+
+.clash-pill.hard.active {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.clash-pill.soft.active {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+
+.clash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clash-card {
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.clash-card:hover {
+  border-color: rgba(148, 163, 184, 0.45);
+  background-color: rgba(30, 41, 59, 0.65);
+}
+
+.clash-card.active {
+  border-color: #38bdf8;
+  background-color: rgba(14, 165, 233, 0.12);
+}
+
+.clash-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.clash-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 9999px;
+}
+
+.clash-badge.hard {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.clash-badge.soft {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+}
+
+.clash-metric {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.clash-bcf-btn {
+  padding: 2px 6px;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.clash-pair-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clash-elem {
+  padding-left: 6px;
+  border-left: 2px solid #ef4444;
+}
+
+.clash-elem-b {
+  border-left-color: #f97316;
+}
+
+.clash-elem-name {
+  font-size: 11px;
+  color: #f8fafc;
+  word-break: break-word;
+}
+
+.clash-elem-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.clash-volume {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #94a3b8;
+}
+
+.clash-more {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px;
+}
+
+/* GIS offline state (E5, T-169) */
+.gis-map-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gis-offline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.gis-offline-banner {
+  position: absolute;
+  inset: 12px;
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  backdrop-filter: blur(6px);
+  color: #e2e8f0;
+  text-align: center;
+}
+
+.gis-offline-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.gis-offline-desc {
+  margin: 0;
+  max-width: 480px;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.gis-offline-coords {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.gis-offline-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }

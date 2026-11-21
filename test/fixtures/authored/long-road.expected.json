@@ -1,0 +1,1731 @@
+{
+  "file": "long-road.ifc",
+  "schema": "IFC4X3_ADD2",
+  "authoring": {
+    "tool": "Blender 5.0 with IfcOpenShell 0.8.4",
+    "author": "guBIM",
+    "licence": "MIT OR Apache-2.0"
+  },
+  "units": {
+    "length": "m",
+    "area": "m2",
+    "volume": "m3",
+    "angle": "rad",
+    "count": "1"
+  },
+  "tolerance_note": "Every numeric quantity carries its own tolerance. Coordinates and sizes are in metres in the IFC project coordinate system (local origin); add the map conversion to obtain EPSG:25829 eastings and northings. Bounding boxes of curved bands use 0.02 m to cover both the 0.2 m sampling and the 20 m chord approximation of the authored solid.",
+  "georeference": {
+    "projected_crs": "EPSG:25829",
+    "eastings": {
+      "value": 536000.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcMapConversion.Eastings"
+    },
+    "northings": {
+      "value": 4747000.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcMapConversion.Northings"
+    },
+    "orthogonal_height": {
+      "value": 0.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcMapConversion.OrthogonalHeight"
+    },
+    "x_axis_abscissa": {
+      "value": 1.0,
+      "unit": "1",
+      "tolerance": 1e-12,
+      "note": "map X axis is local +X (no rotation)"
+    },
+    "x_axis_ordinate": {
+      "value": 0.0,
+      "unit": "1",
+      "tolerance": 1e-12,
+      "note": "map X axis is local +X (no rotation)"
+    },
+    "scale": {
+      "value": 1.0,
+      "unit": "1",
+      "tolerance": 1e-12,
+      "note": "IfcMapConversion.Scale"
+    },
+    "note": "map_easting = 536000 + local x; map_northing = 4747000 + local y."
+  },
+  "computation": {
+    "horizontal": "x(s) and y(s) are the closed-form integrals of cos(heading) and sin(heading) over lines and circular arcs; heading is the sum of the signed arc angles. Checked against composite 8-point Gauss-Legendre integration with 10 m intervals (agreement better than 1e-9 m). Nothing uses IfcOpenShell geometry.",
+    "vertical": "The vertical layout is a single constant 0 % gradient, so z(s) = 0 everywhere.",
+    "bbox": "A constant-width band swept along the alignment has its extreme plan coordinates on one of its two edge curves. Both edges are sampled every 0.2 m (including the end), which is well inside the 0.02 m tolerance.",
+    "volume": "Cross-section area times horizontal length: the road is flat, so there is no grade correction. The authored IfcSectionedSolidHorizontal has a section every 20 m; the resulting chord approximation differs from the ideal arc volume by less than 0.01 m3.",
+    "sectioning": "One IfcSectionedSolidHorizontal per element, directrix = the horizontal IfcCompositeCurve, rectangle profile, cross-section positions every 20 m with OffsetVertical 0."
+  },
+  "counts": {
+    "IfcProject": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcSite": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcRoad": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignment": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignmentHorizontal": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignmentVertical": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcCourse": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the pavement"
+    },
+    "IfcBuildingElementProxy": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "the two lane markings"
+    },
+    "IfcSectionedSolidHorizontal": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "pavement + two markings"
+    },
+    "IfcRectangleProfileDef": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one profile per sectioned solid"
+    },
+    "IfcMapConversion": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored georeference"
+    },
+    "IfcProjectedCRS": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "EPSG:25829"
+    }
+  },
+  "horizontal": {
+    "total_length": {
+      "value": 20000.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "3000 + 2500 + 4000 + 2500 + 3000 + 2500 + 2500"
+    },
+    "turning": "left, right, left; maximum heading 0.25 rad",
+    "segments": [
+      {
+        "index": 1,
+        "type": "LINE",
+        "start_station": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 3000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 3000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 3000.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      },
+      {
+        "index": 2,
+        "type": "CIRCULARARC",
+        "start_station": {
+          "value": 3000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 5500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 2500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 10000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 3000.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 5474.039592545229,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 310.87578289355264,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      },
+      {
+        "index": 3,
+        "type": "LINE",
+        "start_station": {
+          "value": 5500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 9500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 4000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 5474.039592545229,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 310.87578289355264,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 9349.689279387809,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 1300.4916199116444,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      },
+      {
+        "index": 4,
+        "type": "CIRCULARARC",
+        "start_station": {
+          "value": 9500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 12000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 2500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": -10000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 9349.689279387809,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 1300.4916199116444,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 11823.728871933039,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 1611.3674028051971,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      },
+      {
+        "index": 5,
+        "type": "LINE",
+        "start_station": {
+          "value": 12000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 15000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 3000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 11823.728871933039,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 1611.3674028051971,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 14823.728871933039,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 1611.3674028051971,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      },
+      {
+        "index": 6,
+        "type": "CIRCULARARC",
+        "start_station": {
+          "value": 15000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 17500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 2500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 10000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 14823.728871933039,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 1611.3674028051971,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 17297.768464478268,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 1922.2431856987498,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      },
+      {
+        "index": 7,
+        "type": "LINE",
+        "start_station": {
+          "value": 17500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 20000.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 2500.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "signed: positive left, negative right, 0 line"
+        },
+        "start_x": {
+          "value": 17297.768464478268,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_y": {
+          "value": 1922.2431856987498,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_x": {
+          "value": 19720.04951875488,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "end_y": {
+          "value": 2540.753083835057,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "closed-form line/arc integral from station 0"
+        },
+        "start_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of previous signed arc angles"
+        },
+        "end_heading": {
+          "value": 0.25,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "sum of signed arc angles"
+        }
+      }
+    ]
+  },
+  "stations": [
+    {
+      "station": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 536000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 1000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 1000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 537000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 2000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 2000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 538000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 3000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 3000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 539000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 4000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 3998.3341664682816,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 49.958347219741796,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 539998.3341664682,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747049.95834722,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 5000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 4986.6933079506125,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 199.33422158758373,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 540986.6933079506,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747199.3342215875,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 5500.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 5474.039592545229,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 310.87578289355264,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 541474.0395925452,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747310.875782894,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 6000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 5958.495803400552,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 434.5777625208141,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 541958.4958034005,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747434.577762521,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 7000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 6927.408225111197,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 681.9817217753371,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 542927.4082251112,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747681.981721776,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 8000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 7896.320646821841,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 929.38568102986,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 543896.3206468219,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4747929.385681029,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 9000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 8865.233068532485,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1176.7896402843828,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 544865.2330685325,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748176.789640284,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 9500.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 9349.689279387809,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1300.4916199116444,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 545349.6892793878,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748300.491619912,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 10000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 9837.035563982427,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1412.0331812176134,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 545837.0355639824,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748412.0331812175,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 11000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 10825.394705464756,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1561.4090555854552,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 546825.3947054647,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748561.409055585,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 12000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 11823.728871933039,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1611.3674028051971,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 547823.7288719331,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748611.367402805,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 13000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 12823.728871933039,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1611.3674028051971,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 548823.7288719331,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748611.367402805,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 14000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 13823.728871933039,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1611.3674028051971,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 549823.7288719331,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748611.367402805,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 15000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 14823.728871933039,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1611.3674028051971,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 550823.7288719331,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748611.367402805,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 16000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 15822.06303840132,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1661.325750024939,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 551822.0630384013,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748661.325750025,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 17000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 16810.42217988365,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1810.7016243927808,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 552810.4221798837,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748810.7016243925,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 17500.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 17297.768464478268,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 1922.2431856987498,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 553297.7684644783,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4748922.243185699,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 18000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 17782.22467533359,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 2045.9451653260112,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 553782.2246753336,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4749045.945165326,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 19000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 18751.137097044233,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 2293.3491245805344,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 554751.1370970443,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4749293.349124581,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    },
+    {
+      "station": {
+        "value": 20000.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design station"
+      },
+      "x": {
+        "value": 19720.04951875488,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "y": {
+        "value": 2540.753083835057,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "closed-form line/arc integral; checked against 8-point Gauss-Legendre integration"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "constant 0 % vertical alignment over the whole road"
+      },
+      "map_easting": {
+        "value": 555720.0495187549,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "536000 + local x, map rotation 0 and scale 1"
+      },
+      "map_northing": {
+        "value": 4749540.753083835,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "4747000 + local y, map rotation 0 and scale 1"
+      }
+    }
+  ],
+  "elements": {
+    "pavement": {
+      "name": "guBIM pavement",
+      "ifc_class": "IfcCourse",
+      "length": {
+        "value": 20000.0,
+        "unit": "m",
+        "tolerance": 1e-06,
+        "note": "horizontal alignment length; the flat road has no vertical component"
+      },
+      "width": {
+        "value": 7.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter"
+      },
+      "thickness": {
+        "value": 0.25,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter"
+      },
+      "plan_area": {
+        "value": 140000.0,
+        "unit": "m2",
+        "tolerance": 0.5,
+        "note": "width x horizontal length (ideal arc band)"
+      },
+      "volume": {
+        "value": 35000.0,
+        "unit": "m3",
+        "tolerance": 0.5,
+        "note": "7.00 x 0.25 x 20000; the 20 m sections approximate the curves by chords, which changes the volume by less than 0.01 m3"
+      },
+      "bbox_local": {
+        "x_min": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.02,
+          "note": "minimum over both band edges sampled every 0.2 m"
+        },
+        "x_max": {
+          "value": 19720.91543261227,
+          "unit": "m",
+          "tolerance": 0.02,
+          "note": "maximum over both band edges sampled every 0.2 m"
+        },
+        "y_min": {
+          "value": -3.5,
+          "unit": "m",
+          "tolerance": 0.02,
+          "note": "minimum over both band edges sampled every 0.2 m"
+        },
+        "y_max": {
+          "value": 2544.1442773110443,
+          "unit": "m",
+          "tolerance": 0.02,
+          "note": "maximum over both band edges sampled every 0.2 m"
+        },
+        "z_min": {
+          "value": -0.25,
+          "unit": "m",
+          "tolerance": 0.02,
+          "note": "top at z=0, bottom 0.25 m below"
+        },
+        "z_max": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.02,
+          "note": "top at z=0"
+        }
+      }
+    },
+    "lane_markings": [
+      {
+        "name": "guBIM lane marking left",
+        "ifc_class": "IfcBuildingElementProxy",
+        "lateral_centre": {
+          "value": 3.4,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "positive left of the centre line"
+        },
+        "length": {
+          "value": 20000.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "follows the alignment"
+        },
+        "width": {
+          "value": 0.15,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.005,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "5 mm above the pavement top"
+        },
+        "volume": {
+          "value": 15.0,
+          "unit": "m3",
+          "tolerance": 0.05,
+          "note": "0.15 x 0.005 x 20000"
+        },
+        "bbox_local": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "minimum over both stripe edges sampled every 0.2 m"
+          },
+          "x_max": {
+            "value": 19719.226900590358,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "maximum over both stripe edges sampled every 0.2 m"
+          },
+          "y_min": {
+            "value": 3.3249999999999997,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "minimum over both stripe edges sampled every 0.2 m"
+          },
+          "y_max": {
+            "value": 2544.1200545005017,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "maximum over both stripe edges sampled every 0.2 m"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "pavement top at z=0"
+          },
+          "z_max": {
+            "value": 0.005,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "top 5 mm above the pavement"
+          }
+        }
+      },
+      {
+        "name": "guBIM lane marking right",
+        "ifc_class": "IfcBuildingElementProxy",
+        "lateral_centre": {
+          "value": -3.4,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "positive left of the centre line"
+        },
+        "length": {
+          "value": 20000.0,
+          "unit": "m",
+          "tolerance": 1e-06,
+          "note": "follows the alignment"
+        },
+        "width": {
+          "value": 0.15,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "thickness": {
+          "value": 0.005,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "5 mm above the pavement top"
+        },
+        "volume": {
+          "value": 15.0,
+          "unit": "m3",
+          "tolerance": 0.05,
+          "note": "0.15 x 0.005 x 20000"
+        },
+        "bbox_local": {
+          "x_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "minimum over both stripe edges sampled every 0.2 m"
+          },
+          "x_max": {
+            "value": 19720.90924751329,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "maximum over both stripe edges sampled every 0.2 m"
+          },
+          "y_min": {
+            "value": -3.475,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "minimum over both stripe edges sampled every 0.2 m"
+          },
+          "y_max": {
+            "value": 2537.531450032869,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "maximum over both stripe edges sampled every 0.2 m"
+          },
+          "z_min": {
+            "value": 0.0,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "pavement top at z=0"
+          },
+          "z_max": {
+            "value": 0.005,
+            "unit": "m",
+            "tolerance": 0.02,
+            "note": "top 5 mm above the pavement"
+          }
+        }
+      }
+    ]
+  }
+}

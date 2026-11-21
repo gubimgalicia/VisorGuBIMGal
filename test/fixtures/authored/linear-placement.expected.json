@@ -1,0 +1,1242 @@
+{
+  "file": "linear-placement.ifc",
+  "schema": "IFC4X3_ADD2",
+  "authoring": {
+    "tool": "Blender 5.0 with IfcOpenShell 0.8.4",
+    "author": "guBIM",
+    "licence": "MIT OR Apache-2.0"
+  },
+  "units": {
+    "length": "m",
+    "area": "m2",
+    "volume": "m3",
+    "angle": "rad",
+    "count": "1"
+  },
+  "tolerance_note": "Every numeric quantity carries its own tolerance; lengths are in metres in the IFC project coordinate system (no georeferencing). Coordinate tolerances are 1 mm (1e-3 m). The independent integration itself is good to about 1e-9 m.",
+  "computation": {
+    "alignment": "Copy of the road-alignment design; x(s) and y(s) are cos/sin(heading) integrated with composite 8-point Gauss-Legendre on intervals <= 10 m. heading(s) is closed form from the line/clothoid/arc parameters. Independent of IfcOpenShell geometry.",
+    "placement": "IfcLinearPlacement with an IfcAxis2PlacementLinear whose Location is an IfcPointByDistanceExpression on the horizontal IfcCompositeCurve (FootPrint) of the alignment. Axis and RefDirection are left unset, so per IFC 4.3 they default to the curve frame: local X along the curve tangent at Location and local Z up. OffsetLateral is positive to the left. The 1 x 1 x 1 box solid is centred on the local origin, so the world box centre is the placement origin: (x(s)-o*sin h, y(s)+o*cos h, v).",
+    "bbox": "For a unit cube yawed by h about Z, the axis-aligned horizontal extent is |cos h|+|sin h| in both X and Y.",
+    "tolerances": "Volume and bounding-box sizes use 1e-4 m3 and 1e-3 m: a viewer moves vertex positions as 32-bit floats, so the closed forms cannot be reproduced to 1e-12.",
+    "counts": "Counts of the entities written below."
+  },
+  "counts": {
+    "IfcProject": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcSite": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcRoad": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignment": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one alignment with horizontal basis curve and gradient curve"
+    },
+    "IfcBuildingElementProxy": {
+      "value": 10,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcLinearPlacement": {
+      "value": 21,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "10 box placements plus 11 referent placements created with the alignment"
+    },
+    "IfcPointByDistanceExpression": {
+      "value": 21,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "10 box placements plus 11 referent placements"
+    },
+    "IfcAxis2PlacementLinear": {
+      "value": 21,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "10 box placements plus 11 referent placements"
+    },
+    "IfcReferent": {
+      "value": 11,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "key points and start stations created with the alignment"
+    },
+    "IfcExtrudedAreaSolid": {
+      "value": 10,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one 1 x 1 x 1 box solid per proxy"
+    },
+    "IfcRectangleProfileDef": {
+      "value": 10,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "1 m by 1 m profile per box"
+    },
+    "IfcRelContainedInSpatialStructure": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "alignment and all boxes in the road"
+    },
+    "IfcRelAggregates": {
+      "value": 2,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "project -> site -> road"
+    }
+  },
+  "alignment": {
+    "horizontal_length": {
+      "value": 940.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "200 + 120 + 300 + 120 + 200"
+    },
+    "basis_curve": "horizontal IfcCompositeCurve (FootPrint representation)",
+    "segment_types": [
+      "LINE",
+      "CLOTHOID",
+      "CIRCULARARC",
+      "CLOTHOID",
+      "LINE"
+    ]
+  },
+  "placements": [
+    {
+      "name": "BOX-01",
+      "station": {
+        "value": 50.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "LINE",
+      "centre_x": {
+        "value": 50.00000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.0,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 0.0,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 49.50000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 50.50000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": -0.5,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-02",
+      "station": {
+        "value": 150.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": -2.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "LINE",
+      "centre_x": {
+        "value": 150.00000000000003,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": -2.5,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.0,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 0.0,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 149.50000000000003,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 150.50000000000003,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": -3.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": -2.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-03",
+      "station": {
+        "value": 230.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": 2.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CLOTHOID",
+      "centre_x": {
+        "value": 229.9848313910641,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 2.074943448924925,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.0075,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 0.4297183463481174,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.0074718048195335,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.0074718048195335,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 229.48109548865432,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 230.48856729347386,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 1.5712075465151583,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 2.5786793513346917,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-04",
+      "station": {
+        "value": 280.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": -1.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 1.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CLOTHOID",
+      "centre_x": {
+        "value": 280.05720952033175,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": -0.0759338833601495,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 1.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.05333333333333334,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 3.0557749073643907,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.0518861678435691,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.0518861678435691,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 279.53126643640996,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 280.58315260425354,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": -0.6018769672819341,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 0.45000920056163507,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 2.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-05",
+      "station": {
+        "value": 350.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": 3.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CIRCULARARC",
+      "centre_x": {
+        "value": 348.9489095099006,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 12.229067729920063,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.18,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 10.313240312354818,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.1628732662139456,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.1628732662139456,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 348.3674728767936,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 349.5303461430076,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 11.64763109681309,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 12.810504363027036,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-06",
+      "station": {
+        "value": 400.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 2.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CIRCULARARC",
+      "centre_x": {
+        "value": 398.1490357993229,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 20.67166389023093,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 2.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.28,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 16.04281826366305,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.2374110868748847,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.2374110868748847,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 397.5303302558855,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 398.76774134276036,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 20.05295834679349,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 21.290369433668374,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 2.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 3.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-07",
+      "station": {
+        "value": 500.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": -3.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CIRCULARARC",
+      "centre_x": {
+        "value": 492.4770264024027,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 54.597439426246815,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.48,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 27.501974166279513,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.348774098320767,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.348774098320767,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 491.80263935324234,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 493.1514134515631,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 53.923052377086435,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 55.271826475407195,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-08",
+      "station": {
+        "value": 590.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CIRCULARARC",
+      "centre_x": {
+        "value": 565.9165206520096,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 106.99325952843124,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.66,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 37.81521447863433,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.4031090834707989,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.4031090834707989,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 565.2149661102742,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 566.618075193745,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 106.29170498669583,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 107.69481407016664,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-09",
+      "station": {
+        "value": 650.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": -2.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "CLOTHOID",
+      "centre_x": {
+        "value": 613.0585922216318,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 144.256060593983,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.7725000000000001,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 44.2609896738561,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.4140959278678904,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.4140959278678904,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 612.3515442576978,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 613.7656401855658,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 143.54901263004905,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 144.96310855791694,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    },
+    {
+      "name": "BOX-10",
+      "station": {
+        "value": 880.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "design parameter, distance along the horizontal basis curve"
+      },
+      "lateral_offset": {
+        "value": 2.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetLateral, positive left"
+      },
+      "vertical_offset": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "IfcPointByDistanceExpression.OffsetVertical, global up"
+      },
+      "segment": "LINE",
+      "centre_x": {
+        "value": 764.7976259621215,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "x(s) - o*sin(h), with x(s)=integral of cos(heading)"
+      },
+      "centre_y": {
+        "value": 317.2432704412418,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "y(s) + o*cos(h), with y(s)=integral of sin(heading)"
+      },
+      "centre_z": {
+        "value": 0.5,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "vertical offset; the basis curve is the horizontal alignment"
+      },
+      "heading": {
+        "value": 0.84,
+        "unit": "rad",
+        "tolerance": 1e-12,
+        "note": "closed form from the clothoid/arc/line design parameters"
+      },
+      "yaw_degrees": {
+        "value": 48.12845479098915,
+        "unit": "deg",
+        "tolerance": 1e-10,
+        "note": "heading converted to degrees"
+      },
+      "volume": {
+        "value": 1.0,
+        "unit": "m3",
+        "tolerance": 0.0001,
+        "note": "1 x 1 x 1 m box, closed form; the 1e-4 m3 tolerance allows for 32-bit float vertex positions in the viewer"
+      },
+      "bbox_size_x": {
+        "value": 1.4121059458121674,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_y": {
+        "value": 1.4121059458121674,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "(|cos h| + |sin h|) * 1 m for a yawed unit box; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_size_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "box height; 1e-3 m allows for 32-bit float vertex positions"
+      },
+      "bbox_min_x": {
+        "value": 764.0915729892155,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x minus half the yawed extent"
+      },
+      "bbox_max_x": {
+        "value": 765.5036789350276,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_x plus half the yawed extent"
+      },
+      "bbox_min_y": {
+        "value": 316.5372174683357,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y minus half the yawed extent"
+      },
+      "bbox_max_y": {
+        "value": 317.9493234141479,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "centre_y plus half the yawed extent"
+      },
+      "bbox_min_z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z minus half the box height"
+      },
+      "bbox_max_z": {
+        "value": 1.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "centre_z plus half the box height"
+      }
+    }
+  ]
+}

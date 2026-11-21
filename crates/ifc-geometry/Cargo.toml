@@ -1,0 +1,16 @@
+[package]
+name = "ifc-geometry"
+description = "IFC geometry evaluation: placements, solids, meshes and booleans"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+step-parser.workspace = true
+ifc-schema.workspace = true
+glam.workspace = true
+earcut.workspace = true
+
+[lints]
+workspace = true

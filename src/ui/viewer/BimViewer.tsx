@@ -1,43 +1,130 @@
-import React, { useEffect, useRef, useState, type DragEvent } from 'react';
-import { bimEngine } from '../../infrastructure/ifclite/BimEngine';
-import { RefreshCw, Box, Compass, Eye, UploadCloud } from 'lucide-react';
-import type { ModelId } from '../../domain/models/ModelRecord';
+import React, { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { RefreshCw, Box, Compass, Eye, UploadCloud, Activity, Maximize2, Footprints, Frame } from 'lucide-react';
+import { PerfMonitor } from '../components/PerfMonitor';
+import { ViewCube } from '../components/ViewCube';
+import type { ElementRef } from '../../domain/models/ModelRecord';
+import type {
+  CameraPose,
+  CameraProjection,
+  NavigationMode,
+  RendererEventHandlers,
+  RendererPort
+} from '../../domain/kernel/RendererPort';
+import { t } from '../i18n';
 
 interface BimViewerProps {
+  renderer: RendererPort;
   onOpenFile: (file: File) => void;
-  onSelectElement: (modelId: ModelId | null, expressId: number | null) => void;
+  onOpenFiles?: (files: readonly File[]) => void;
+  onSelectElement: (ref: ElementRef | null) => void;
+  onHoverElement?: (ref: ElementRef | null) => void;
+  onInitError?: (message: string | null) => void;
+  hasSelection?: boolean;
+  onZoomToSelection?: () => void;
+  /** Measure mode and frames, passed to the renderer as they are. */
+  onPoint?: RendererEventHandlers['onPoint'];
+  onPointerMove?: RendererEventHandlers['onPointerMove'];
+  onFrame?: RendererEventHandlers['onFrame'];
   statusText: string;
   isWorking: boolean;
+  /** Drawn over the canvas, in its coordinates. */
+  children?: ReactNode;
+  /** C24: the storeys a user can walk, lowest first, the one walked (an index) and its setter. */
+  storeys?: ReadonlyArray<{ name: string; level: number }>;
+  walkStorey?: number | null;
+  onWalkStorey?: (index: number | null) => void;
 }
 
 export const BimViewer: React.FC<BimViewerProps> = ({
+  renderer,
   onOpenFile,
+  onOpenFiles,
   onSelectElement,
+  onHoverElement,
+  onInitError,
+  hasSelection = false,
+  onZoomToSelection,
+  onPoint,
+  onPointerMove,
+  onFrame,
   statusText,
-  isWorking
+  isWorking,
+  children,
+  storeys = [],
+  walkStorey = null,
+  onWalkStorey
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [showPerfMonitor, setShowPerfMonitor] = useState(false);
+  const [cameraPose, setCameraPose] = useState<CameraPose | null>(() => renderer.getCameraPose());
+  const [projection, setProjection] = useState<CameraProjection>(() => renderer.getProjection());
+  const [navMode, setNavMode] = useState<NavigationMode>(() => renderer.getNavigationMode());
+  // C17: edges and outlines over the opaque geometry, on by default (Nick, 2026-11-20).
+  const [edges, setEdges] = useState<boolean>(() => renderer.getEdges());
+
+  const handleFrame = useCallback(() => {
+    const pose = renderer.getCameraPose();
+    setCameraPose(pose);
+    setProjection(renderer.getProjection());
+    setNavMode(renderer.getNavigationMode());
+    // Fitting, a view preset or a saved view release the storey: the menu follows.
+    if (walkStorey !== null && renderer.getEyeLock() === null) onWalkStorey?.(null);
+    onFrame?.();
+  }, [renderer, onFrame, walkStorey, onWalkStorey]);
+
+  useEffect(() => {
+    renderer.setHandlers({
+      onSelect: (ref) => onSelectElement(ref),
+      onHover: (ref) => onHoverElement?.(ref),
+      onPoint,
+      onPointerMove,
+      onFrame: handleFrame
+    });
+  }, [renderer, onSelectElement, onHoverElement, onPoint, onPointerMove, handleFrame]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    bimEngine.setHandlers({
-      onSelectElement: (mId, eId) => onSelectElement(mId, eId)
-    });
-
-    bimEngine
+    renderer
       .initialize(canvasRef.current)
+      .then(() => {
+        setInitError(null);
+        setCameraPose(renderer.getCameraPose());
+        setProjection(renderer.getProjection());
+        setNavMode(renderer.getNavigationMode());
+        onInitError?.(null);
+      })
       .catch((err) => {
-        console.error('Error initializing BimEngine:', err);
-        setInitError(err instanceof Error ? err.message : 'Error al inicializar WebGPU');
+        console.error('Error initializing renderer:', err);
+        const msg = err instanceof Error ? err.message : t('viewer.initWebGpuError');
+        setInitError(msg);
+        onInitError?.(msg);
       });
 
     return () => {
-      bimEngine.destroy();
+      renderer.destroy();
     };
-  }, []);
+  }, [renderer, onInitError]);
+
+  const handleToggleProjection = () => {
+    const next: CameraProjection = projection === 'perspective' ? 'orthographic' : 'perspective';
+    renderer.setProjection(next);
+    setProjection(next);
+  };
+
+  const handleToggleEdges = () => {
+    renderer.setEdges(!edges);
+    setEdges(!edges);
+  };
+
+  const handleToggleNavMode = () => {
+    const next: NavigationMode = navMode === 'orbit' ? 'first-person' : 'orbit';
+    if (next === 'orbit' && walkStorey !== null) onWalkStorey?.(null);
+    renderer.setNavigationMode(next);
+    setNavMode(next);
+  };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -51,9 +138,14 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.name.toLowerCase().endsWith('.ifc')) {
-      onOpenFile(file);
+    const files = Array.from(e.dataTransfer.files ?? []).filter((f) =>
+      f.name.toLowerCase().endsWith('.ifc')
+    );
+    if (files.length === 0) return;
+    if (onOpenFiles) {
+      onOpenFiles(files);
+    } else {
+      onOpenFile(files[0]);
     }
   };
 
@@ -65,39 +157,109 @@ export const BimViewer: React.FC<BimViewerProps> = ({
       onDrop={handleDrop}
     >
       <canvas ref={canvasRef} className="bim-viewport" tabIndex={0} />
+      {children}
 
       {/* Floating viewport controls */}
       <div className="viewport-overlay-toolbar">
         <button
           className="btn btn-ghost btn-icon"
-          onClick={() => bimEngine.setViewPreset('iso')}
-          title="Vista Isométrica"
+          onClick={() => renderer.setViewPreset('iso')}
+          title={t('viewer.presetIsoTitle')}
         >
           <Box size={15} />
         </button>
         <button
           className="btn btn-ghost btn-icon"
-          onClick={() => bimEngine.setViewPreset('top')}
-          title="Vista Planta (Superior)"
+          onClick={() => renderer.setViewPreset('top')}
+          title={t('viewer.presetTopTitle')}
         >
           <Compass size={15} />
         </button>
         <button
           className="btn btn-ghost btn-icon"
-          onClick={() => bimEngine.setViewPreset('front')}
-          title="Vista Frontal"
+          onClick={() => renderer.setViewPreset('front')}
+          title={t('viewer.presetFrontTitle')}
         >
           <Eye size={15} />
         </button>
         <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
         <button
           className="btn btn-ghost btn-icon"
-          onClick={() => bimEngine.fitToView()}
-          title="Encuadrar modelo"
+          onClick={() => renderer.fitToView()}
+          title={t('viewer.fitTitle')}
         >
           <RefreshCw size={14} />
         </button>
+        <button
+          className="btn btn-ghost btn-icon nav-zoom-sel-btn"
+          disabled={!hasSelection}
+          onClick={() => onZoomToSelection?.()}
+          title={t('viewer.zoomSelectionTitle')}
+        >
+          <Maximize2 size={14} />
+        </button>
+        <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
+        <button
+          className={`btn btn-ghost nav-proj-btn ${projection === 'orthographic' ? 'active' : ''}`}
+          aria-pressed={projection === 'orthographic'}
+          onClick={handleToggleProjection}
+          title={t('viewer.toggleProjectionTitle')}
+          style={{ fontSize: '11px', padding: '4px 8px', height: '26px' }}
+        >
+          {projection === 'orthographic' ? t('common.orthoShort') : t('common.perspShort')}
+        </button>
+        <button
+          className={`btn btn-ghost btn-icon nav-edges-btn ${edges ? 'active' : ''}`}
+          aria-pressed={edges}
+          aria-label={t('viewer.edgesLabel')}
+          onClick={handleToggleEdges}
+          title={t('viewer.edgesTitle')}
+        >
+          <Frame size={14} />
+        </button>
+        {storeys.length > 0 && onWalkStorey && (
+          <select
+            className="nav-storey-select"
+            value={walkStorey === null ? '' : String(walkStorey)}
+            onChange={(e) => onWalkStorey(e.target.value === '' ? null : Number(e.target.value))}
+            title={t('viewer.storeyTitle')}
+            style={{ fontSize: '11px', height: '26px', maxWidth: '110px' }}
+          >
+            <option value="">{t('viewer.storeyFree')}</option>
+            {storeys.map((storey, index) => (
+              <option key={`${storey.name}-${storey.level}`} value={String(index)}>
+                {storey.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <button
+          className={`btn btn-ghost nav-fp-btn ${navMode === 'first-person' ? 'active' : ''}`}
+          aria-pressed={navMode === 'first-person'}
+          onClick={handleToggleNavMode}
+          title={t('viewer.toggleNavModeTitle')}
+          style={{ fontSize: '11px', padding: '4px 8px', height: '26px', gap: '4px', whiteSpace: 'nowrap' }}
+        >
+          <Footprints size={13} />
+          <span>{navMode === 'first-person' ? t('viewer.navFirstPerson') : t('viewer.navOrbit')}</span>
+        </button>
+        <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
+        <button
+          className={`btn btn-ghost btn-icon perf-toggle-btn ${showPerfMonitor ? 'active' : ''}`}
+          aria-pressed={showPerfMonitor}
+          onClick={() => setShowPerfMonitor((prev) => !prev)}
+          title={t('viewer.perfMonitorTitle')}
+        >
+          <Activity size={14} />
+        </button>
       </div>
+
+      <ViewCube
+        pose={cameraPose}
+        onSelectPreset={(preset) => renderer.setViewPreset(preset)}
+      />
+
+      {showPerfMonitor && <PerfMonitor renderer={renderer} />}
 
       {/* Status toast */}
       {(statusText || isWorking) && (
@@ -130,15 +292,15 @@ export const BimViewer: React.FC<BimViewerProps> = ({
         <div className="dropzone-overlay">
           <UploadCloud size={48} color="#38bdf8" style={{ marginBottom: '12px' }} />
           <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'white' }}>
-            Suelta el archivo IFC aquí
+            {t('viewer.dropTitle')}
           </h3>
           <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            Se procesará localmente en el navegador mediante WebAssembly
+            {t('viewer.dropSubtitle')}
           </p>
         </div>
       )}
 
-      {/* WebGPU Error Banner */}
+      {/* Init Error Banner */}
       {initError && (
         <div
           style={{
@@ -148,17 +310,18 @@ export const BimViewer: React.FC<BimViewerProps> = ({
             transform: 'translate(-50%, -50%)',
             background: 'rgba(15, 23, 42, 0.95)',
             border: '1px solid #ef4444',
-            padding: '24px',
+            padding: '20px',
             borderRadius: '8px',
-            maxWidth: '440px',
+            color: '#f8fafc',
+            maxWidth: '420px',
             textAlign: 'center',
             zIndex: 30
           }}
         >
-          <h3 style={{ color: '#ef4444', fontSize: '16px', marginBottom: '8px' }}>
-            Aviso de compatibilidad
-          </h3>
-          <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5' }}>{initError}</p>
+          <h4 style={{ color: '#ef4444', marginBottom: '8px', fontWeight: 600 }}>
+            {t('viewer.initErrorTitle')}
+          </h4>
+          <p style={{ fontSize: '12px', color: '#cbd5e1' }}>{initError}</p>
         </div>
       )}
     </div>

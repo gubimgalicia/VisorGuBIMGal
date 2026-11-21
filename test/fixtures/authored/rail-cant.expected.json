@@ -1,0 +1,1543 @@
+{
+  "file": "rail-cant.ifc",
+  "schema": "IFC4X3_ADD2",
+  "authoring": {
+    "tool": "Blender 5.0 with IfcOpenShell 0.8.4",
+    "author": "guBIM",
+    "licence": "MIT OR Apache-2.0"
+  },
+  "units": {
+    "length": "m",
+    "area": "m2",
+    "volume": "m3",
+    "angle": "rad",
+    "count": "1"
+  },
+  "tolerance_note": "Every numeric quantity carries its own tolerance; lengths are in metres in the IFC project coordinate system (no georeferencing). Coordinate tolerances are 1 mm (1e-3 m), the accuracy a viewer needs; the independent integration itself is good to about 1e-9 m.",
+  "computation": {
+    "horizontal": "x(s) = integral of cos(heading(t)) dt from 0 to s, y(s) = integral of sin(heading(t)) dt; heading comes from the clothoid/arc/line design parameters. Composite 8-point Gauss-Legendre, intervals <= 10 m, estimated error < 1e-9 m; checked against the closed-form clothoid power series and the mirrored R->infinity clothoid identity. Nothing here uses IfcOpenShell geometry.",
+    "vertical": "z(s) = integral of the piecewise gradient; constant gradients integrate to lines, the parabolic arc to a quadratic. Closed form, no numeric error.",
+    "cant": "Cant is authored as IfcAlignmentCant + IfcAlignmentCantSegment with a rail head distance of 1.5 m. Values are rail heights over the vertical alignment per IFC 4.3: the left rail rises from 0 to 0.04 m and back to 0, the right rail stays at 0. The kernel is expected to report cant as ignored; the expected x/y/z below are the plain horizontal/vertical centreline and contain no cant contribution. The cant_left_ignored / cant_right_ignored fields document the authored data only."
+  },
+  "expected_kernel_behaviour": {
+    "cant": "ignored (report the IfcAlignmentCant data as unsupported/ignored); geometry must equal the horizontal + vertical alignment without any transverse rotation.",
+    "max_cant_angle_if_applied": {
+      "value": 0.026660348374597954,
+      "unit": "rad",
+      "tolerance": 1e-12,
+      "note": "atan((left-right)/rail head distance) in the constant 0.04 m section; informational only"
+    }
+  },
+  "counts": {
+    "IfcProject": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignment": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one alignment, one vertical layout, one cant layout, no child alignments"
+    },
+    "IfcAlignmentHorizontal": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignmentVertical": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignmentCant": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "authored"
+    },
+    "IfcAlignmentHorizontalSegment": {
+      "value": 6,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "5 design parameter segments plus the zero-length closing segment"
+    },
+    "IfcAlignmentVerticalSegment": {
+      "value": 4,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "3 design parameter segments plus the zero-length closing segment"
+    },
+    "IfcAlignmentCantSegment": {
+      "value": 6,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "5 design parameter segments plus the zero-length closing segment"
+    },
+    "IfcAlignmentSegment": {
+      "value": 16,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one per design segment plus one zero-length closing segment per layout"
+    },
+    "IfcCurveSegment": {
+      "value": 16,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "one per IfcAlignmentSegment"
+    },
+    "IfcCompositeCurve": {
+      "value": 3,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "by_type includes subtypes: horizontal basis curve, IfcGradientCurve and IfcSegmentedReferenceCurve; exact-type count is 1"
+    },
+    "IfcGradientCurve": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "vertical representation on the basis curve"
+    },
+    "IfcSegmentedReferenceCurve": {
+      "value": 1,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "cant representation on the basis curve"
+    },
+    "IfcReferent": {
+      "value": 33,
+      "unit": "1",
+      "tolerance": 0,
+      "note": "16 station referents plus 17 key-point referents inserted by the alignment API"
+    }
+  },
+  "referents": {
+    "stations": [
+      "STA 0+000.000",
+      "STA 0+100.000",
+      "STA 0+120.000",
+      "STA 0+200.000",
+      "STA 0+220.000",
+      "STA 0+250.000",
+      "STA 0+300.000",
+      "STA 0+400.000",
+      "STA 0+450.000",
+      "STA 0+470.000",
+      "STA 0+500.000",
+      "STA 0+550.000",
+      "STA 0+570.000",
+      "STA 0+600.000",
+      "STA 0+700.000",
+      "STA 0+720.000"
+    ],
+    "key_points": [
+      "0+000.000",
+      "C.P.O.B. (0+000.000)",
+      "C.P.O.E. (0+720.000)",
+      "C.S. (0+470.000)",
+      "C.T.E. (0+300.000)",
+      "C.T.E. (0+550.000)",
+      "C.T.S. (0+220.000)",
+      "C.T.S. (0+470.000)",
+      "P.O.B. (0+000.000)",
+      "P.O.E. (0+720.000)",
+      "P.V.C. (0+250.000)",
+      "P.V.T. (0+450.000)",
+      "S.C. (0+220.000)",
+      "S.T. (0+570.000)",
+      "T.S. (0+120.000)",
+      "V.P.O.B. (0+000.000)",
+      "V.P.O.E. (0+720.000)"
+    ]
+  },
+  "horizontal": {
+    "total_length": {
+      "value": 720.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "120 + 100 + 250 + 100 + 150"
+    },
+    "turning_direction": "left (counter-clockwise, heading increases)",
+    "segments": [
+      {
+        "index": 1,
+        "type": "LINE",
+        "start_station": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 120.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 120.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_x": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "start_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "end_x": {
+          "value": 120.00000000000001,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "end_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "start_radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        },
+        "end_radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        }
+      },
+      {
+        "index": 2,
+        "type": "CLOTHOID",
+        "start_station": {
+          "value": 120.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 220.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_x": {
+          "value": 120.00000000000001,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "start_y": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "end_x": {
+          "value": 219.93057787850978,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "end_y": {
+          "value": 2.7764002162323727,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "start_heading": {
+          "value": 0.0,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.08333333333333333,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "start_radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        },
+        "end_radius": {
+          "value": 600.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        }
+      },
+      {
+        "index": 3,
+        "type": "CIRCULARARC",
+        "start_station": {
+          "value": 220.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 470.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 250.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_x": {
+          "value": 219.93057787850978,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "start_y": {
+          "value": 2.7764002162323727,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "end_x": {
+          "value": 457.6437513208455,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "end_y": {
+          "value": 74.14473510234444,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "start_heading": {
+          "value": 0.08333333333333333,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "start_radius": {
+          "value": 600.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        },
+        "end_radius": {
+          "value": 600.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        }
+      },
+      {
+        "index": 4,
+        "type": "CLOTHOID",
+        "start_station": {
+          "value": 470.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 570.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 100.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_x": {
+          "value": 457.6437513208455,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "start_y": {
+          "value": 74.14473510234444,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "end_x": {
+          "value": 542.5782019242149,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "end_y": {
+          "value": 126.87013594479788,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "start_heading": {
+          "value": 0.5,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.5833333333333333,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "start_radius": {
+          "value": 600.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        },
+        "end_radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        }
+      },
+      {
+        "index": 5,
+        "type": "LINE",
+        "start_station": {
+          "value": 570.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 720.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + length"
+        },
+        "length": {
+          "value": 150.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_x": {
+          "value": 542.5782019242149,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "start_y": {
+          "value": 126.87013594479788,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "end_x": {
+          "value": 667.7728908989633,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "cos(heading) integrated from 0"
+        },
+        "end_y": {
+          "value": 209.4915003278434,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "sin(heading) integrated from 0"
+        },
+        "start_heading": {
+          "value": 0.5833333333333333,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "end_heading": {
+          "value": 0.5833333333333334,
+          "unit": "rad",
+          "tolerance": 1e-12,
+          "note": "closed form from the design parameters"
+        },
+        "start_radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        },
+        "end_radius": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "0 means infinite radius (straight)"
+        }
+      }
+    ]
+  },
+  "vertical": {
+    "total_length": {
+      "value": 720.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "250 + 200 + 270, equals the horizontal length"
+    },
+    "segments": [
+      {
+        "index": 1,
+        "type": "CONSTANTGRADIENT",
+        "start_station": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 250.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 250.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "horizontal length"
+        },
+        "start_height": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_height": {
+          "value": 2.500000000000001,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "gradient integrated from 0"
+        },
+        "start_gradient": {
+          "value": 0.01,
+          "unit": "1",
+          "tolerance": 1e-12,
+          "note": "design parameter"
+        },
+        "end_gradient": {
+          "value": 0.01,
+          "unit": "1",
+          "tolerance": 1e-12,
+          "note": "design parameter"
+        }
+      },
+      {
+        "index": 2,
+        "type": "PARABOLICARC",
+        "start_station": {
+          "value": 250.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 450.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 200.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "horizontal length"
+        },
+        "start_height": {
+          "value": 2.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_height": {
+          "value": 2.500000000000001,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "gradient integrated from 0"
+        },
+        "start_gradient": {
+          "value": 0.01,
+          "unit": "1",
+          "tolerance": 1e-12,
+          "note": "design parameter"
+        },
+        "end_gradient": {
+          "value": -0.01,
+          "unit": "1",
+          "tolerance": 1e-12,
+          "note": "design parameter"
+        }
+      },
+      {
+        "index": 3,
+        "type": "CONSTANTGRADIENT",
+        "start_station": {
+          "value": 450.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 720.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 270.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "horizontal length"
+        },
+        "start_height": {
+          "value": 2.5,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_height": {
+          "value": -0.2000000000000002,
+          "unit": "m",
+          "tolerance": 0.001,
+          "note": "gradient integrated from 0"
+        },
+        "start_gradient": {
+          "value": -0.01,
+          "unit": "1",
+          "tolerance": 1e-12,
+          "note": "design parameter"
+        },
+        "end_gradient": {
+          "value": -0.01,
+          "unit": "1",
+          "tolerance": 1e-12,
+          "note": "design parameter"
+        }
+      }
+    ]
+  },
+  "cant": {
+    "rail_head_distance": {
+      "value": 1.5,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "IfcAlignmentCant.RailHeadDistance"
+    },
+    "total_length": {
+      "value": 720.0,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "220 + 80 + 170 + 80 + 170"
+    },
+    "constant_cant": {
+      "value": 0.04,
+      "unit": "m",
+      "tolerance": 1e-09,
+      "note": "left rail height in the constant section; right rail at 0"
+    },
+    "segments": [
+      {
+        "index": 1,
+        "type": "CONSTANTCANT",
+        "start_station": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 220.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 220.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_cant_left": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_left": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "start_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        }
+      },
+      {
+        "index": 2,
+        "type": "LINEARTRANSITION",
+        "start_station": {
+          "value": 220.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 300.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 80.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_cant_left": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_left": {
+          "value": 0.04,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "start_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        }
+      },
+      {
+        "index": 3,
+        "type": "CONSTANTCANT",
+        "start_station": {
+          "value": 300.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 470.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 170.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_cant_left": {
+          "value": 0.04,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_left": {
+          "value": 0.04,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "start_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        }
+      },
+      {
+        "index": 4,
+        "type": "LINEARTRANSITION",
+        "start_station": {
+          "value": 470.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 550.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 80.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_cant_left": {
+          "value": 0.04,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_left": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "start_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        }
+      },
+      {
+        "index": 5,
+        "type": "CONSTANTCANT",
+        "start_station": {
+          "value": 550.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "end_station": {
+          "value": 720.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "start + horizontal length"
+        },
+        "length": {
+          "value": 170.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "design parameter"
+        },
+        "start_cant_left": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_left": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "start_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        },
+        "end_cant_right": {
+          "value": 0.0,
+          "unit": "m",
+          "tolerance": 1e-09,
+          "note": "rail height over the vertical alignment"
+        }
+      }
+    ]
+  },
+  "stations": [
+    {
+      "station": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "LINE",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 100.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 100.00000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 0.9999999999999999,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "LINE",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 120.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 120.00000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 1.2,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CLOTHOID",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 200.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 199.97724744086418,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 1.421933288937586,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.0000000000000004,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CLOTHOID",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 220.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 219.93057787850978,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 2.7764002162323727,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.2000000000000006,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CIRCULARARC",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 250.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 249.75160173171207,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 6.019709016060434,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.500000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CIRCULARARC",
+      "cant_left_ignored": {
+        "value": 0.015,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 300.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 298.97368329121366,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 14.722597188786171,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.8750000000000013,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CIRCULARARC",
+      "cant_left_ignored": {
+        "value": 0.04,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 400.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 394.3967992373496,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 44.24042600162813,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.8750000000000013,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CIRCULARARC",
+      "cant_left_ignored": {
+        "value": 0.04,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 450.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 439.9355564919235,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 64.85050031751048,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.500000000000001,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CIRCULARARC",
+      "cant_left_ignored": {
+        "value": 0.04,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 470.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 457.6437513208455,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 74.14473510234444,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.3000000000000007,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CLOTHOID",
+      "cant_left_ignored": {
+        "value": 0.04,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 500.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 483.63901823838376,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 89.11505093389901,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 2.0000000000000004,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CLOTHOID",
+      "cant_left_ignored": {
+        "value": 0.025,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 550.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 525.8733550825172,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 115.87251361386379,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 1.5,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "CLOTHOID",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 570.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 542.5782019242149,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 126.87013594479788,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 1.2999999999999998,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "LINE",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 600.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 567.6171397191646,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 143.39440882140698,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": 0.9999999999999997,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "LINE",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 700.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 651.0802657023302,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 198.475318410104,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": -1.942890293094024e-16,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "LINE",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    },
+    {
+      "station": {
+        "value": 720.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "stationing matches distance along (start 0, no equations)"
+      },
+      "x": {
+        "value": 667.7728908989633,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "cos(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "y": {
+        "value": 209.4915003278434,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "sin(heading) integrated with 8-point Gauss-Legendre, steps <= 10 m"
+      },
+      "z": {
+        "value": -0.2000000000000002,
+        "unit": "m",
+        "tolerance": 0.001,
+        "note": "piecewise linear / parabolic gradient integrated analytically"
+      },
+      "segment": "LINE",
+      "cant_left_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      },
+      "cant_right_ignored": {
+        "value": 0.0,
+        "unit": "m",
+        "tolerance": 1e-09,
+        "note": "authored rail height; must not affect x/y/z"
+      }
+    }
+  ]
+}

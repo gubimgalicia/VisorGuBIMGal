@@ -1,0 +1,19 @@
+{
+  "svgElements": {
+    "svg": 1,
+    "g": 1,
+    "path": 2
+  },
+  "loops": 7,
+  "layers": {
+    "Basic_Wall_Bearing_Wall": 6.97,
+    "Door_-_Frame": 2.74
+  },
+  "extents": [
+    -1.693309,
+    -0.130569,
+    2.306691,
+    0.119431
+  ],
+  "diagnostics": []
+}

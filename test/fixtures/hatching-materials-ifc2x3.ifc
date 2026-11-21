@@ -1,0 +1,37 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('ViewDefinition [CoordinationView_V2.0]','Hand-authored fixture for IFC2x3 cut hatching from material fill area styles'),'2;1');
+FILE_NAME('hatching-materials-ifc2x3.ifc','2026-11-03T12:00:00',('guBIM'),('guBIM Sovereign Kernel'),'1.0','hand-authored','MIT OR Apache-2.0');
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0hAtch2x30000000000001',#2,'Tramas IFC2x3',$,$,$,$,(#10),#20);
+#2=IFCOWNERHISTORY(#3,#4,$,.ADDED.,$,$,$,1700000000);
+#3=IFCPERSONANDORGANIZATION(#5,#6,$);
+#4=IFCAPPLICATION(#6,'1.0','guBIM Fixture Author','guBIM');
+#5=IFCPERSON($,'guBIM',$,$,$,$,$,$);
+#6=IFCORGANIZATION($,'guBIM',$,$,$);
+#10=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#11,$);
+#11=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+/* Metres, and no angle unit: radians. */
+#20=IFCUNITASSIGNMENT((#21));
+#21=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+/* A material list: its first material holds the hatch, 30 degrees, with a repeat vector of 0.3 m straight up. */
+#100=IFCWALL('0hAtch2x30000000000010',#2,'Muro',$,$,$,$,$);
+#200=IFCMATERIAL('Piedra');
+#201=IFCMATERIAL('Mortero');
+#202=IFCMATERIALLIST((#200,#201));
+#203=IFCRELASSOCIATESMATERIAL('0hAtch2x30000000000011',#2,$,$,(#100),#202);
+#204=IFCMATERIALDEFINITIONREPRESENTATION($,$,(#205),#200);
+#205=IFCSTYLEDREPRESENTATION(#10,'Style','Material',(#206));
+#206=IFCSTYLEDITEM($,(#207),$);
+#207=IFCPRESENTATIONSTYLEASSIGNMENT((#208));
+#208=IFCFILLAREASTYLE($,(#209));
+#209=IFCFILLAREASTYLEHATCHING(#210,#211,$,$,0.523598775598299);
+#210=IFCCURVESTYLE($,$,$,$);
+#211=IFCONEDIRECTIONREPEATFACTOR(#212);
+#212=IFCVECTOR(#213,0.3);
+#213=IFCDIRECTION((0.,1.));
+ENDSEC;
+END-ISO-10303-21;

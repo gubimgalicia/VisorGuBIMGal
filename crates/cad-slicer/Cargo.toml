@@ -1,0 +1,17 @@
+[package]
+name = "cad-slicer"
+description = "Plan and section cuts, hidden lines, hatching, DXF and SVG export"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ifc-geometry.workspace = true
+glam.workspace = true
+
+[dev-dependencies]
+step-parser.workspace = true
+
+[lints]
+workspace = true

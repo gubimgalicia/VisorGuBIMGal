@@ -1,0 +1,31 @@
+{
+  "comment": "Public IFC models used for testing and the benchmark. Downloaded into test/models/ (gitignored) by scripts/fetch-models.mjs; never committed. Licences: Sample-Test-Files CC BY 4.0, (C) buildingSMART International Ltd.; Community-Sample-Test-Files contributions under CC BY 4.0, authors in each folder's README; IFC4.3.x-sample-models (C) buildingSMART International Ltd., all rights reserved until formal release, local testing only.",
+  "sources": [
+    {
+      "name": "Sample-Test-Files",
+      "repo": "https://github.com/buildingSMART/Sample-Test-Files.git",
+      "licence": "CC-BY-4.0"
+    },
+    {
+      "name": "IFC4.3.x-sample-models",
+      "repo": "https://github.com/buildingSMART/IFC4.3.x-sample-models.git",
+      "licence": "All rights reserved until formal release (local testing only)"
+    },
+    {
+      "name": "Community-Sample-Test-Files",
+      "repo": "https://github.com/buildingsmart-community/Community-Sample-Test-Files.git",
+      "licence": "CC-BY-4.0 (contributors)"
+    }
+  ],
+  "bench": {
+    "comment": "Real models for the kernel benchmark, pinned by commit and sha256 (the Git LFS oid).",
+    "base": "https://media.githubusercontent.com/media/buildingsmart-community/Community-Sample-Test-Files/31eb1dd0a0406fb9ebf0ebd823b48e1ec95afc08/",
+    "models": [
+      { "name": "Duplex A", "path": "IFC 2.3.0.1 (IFC 2x3)/Duplex Apartment/Duplex_A_20110907.ifc", "sha256": "b347a2c8aa8fff6db896a4417a9c50c22ac0ccd7c5cfc22b99b8d29336c606ed", "bytes": 2380763 },
+      { "name": "Clinic architecture", "path": "IFC 2.3.0.1 (IFC 2x3)/Medical-Dental Clinic/Clinic_Architectural.ifc", "sha256": "2ac970ce065ecac4e0c9e5f453a257169e90d0067f419b7e33533a64ef837880", "bytes": 13003205 },
+      { "name": "Clinic plumbing", "path": "IFC 2.3.0.1 (IFC 2x3)/Medical-Dental Clinic/Clinic_Plumbing.ifc", "sha256": "e662a8d0273694b745a313fc18ee8d4916db03453caa8f9d00d4d80b62bb6e23", "bytes": 55834520 },
+      { "name": "Esplanades", "path": "IFC 2.3.0.1 (IFC 2x3)/Esplanades/1807_EP_AR_v18.ifc", "sha256": "b97db10a2cb679a6543ccf4e34cfa8e77753f14e67f51b403e6cd9a819e3748f", "bytes": 12109172 },
+      { "name": "Schependomlaan", "path": "IFC 2.3.0.1 (IFC 2x3)/Schependomlaan/As Planned models/IFC Schependomlaan incl planningsdata.ifc", "sha256": "57fafa59f03b18c05be211a456e346bdd0445d5c35d66522e598d339e81dfcf4", "bytes": 65078748 }
+    ]
+  }
+}
