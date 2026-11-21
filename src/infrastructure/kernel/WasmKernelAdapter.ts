@@ -1,4 +1,5 @@
 import type { ElementRef, ModelId } from '../../domain/models/ModelRecord';
+import type { ClashReport, ClashRequest, ClashResultItem } from '../../domain/clash/ClashTypes';
 import type { ElementSnapshot } from '../../domain/compare/modelDiff';
 import type { DrawingExportConfig, DrawingOptions } from '../../domain/drawings/DrawingTypes';
 import {
@@ -398,5 +399,374 @@ export class WasmKernelAdapter implements KernelPort {
     this.workers.get(modelId)?.terminate();
     this.workers.delete(modelId);
     this.references.delete(modelId);
+  }
+
+  async detectClashes(
+    request: ClashRequest,
+    onProgress?: ProgressHandler
+  ): Promise<ClashReport> {
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const clearanceM =
+      Number.isFinite(request.clearanceM) && request.clearanceM > 0 ? request.clearanceM : 0;
+    const maxResults =
+      request.maxResults !== undefined && request.maxResults > 0
+        ? Math.floor(request.maxResults)
+        : 5000;
+    const diagnostics: KernelDiagnostic[] = [];
+
+    // Collect deduplicated requested expressIds per open model.
+    const modelIndexById = new Map<ModelId, number>();
+    const modelIds: ModelId[] = [];
+    const wantedByModel = new Map<ModelId, Set<number>>();
+    const registerSpec = (modelId: ModelId, expressIds: readonly number[]) => {
+      if (expressIds.length === 0) return;
+      if (!this.workers.has(modelId)) {
+        if (!diagnostics.some((d) => d.code === 'clash-model-not-open' && d.modelId === modelId)) {
+          diagnostics.push({
+            severity: 'warning',
+            code: 'clash-model-not-open',
+            message: 'El modelo no está disponible y se omite del análisis de interferencias.',
+            modelId
+          });
+        }
+        return;
+      }
+      if (!modelIndexById.has(modelId)) {
+        modelIndexById.set(modelId, modelIds.length);
+        modelIds.push(modelId);
+      }
+      let set = wantedByModel.get(modelId);
+      if (!set) {
+        set = new Set<number>();
+        wantedByModel.set(modelId, set);
+      }
+      for (const id of expressIds) set.add(id);
+    };
+
+    for (const s of request.setA) registerSpec(s.modelId, s.expressIds);
+    for (const s of request.setB) registerSpec(s.modelId, s.expressIds);
+
+    if (modelIds.length === 0) {
+      return {
+        clashes: [],
+        broadPhasePairs: 0,
+        testedPairs: 0,
+        truncated: false,
+        elapsedMs: 0,
+        diagnostics
+      };
+    }
+
+    // Phase 1: compact f64 AABBs per open model (52 B/element).
+    onProgress?.('Calculando cajas envolventes', 5);
+    const boundsByModel = new Map<ModelId, Map<number, [number, number, number, number, number, number]>>();
+    for (const [idx, modelId] of modelIds.entries()) {
+      const worker = this.workers.get(modelId);
+      if (!worker) continue;
+      const ids = Array.from(wantedByModel.get(modelId) ?? []).sort((a, b) => a - b);
+      const idBuf = new Uint32Array(ids);
+      let flat: Float64Array;
+      try {
+        flat = await worker.call<Float64Array>(
+          { op: 'clash-bounds', expressIds: idBuf },
+          [idBuf.buffer]
+        );
+      } catch (err) {
+        if (isClosed(err)) continue;
+        throw err;
+      }
+      const map = new Map<number, [number, number, number, number, number, number]>();
+      for (let i = 0; i + 6 < flat.length; i += 7) {
+        map.set(flat[i], [
+          flat[i + 1],
+          flat[i + 2],
+          flat[i + 3],
+          flat[i + 4],
+          flat[i + 5],
+          flat[i + 6]
+        ]);
+      }
+      boundsByModel.set(modelId, map);
+      onProgress?.('Calculando cajas envolventes', 5 + Math.round(((idx + 1) / modelIds.length) * 20));
+    }
+
+    interface BroadRef {
+      modelId: ModelId;
+      modelIdx: number;
+      expressId: number;
+      box: [number, number, number, number, number, number];
+    }
+
+    const packSide = (specs: readonly { modelId: ModelId; expressIds: readonly number[] }[]) => {
+      const items: BroadRef[] = [];
+      const seen = new Set<string>();
+      for (const spec of specs) {
+        const modelIdx = modelIndexById.get(spec.modelId);
+        const boxes = boundsByModel.get(spec.modelId);
+        if (modelIdx === undefined || !boxes) continue;
+        for (const expressId of spec.expressIds) {
+          const box = boxes.get(expressId);
+          if (!box) continue;
+          const key = `${modelIdx}:${expressId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          items.push({ modelId: spec.modelId, modelIdx, expressId, box });
+        }
+      }
+      const flat = new Float64Array(items.length * 8);
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const o = i * 8;
+        flat[o] = it.modelIdx;
+        flat[o + 1] = it.expressId;
+        flat[o + 2] = it.box[0];
+        flat[o + 3] = it.box[1];
+        flat[o + 4] = it.box[2];
+        flat[o + 5] = it.box[3];
+        flat[o + 6] = it.box[4];
+        flat[o + 7] = it.box[5];
+      }
+      return { items, flat };
+    };
+
+    const sideA = packSide(request.setA);
+    const sideB = packSide(request.setB);
+    if (sideA.items.length === 0 || sideB.items.length === 0) {
+      const elapsedMs = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt
+      );
+      return {
+        clashes: [],
+        broadPhasePairs: 0,
+        testedPairs: 0,
+        truncated: false,
+        elapsedMs,
+        diagnostics
+      };
+    }
+
+    // Phase 2 & 3: dedicated short-lived ClashWorker (16 MiB bounded LRU cache), terminated in finally.
+    const clashWorker = new ModelWorker();
+    const MAX_CACHE_BYTES = 16 * 1024 * 1024;
+    try {
+      await clashWorker.call({ op: 'clash-new', maxCacheBytes: MAX_CACHE_BYTES });
+      onProgress?.('Fase ancha (BVH)', 30);
+      const rawPairs = await clashWorker.call<Uint32Array>(
+        { op: 'clash-broad', aFlat: sideA.flat, bFlat: sideB.flat, clearanceM },
+        [sideA.flat.buffer, sideB.flat.buffer]
+      );
+      const broadPhasePairs = rawPairs.length / 2;
+      if (broadPhasePairs === 0) {
+        const elapsedMs = Math.round(
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt
+        );
+        return {
+          clashes: [],
+          broadPhasePairs: 0,
+          testedPairs: 0,
+          truncated: false,
+          elapsedMs,
+          diagnostics
+        };
+      }
+
+      // Choose the larger unique side as the outer streaming loop, and cache the smaller side.
+      const uniqueA = new Set<number>();
+      const uniqueB = new Set<number>();
+      for (let i = 0; i < rawPairs.length; i += 2) {
+        uniqueA.add(rawPairs[i]);
+        uniqueB.add(rawPairs[i + 1]);
+      }
+      const outerIsA = uniqueA.size > uniqueB.size;
+
+      interface GroupedPair {
+        refA: BroadRef;
+        refB: BroadRef;
+        cached: BroadRef;
+      }
+      const groups = new Map<string, { outer: BroadRef; pairs: GroupedPair[] }>();
+      for (let i = 0; i < rawPairs.length; i += 2) {
+        const refA = sideA.items[rawPairs[i]];
+        const refB = sideB.items[rawPairs[i + 1]];
+        const outer = outerIsA ? refA : refB;
+        const cached = outerIsA ? refB : refA;
+        const key = `${outer.modelIdx}:${outer.expressId}`;
+        let group = groups.get(key);
+        if (!group) {
+          group = { outer, pairs: [] };
+          groups.set(key, group);
+        }
+        group.pairs.push({ refA, refB, cached });
+      }
+
+      type RawMeshPayload = { positions: Float64Array; indices: Uint32Array } | null;
+      type TestReply =
+        | { status: 'miss' }
+        | { status: 'none' }
+        | { status: 'hit'; data: Float64Array };
+
+      const fetchRawMesh = async (ref: BroadRef): Promise<RawMeshPayload> => {
+        const w = this.workers.get(ref.modelId);
+        if (!w) return null;
+        try {
+          return await w.call<RawMeshPayload>({ op: 'clash-mesh', expressId: ref.expressId });
+        } catch (err) {
+          if (isClosed(err)) return null;
+          throw err;
+        }
+      };
+
+      const sentToCache = new Set<string>();
+      const emptyMeshes = new Set<string>();
+      const clashes: ClashResultItem[] = [];
+      let testedPairs = 0;
+      let truncated = false;
+
+      const ensureCached = async (ref: BroadRef, forceRefetch = false): Promise<boolean> => {
+        const key = `${ref.modelIdx}:${ref.expressId}`;
+        if (emptyMeshes.has(key)) return false;
+        if (!forceRefetch && sentToCache.has(key)) return true;
+        const raw = await fetchRawMesh(ref);
+        if (!raw || raw.indices.length === 0) {
+          emptyMeshes.add(key);
+          return false;
+        }
+        const ok = await clashWorker.call<boolean>(
+          {
+            op: 'clash-cache',
+            modelIndex: ref.modelIdx,
+            expressId: ref.expressId,
+            positions: raw.positions,
+            indices: raw.indices
+          },
+          [raw.positions.buffer, raw.indices.buffer]
+        );
+        if (ok) {
+          sentToCache.add(key);
+        } else {
+          emptyMeshes.add(key);
+        }
+        return ok;
+      };
+
+      let donePairs = 0;
+      let lastPct = 30;
+      for (const { outer, pairs } of groups.values()) {
+        if (truncated) break;
+        const outerKey = `${outer.modelIdx}:${outer.expressId}`;
+        if (emptyMeshes.has(outerKey)) {
+          donePairs += pairs.length;
+          continue;
+        }
+        const outerRaw = await fetchRawMesh(outer);
+        if (!outerRaw || outerRaw.indices.length === 0) {
+          emptyMeshes.add(outerKey);
+          donePairs += pairs.length;
+          continue;
+        }
+        const activeOk = await clashWorker.call<boolean>(
+          {
+            op: 'clash-set-active',
+            modelIndex: outer.modelIdx,
+            expressId: outer.expressId,
+            positions: outerRaw.positions,
+            indices: outerRaw.indices
+          },
+          [outerRaw.positions.buffer, outerRaw.indices.buffer]
+        );
+        if (!activeOk) {
+          donePairs += pairs.length;
+          continue;
+        }
+
+        for (const pair of pairs) {
+          if (clashes.length >= maxResults) {
+            truncated = true;
+            break;
+          }
+          const ok = await ensureCached(pair.cached, false);
+          if (!ok) {
+            donePairs++;
+            continue;
+          }
+          let reply = await clashWorker.call<TestReply>({
+            op: 'clash-test',
+            cachedModel: pair.cached.modelIdx,
+            cachedId: pair.cached.expressId,
+            clearanceM
+          });
+          if (reply.status === 'miss') {
+            // LRU evicted this entry: re-fetch once and retry.
+            const recached = await ensureCached(pair.cached, true);
+            if (!recached) {
+              donePairs++;
+              continue;
+            }
+            reply = await clashWorker.call<TestReply>({
+              op: 'clash-test',
+              cachedModel: pair.cached.modelIdx,
+              cachedId: pair.cached.expressId,
+              clearanceM
+            });
+          }
+          testedPairs++;
+          donePairs++;
+          if (reply.status === 'hit') {
+            const d = reply.data;
+            const kind = d[0] === 1 ? 'hard' : 'soft';
+            const volumeM3 = Number.isFinite(d[3]) ? d[3] : undefined;
+            clashes.push({
+              elementA: { modelId: pair.refA.modelId, expressId: pair.refA.expressId },
+              elementB: { modelId: pair.refB.modelId, expressId: pair.refB.expressId },
+              kind,
+              penetrationM: d[1],
+              gapM: d[2],
+              volumeM3,
+              point: [d[4], d[5], d[6]],
+              bounds: {
+                min: { x: d[7], y: d[8], z: d[9] },
+                max: { x: d[10], y: d[11], z: d[12] }
+              }
+            });
+          }
+        }
+
+        const pct = 30 + Math.round((donePairs / broadPhasePairs) * 69);
+        if (pct > lastPct) {
+          lastPct = pct;
+          onProgress?.('Comprobando interferencias', pct);
+        }
+      }
+
+      clashes.sort((x, y) => {
+        if (x.kind !== y.kind) return x.kind === 'hard' ? -1 : 1;
+        if (x.kind === 'hard') {
+          if (y.penetrationM !== x.penetrationM) return y.penetrationM - x.penetrationM;
+        } else if (x.gapM !== y.gapM) {
+          return x.gapM - y.gapM;
+        }
+        return (
+          x.elementA.modelId.localeCompare(y.elementA.modelId) ||
+          x.elementA.expressId - y.elementA.expressId ||
+          x.elementB.modelId.localeCompare(y.elementB.modelId) ||
+          x.elementB.expressId - y.elementB.expressId
+        );
+      });
+
+      onProgress?.('Comprobando interferencias', 100);
+      const elapsedMs = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt
+      );
+      return {
+        clashes,
+        broadPhasePairs,
+        testedPairs,
+        truncated,
+        elapsedMs,
+        diagnostics
+      };
+    } finally {
+      clashWorker.terminate();
+    }
   }
 }

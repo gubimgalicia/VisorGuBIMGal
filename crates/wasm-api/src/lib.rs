@@ -1,6 +1,7 @@
 //! WebAssembly facade of the kernel. Owner: Claude (T-033). Contract: `docs/05_kernel_contract.md`.
 
 pub mod batches;
+pub mod clash;
 pub mod drawing;
 mod encode;
 mod json;
@@ -152,6 +153,20 @@ impl Model {
     #[wasm_bindgen(js_name = elementMesh)]
     pub fn element_mesh(&mut self, express_id: u32) -> Option<ShapeView> {
         self.inner.element_mesh(express_id).map(|shape| ShapeView { shape })
+    }
+
+    /// Compact `f64` AABBs `[id, minX, minY, minZ, maxX, maxY, maxZ]` for clash broad phase.
+    #[wasm_bindgen(js_name = elementBounds)]
+    pub fn element_bounds(&mut self, express_ids: Vec<u32>) -> Vec<f64> {
+        self.inner.element_bounds(&express_ids)
+    }
+
+    /// Raw `f64` triangle mesh without feature edges, for clash narrow phase.
+    #[wasm_bindgen(js_name = rawElementMesh)]
+    pub fn raw_element_mesh(&mut self, express_id: u32) -> Option<RawMeshView> {
+        self.inner
+            .raw_element_mesh(express_id)
+            .map(|mesh| RawMeshView { mesh })
     }
 
     #[wasm_bindgen(js_name = startStream)]
@@ -473,6 +488,90 @@ impl ShapeView {
     #[wasm_bindgen(js_name = takeEdges)]
     pub fn take_edges(&mut self) -> Vec<u32> {
         std::mem::take(&mut self.shape.edges)
+    }
+}
+
+/// Raw `f64` positions and `u32` triangle indices for clash narrow phase.
+#[wasm_bindgen]
+pub struct RawMeshView {
+    mesh: clash::RawElementMesh,
+}
+
+#[wasm_bindgen]
+impl RawMeshView {
+    #[wasm_bindgen(js_name = takePositions)]
+    pub fn take_positions(&mut self) -> Vec<f64> {
+        std::mem::take(&mut self.mesh.positions)
+    }
+
+    #[wasm_bindgen(js_name = takeIndices)]
+    pub fn take_indices(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.mesh.indices)
+    }
+}
+
+/// Dedicated narrow-phase clash session running in its own short-lived Worker (`docs/11_clash.md`).
+#[wasm_bindgen]
+pub struct ClashSession {
+    inner: clash::ClashSessionStore,
+}
+
+#[wasm_bindgen]
+impl ClashSession {
+    #[wasm_bindgen(constructor)]
+    pub fn new(max_cache_bytes: u32) -> ClashSession {
+        ClashSession {
+            inner: clash::ClashSessionStore::new(max_cache_bytes as usize),
+        }
+    }
+
+    #[wasm_bindgen(js_name = broadPhase)]
+    pub fn broad_phase(&self, a_flat: Vec<f64>, b_flat: Vec<f64>, clearance_m: f64) -> Vec<u32> {
+        clash::ClashSessionStore::broad_phase(&a_flat, &b_flat, clearance_m)
+    }
+
+    #[wasm_bindgen(js_name = hasCached)]
+    pub fn has_cached(&self, model_index: u32, express_id: u32) -> bool {
+        self.inner.has_cached(model_index, express_id)
+    }
+
+    #[wasm_bindgen(js_name = cacheBytes)]
+    pub fn cache_bytes(&self) -> u32 {
+        self.inner.cache_bytes() as u32
+    }
+
+    #[wasm_bindgen(js_name = cacheMesh)]
+    pub fn cache_mesh(
+        &mut self,
+        model_index: u32,
+        express_id: u32,
+        positions: Vec<f64>,
+        indices: Vec<u32>,
+    ) -> bool {
+        self.inner.cache_mesh(model_index, express_id, &positions, &indices)
+    }
+
+    #[wasm_bindgen(js_name = setActiveMesh)]
+    pub fn set_active_mesh(
+        &mut self,
+        model_index: u32,
+        express_id: u32,
+        positions: Vec<f64>,
+        indices: Vec<u32>,
+    ) -> bool {
+        self.inner
+            .set_active_mesh(model_index, express_id, &positions, &indices)
+    }
+
+    #[wasm_bindgen(js_name = testActiveAgainstCached)]
+    pub fn test_active_against_cached(
+        &mut self,
+        cached_model: u32,
+        cached_id: u32,
+        clearance_m: f64,
+    ) -> Option<Vec<f64>> {
+        self.inner
+            .test_active_against_cached(cached_model, cached_id, clearance_m)
     }
 }
 

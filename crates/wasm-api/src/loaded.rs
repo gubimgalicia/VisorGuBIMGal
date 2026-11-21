@@ -1,6 +1,7 @@
 //! An open model: its bytes, its index, and everything that borrows them.
 
 use crate::batches::{Batch, GeometryStream};
+use crate::clash::{RawElementMesh, element_bounds_flat, raw_element_mesh};
 use crate::drawing::{DrawingRequest, DrawingStream};
 use crate::encode::{complete_json, diagnostics_json, snapshots_json};
 use crate::json::to_json;
@@ -163,6 +164,21 @@ impl LoadedModel {
         let query = self.query_evaluator()?;
         query.drawn.binary_search(&express_id).ok()?;
         element_shape(&query.evaluator.evaluate(express_id)?)
+    }
+
+    /// Compact `f64` AABBs `[id, minX, minY, minZ, maxX, maxY, maxZ]` for clash broad phase.
+    pub fn element_bounds(&mut self, express_ids: &[u32]) -> Vec<f64> {
+        let Some(query) = self.query_evaluator() else {
+            return Vec::new();
+        };
+        element_bounds_flat(&mut query.evaluator, &query.drawn, express_ids)
+    }
+
+    /// Raw `f64` positions and `u32` triangle indices for clash narrow phase (no feature edges).
+    pub fn raw_element_mesh(&mut self, express_id: u32) -> Option<RawElementMesh> {
+        let query = self.query_evaluator()?;
+        query.drawn.binary_search(&express_id).ok()?;
+        raw_element_mesh(&query.evaluator.evaluate(express_id)?)
     }
 
     /// Starts from the first element. Evaluator caches last only as long as the stream.

@@ -77,13 +77,16 @@ function snapshotToDataUrl(snapshot: { bytes: Uint8Array; format: 'png' | 'jpg' 
 export interface BcfPanelProps {
   onCaptureViewpoint: (index: number) => Promise<BcfViewpoint | null>;
   onApplyViewpoint: (viewpoint: BcfViewpoint) => Promise<void>;
+  pendingTopic?: { seq: number; topic: BcfTopic } | null;
 }
 
 export const BcfPanel: React.FC<BcfPanelProps> = ({
   onCaptureViewpoint,
-  onApplyViewpoint
+  onApplyViewpoint,
+  pendingTopic
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastPendingSeqRef = useRef<number>(0);
   const [project, setProject] = useState<BcfProject>(() => createInitialProject());
   const [activeTopicGuid, setActiveTopicGuid] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -113,6 +116,27 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
       setActiveTopicGuid(null);
     }
   }, [activeTopic, activeTopicGuid]);
+
+  useEffect(() => {
+    if (!pendingTopic || pendingTopic.seq === lastPendingSeqRef.current) return;
+    lastPendingSeqRef.current = pendingTopic.seq;
+    const incoming = pendingTopic.topic;
+    setProject((prev) => ({
+      ...prev,
+      extensions: {
+        ...prev.extensions,
+        topicTypes: prev.extensions.topicTypes.includes(incoming.topicType)
+          ? prev.extensions.topicTypes
+          : [...prev.extensions.topicTypes, incoming.topicType]
+      },
+      topics: [
+        ...prev.topics,
+        { ...incoming, index: incoming.index ?? prev.topics.length + 1 }
+      ]
+    }));
+    setActiveTopicGuid(incoming.guid);
+    setErrorText(null);
+  }, [pendingTopic]);
 
   const topicTypes = useMemo(
     () => [...new Set([...DEFAULT_TYPES, ...project.extensions.topicTypes])],
