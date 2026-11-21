@@ -117,4 +117,41 @@ check('fitting, a preset or a pose release the eye; releasing leaves the camera 
   assert.ok(near(eyeZ(camera), 2.6), 'free again: it can climb');
 });
 
-console.log(`\nt164-storey-walk-test: ${passed}/6 pass`);
+check('first-person look drags the scene consistently with the pointer on both axes', () => {
+  const ahead = [0, 10, 1.6];
+  const makeCam = () => {
+    const c = new Camera();
+    c.setAspect(16 / 9);
+    // Eye at (0, 0, 1.6), looking North (+Y), screen right = +X, screen up = +Z.
+    c.setPose({ target: [0, 2, 1.6], distance: 2, azimuth: -Math.PI / 2, elevation: 0, projection: 'perspective' });
+    return c;
+  };
+
+  // Drag left (dx < 0) -> scene moves left (ndc.x < 0), camera looks right
+  const left = makeCam();
+  const eye0 = left.getEye();
+  left.look(-60, 0);
+  const pLeft = left.project(ahead);
+  assert.ok(pLeft && pLeft.x < -0.1 && near(pLeft.y, 0, 1e-6), `drag left: ${JSON.stringify(pLeft)}`);
+  assert.ok(near(left.getEye()[0], eye0[0]) && near(left.getEye()[1], eye0[1]) && near(left.getEye()[2], eye0[2]));
+
+  // Drag right (dx > 0) -> scene moves right (ndc.x > 0), camera looks left
+  const right = makeCam();
+  right.look(60, 0);
+  const pRight = right.project(ahead);
+  assert.ok(pRight && pRight.x > 0.1 && near(pRight.y, 0, 1e-6), `drag right: ${JSON.stringify(pRight)}`);
+
+  // Drag down (dy > 0) -> scene moves down (ndc.y < 0), camera looks up
+  const down = makeCam();
+  down.look(0, 60);
+  const pDown = down.project(ahead);
+  assert.ok(pDown && near(pDown.x, 0, 1e-6) && pDown.y < -0.1, `drag down: ${JSON.stringify(pDown)}`);
+
+  // Drag up (dy < 0) -> scene moves up (ndc.y > 0), camera looks down
+  const up = makeCam();
+  up.look(0, -60);
+  const pUp = up.project(ahead);
+  assert.ok(pUp && near(pUp.x, 0, 1e-6) && pUp.y > 0.1, `drag up: ${JSON.stringify(pUp)}`);
+});
+
+console.log(`\nt164-storey-walk-test: ${passed}/7 pass`);

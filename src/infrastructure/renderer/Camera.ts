@@ -393,11 +393,12 @@ export class Camera {
 
   /**
    * First-person look-around: rotates `azimuth` and `elevation` while keeping the camera `eye`
-   * fixed in world space.
+   * fixed in world space. Dragging pulls the scene with the pointer on both axes (drag down ->
+   * scene moves down / camera looks up; drag left -> scene moves left / camera looks right).
    */
   look(dx: number, dy: number): void {
     const eye = this.getEye();
-    this.azimuth -= dx * 0.005;
+    this.azimuth += dx * 0.005;
     const nextElev = this.elevation - dy * 0.005;
     const maxElev = Math.PI / 2 - 0.01;
     this.elevation = Math.max(-maxElev, Math.min(maxElev, nextElev));
