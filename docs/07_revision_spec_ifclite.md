@@ -1,5 +1,7 @@
 # Revisión crítica — `SPEC_IFCLITE_BIM_GIS_VIEWER.md`
 
+> **Documento histórico.** Revisa la especificación basada en IFC-Lite, que el proyecto ha abandonado en favor del kernel propio Rust/WASM (ver [03_sovereign_kernel_spec.md](03_sovereign_kernel_spec.md)). Se conserva por el razonamiento que llevó a esa decisión.
+
 **Documento revisado:** `SPEC_IFCLITE_BIM_GIS_VIEWER.md`
 **Commits revisados:** `6747db6` y `8c245dd` (repo `gubimgalicia/VisorGuBIMGal`, rama `main`)
 **Autor de la spec:** Andrés
