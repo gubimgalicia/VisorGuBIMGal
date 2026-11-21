@@ -21,12 +21,49 @@ export const PAPER_DIMENSIONS_MM: Record<PdfPaper, { widthMm: number; heightMm: 
 
 export const PT_PER_MM = 72 / 25.4;
 
+/** Outer page margin and bottom footer strip height in millimetres. */
+export const PDF_MARGIN_MM = 10;
+export const PDF_FOOTER_MM = 8;
+
 export function paperSizePt(paper: PdfPaper): { widthPt: number; heightPt: number } {
   const { widthMm, heightMm } = PAPER_DIMENSIONS_MM[paper];
   return {
     widthPt: widthMm * PT_PER_MM,
     heightPt: heightMm * PT_PER_MM
   };
+}
+
+/** Printable drawing viewport inside the page margins and footer strip, in millimetres. */
+export function printableAreaMm(paper: PdfPaper): { widthMm: number; heightMm: number } {
+  const { widthMm, heightMm } = PAPER_DIMENSIONS_MM[paper];
+  return {
+    widthMm: widthMm - 2 * PDF_MARGIN_MM,
+    heightMm: heightMm - 2 * PDF_MARGIN_MM - PDF_FOOTER_MM
+  };
+}
+
+export interface PdfScaleFit {
+  fits: boolean;
+  drawingWidthMm: number;
+  drawingHeightMm: number;
+  printableWidthMm: number;
+  printableHeightMm: number;
+}
+
+/** Checks whether an SVG (in metres by default) fits inside the printable frame at `scale` on `paper`. */
+export function checkPdfScaleFit(
+  svgText: string,
+  scale: PdfScale,
+  paper: PdfPaper,
+  metresPerUnit = 1
+): PdfScaleFit {
+  const [, , vw, vh] = parseViewBox(svgText);
+  const mmPerUnit = metresPerUnit * (1000 / scale);
+  const drawingWidthMm = vw * mmPerUnit;
+  const drawingHeightMm = vh * mmPerUnit;
+  const { widthMm: printableWidthMm, heightMm: printableHeightMm } = printableAreaMm(paper);
+  const fits = drawingWidthMm <= printableWidthMm + 1e-6 && drawingHeightMm <= printableHeightMm + 1e-6;
+  return { fits, drawingWidthMm, drawingHeightMm, printableWidthMm, printableHeightMm };
 }
 
 export interface SvgToPdfOptions {
@@ -367,8 +404,8 @@ export function svgToPdf(svgText: string, options: SvgToPdfOptions): Uint8Array 
 
   const [vx, vy, vw, vh] = parseViewBox(svgText);
 
-  const marginPt = 10 * PT_PER_MM;
-  const footerPt = 8 * PT_PER_MM;
+  const marginPt = PDF_MARGIN_MM * PT_PER_MM;
+  const footerPt = PDF_FOOTER_MM * PT_PER_MM;
   const frameX = marginPt;
   const frameY = marginPt + footerPt;
   const frameW = pageW - 2 * marginPt;

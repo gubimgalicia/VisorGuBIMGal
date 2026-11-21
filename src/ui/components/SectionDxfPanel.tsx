@@ -21,6 +21,7 @@ import type { ModelId, ModelRecord } from '../../domain/models/ModelRecord';
 import { faceCutPlane, type SectionState } from '../viewer/section';
 import { planRange, storeyLevels, type PlanBottom } from '../viewer/planDepth';
 import {
+  checkPdfScaleFit,
   PDF_PAPERS,
   PDF_SCALES,
   svgToPdf,
@@ -399,6 +400,10 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
   };
 
   const resolvedFace = faceCutPlane(section);
+  const pdfScaleFits = previewSvg
+    ? new Map(PDF_SCALES.map((scale) => [scale, checkPdfScaleFit(previewSvg, scale, pdfPaper)]))
+    : null;
+  const currentPdfFit = pdfScaleFits?.get(pdfScale) ?? null;
 
   return (
     <div style={{ fontSize: '13px' }}>
@@ -844,11 +849,16 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                 value={pdfScale}
                 onChange={(e) => setPdfScale(Number(e.target.value) as PdfScale)}
               >
-                {PDF_SCALES.map((scale) => (
-                  <option key={scale} value={scale}>
-                    {t('sectionDxf.pdfScaleOption', { scale })}
-                  </option>
-                ))}
+                {PDF_SCALES.map((scale) => {
+                  const fits = pdfScaleFits?.get(scale)?.fits ?? true;
+                  return (
+                    <option key={scale} value={scale}>
+                      {fits
+                        ? t('sectionDxf.pdfScaleOption', { scale })
+                        : t('sectionDxf.pdfScaleOptionNoFit', { scale })}
+                    </option>
+                  );
+                })}
               </select>
               <select
                 className="select dxf-pdf-paper"
@@ -864,6 +874,36 @@ export const SectionDxfPanel: React.FC<SectionDxfPanelProps> = ({
                 ))}
               </select>
             </div>
+            {currentPdfFit && !currentPdfFit.fits && (
+              <div
+                className="dxf-pdf-overflow-warning"
+                style={{
+                  marginBottom: '8px',
+                  padding: '6px 8px',
+                  background: 'rgba(245, 158, 11, 0.14)',
+                  border: '1px solid rgba(245, 158, 11, 0.45)',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  color: '#fcd34d',
+                  lineHeight: 1.35
+                }}
+              >
+                {t('sectionDxf.pdfOverflowWarning', {
+                  scale: pdfScale,
+                  paper: pdfPaper,
+                  drawW: Math.round(currentPdfFit.drawingWidthMm),
+                  drawH: Math.round(currentPdfFit.drawingHeightMm),
+                  frameW: Math.round(currentPdfFit.printableWidthMm),
+                  frameH: Math.round(currentPdfFit.printableHeightMm),
+                  hint:
+                    pdfPaper === 'A4'
+                      ? t('sectionDxf.pdfOverflowSuggestPaper')
+                      : pdfScale !== 200
+                        ? t('sectionDxf.pdfOverflowSuggestScale')
+                        : ''
+                })}
+              </div>
+            )}
             <button
               type="button"
               className="btn btn-secondary dxf-export-pdf-btn"

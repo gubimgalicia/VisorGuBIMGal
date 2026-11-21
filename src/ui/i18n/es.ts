@@ -347,7 +347,12 @@ export const es = {
     pdfScaleLabel: 'Escala',
     pdfPaperLabel: 'Papel',
     pdfScaleOption: '1:{scale}',
+    pdfScaleOptionNoFit: '1:{scale} (no cabe)',
     pdfPaperOption: '{paper} horizontal',
+    pdfOverflowWarning:
+      'A 1:{scale} el plano ({drawW} × {drawH} mm) no cabe en {paper} ({frameW} × {frameH} mm) y se recortará en el marco.{hint}',
+    pdfOverflowSuggestPaper: ' Prueba A3 o una escala menor.',
+    pdfOverflowSuggestScale: ' Prueba una escala menor.',
     exportPdf: 'Exportar PDF',
     pdfFooter: 'Escala 1:{scale} · {paper} horizontal',
     planDepthErrorTopNaN: 'La cota del corte no es un número.',
