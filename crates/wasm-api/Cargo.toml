@@ -15,6 +15,7 @@ ifc-schema.workspace = true
 spatial-tree.workspace = true
 ifc-geometry.workspace = true
 cad-slicer.workspace = true
+clash-detector.workspace = true
 wasm-bindgen.workspace = true
 glam.workspace = true
 

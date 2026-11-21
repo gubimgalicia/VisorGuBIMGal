@@ -14,6 +14,7 @@ ifc-schema = { path = "crates/ifc-schema" }
 spatial-tree = { path = "crates/spatial-tree" }
 ifc-geometry = { path = "crates/ifc-geometry" }
 cad-slicer = { path = "crates/cad-slicer" }
+clash-detector = { path = "crates/clash-detector" }
 glam = "0.34"
 earcut = "0.4"
 # Must match the wasm-bindgen CLI exactly (D-008).

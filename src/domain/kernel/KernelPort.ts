@@ -8,6 +8,7 @@ import type {
   SelectedElementDetails
 } from '../models/ModelRecord';
 import type { DrawingExportConfig, DrawingFrame, DrawingOptions } from '../drawings/DrawingTypes';
+import type { ClashReport, ClashRequest } from '../clash/ClashTypes';
 import type { ElementSnapshot } from '../compare/modelDiff';
 import type { GeometryBatch } from './GeometryBatch';
 
@@ -225,4 +226,10 @@ export interface KernelPort {
 
   /** Notifies when an open model's Worker crashes or traps after or during evaluation. */
   onModelCrash?(listener: (modelId: ModelId, error: KernelError) => void): () => void;
+
+  /**
+   * Runs hard/soft clash detection across one or more open models inside Workers, without
+   * holding full meshes on the main thread (C22, docs/11_clash.md).
+   */
+  detectClashes?(request: ClashRequest, onProgress?: ProgressHandler): Promise<ClashReport>;
 }

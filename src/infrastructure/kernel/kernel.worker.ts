@@ -8,7 +8,7 @@ import type {
 } from '../../domain/kernel/KernelPort';
 import type { StreamStep, WorkerRequest, WorkerResponse } from './protocol';
 import { batchTransfer, readBatchView } from './batchView';
-import init, { allocationFailed, Model, Sheet } from './pkg/wasm_api';
+import init, { allocationFailed, ClashSession, Model, Sheet } from './pkg/wasm_api';
 import {
   CACHE_FORMAT,
   CacheCorrupt,
@@ -68,6 +68,7 @@ const ready = (async () => {
 /** A model replayed from the cache has no `Model` until something needs one: then its bytes open it. */
 let open: { modelId: ModelId; model: Model | null; bytes: Uint8Array | null } | null = null;
 let sheet: Sheet | null = null;
+let clashSession: ClashSession | null = null;
 let sequence = 0;
 /** The cache being replayed, until its stream ends. */
 let replay: { reader: CacheReader; handle: SyncAccessHandle; folder: FileSystemDirectoryHandle; name: string } | null =
@@ -191,6 +192,7 @@ function toRequestError(error: unknown): RequestError {
   if (error instanceof WebAssembly.RuntimeError) {
     open = null;
     sheet = null;
+    clashSession = null;
     return allocationFailed()
       ? new RequestError('out-of-memory', 'El modelo no cabe en la memoria disponible.')
       : new RequestError('internal', `El kernel se ha detenido: ${text}`);
@@ -340,6 +342,26 @@ function currentSheet(): Sheet {
   return sheet;
 }
 
+function currentClash(): ClashSession {
+  if (!clashSession) throw new RequestError('internal', 'La sesión de interferencias no existe.');
+  return clashSession;
+}
+
+function rawElementMesh(expressId: number): { value: { positions: Float64Array; indices: Uint32Array } | null; transfer: Transferable[] } {
+  const view = current().model.rawElementMesh(expressId);
+  if (!view) return { value: null, transfer: [] };
+  try {
+    const positions = view.takePositions();
+    const indices = view.takeIndices();
+    return {
+      value: { positions, indices },
+      transfer: [positions.buffer, indices.buffer] as Transferable[]
+    };
+  } finally {
+    view.free();
+  }
+}
+
 function nextChunk(): { value: unknown; transfer: Transferable[] } {
   const chunk = current().model.nextDrawingChunk(MAX_TRIANGLES_PER_CHUNK);
   return chunk
@@ -418,6 +440,51 @@ async function handle(request: WorkerRequest): Promise<{ value: unknown; transfe
     }
     case 'mesh':
       return elementMesh(request.expressId);
+    case 'clash-bounds': {
+      const bounds = current().model.elementBounds(request.expressIds);
+      return { value: bounds, transfer: [bounds.buffer as ArrayBuffer] };
+    }
+    case 'clash-mesh':
+      return rawElementMesh(request.expressId);
+    case 'clash-new':
+      clashSession?.free();
+      clashSession = new ClashSession(request.maxCacheBytes);
+      return { value: undefined, transfer: [] };
+    case 'clash-broad': {
+      const pairs = currentClash().broadPhase(request.aFlat, request.bFlat, request.clearanceM);
+      return { value: pairs, transfer: [pairs.buffer as ArrayBuffer] };
+    }
+    case 'clash-cache': {
+      const ok = currentClash().cacheMesh(
+        request.modelIndex,
+        request.expressId,
+        request.positions,
+        request.indices
+      );
+      return { value: ok, transfer: [] };
+    }
+    case 'clash-set-active': {
+      const ok = currentClash().setActiveMesh(
+        request.modelIndex,
+        request.expressId,
+        request.positions,
+        request.indices
+      );
+      return { value: ok, transfer: [] };
+    }
+    case 'clash-test': {
+      const session = currentClash();
+      if (!session.hasCached(request.cachedModel, request.cachedId)) {
+        return { value: { status: 'miss' as const }, transfer: [] };
+      }
+      const hit = session.testActiveAgainstCached(
+        request.cachedModel,
+        request.cachedId,
+        request.clearanceM
+      );
+      if (!hit) return { value: { status: 'none' as const }, transfer: [] };
+      return { value: { status: 'hit' as const, data: hit }, transfer: [hit.buffer as ArrayBuffer] };
+    }
   }
 }
 

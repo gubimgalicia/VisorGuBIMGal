@@ -1253,3 +1253,243 @@ canvas.bim-viewport {
   font-family: var(--font-mono);
   color: var(--text-main);
 }
+
+/* Clash detection panel (C22, T-168) */
+.clash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clash-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.clash-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clash-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clash-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.clash-set-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--border-color);
+}
+
+.clash-set-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.clash-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.clash-progress {
+  font-size: 11px;
+  color: #38bdf8;
+}
+
+.clash-error {
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+  font-size: 11px;
+}
+
+.clash-notice {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background-color: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  font-size: 11px;
+}
+
+.clash-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clash-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--border-color);
+}
+
+.clash-summary-stats {
+  font-size: 11px;
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+}
+
+.clash-filter-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.clash-pill {
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.7);
+  color: #cbd5e1;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.clash-pill.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  color: #f8fafc;
+}
+
+.clash-pill.hard.active {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.clash-pill.soft.active {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+
+.clash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clash-card {
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.clash-card:hover {
+  border-color: rgba(148, 163, 184, 0.45);
+  background-color: rgba(30, 41, 59, 0.65);
+}
+
+.clash-card.active {
+  border-color: #38bdf8;
+  background-color: rgba(14, 165, 233, 0.12);
+}
+
+.clash-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.clash-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 9999px;
+}
+
+.clash-badge.hard {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.clash-badge.soft {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+}
+
+.clash-metric {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.clash-bcf-btn {
+  padding: 2px 6px;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.clash-pair-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clash-elem {
+  padding-left: 6px;
+  border-left: 2px solid #ef4444;
+}
+
+.clash-elem-b {
+  border-left-color: #f97316;
+}
+
+.clash-elem-name {
+  font-size: 11px;
+  color: #f8fafc;
+  word-break: break-word;
+}
+
+.clash-elem-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.clash-volume {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #94a3b8;
+}
+
+.clash-more {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px;
+}

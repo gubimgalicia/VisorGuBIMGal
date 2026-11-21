@@ -9,12 +9,20 @@ import { DisplayBar } from './ui/components/DisplayBar';
 import { SectionBar } from './ui/components/SectionBar';
 import { SearchPanel } from './ui/components/SearchPanel';
 import { ComparePanel } from './ui/components/ComparePanel';
+import { ClashPanel } from './ui/components/ClashPanel';
 import { IdsPanel } from './ui/components/IdsPanel';
 import { BcfPanel } from './ui/components/BcfPanel';
 import { MeasureBar } from './ui/components/MeasureBar';
 import { SavedViewsBar } from './ui/components/SavedViewsBar';
 import { ColorByBar } from './ui/components/ColorByBar';
-import type { BcfViewpoint } from './ui/viewer/bcf';
+import { newGuid, type BcfTopic, type BcfViewpoint } from './ui/viewer/bcf';
+import {
+  buildClashBcfTopic,
+  buildClashPairIsolation,
+  CLASH_COLOR_A_RGBA,
+  CLASH_COLOR_B_RGBA,
+  type ClashDisplayEntry
+} from './ui/viewer/clashDetector';
 import {
   buildBcfViewpoint,
   collectDisplayExceptionRefs,
@@ -86,10 +94,11 @@ import {
   Scissors,
   Search,
   GitCompareArrows,
+  AlertTriangle,
   ShieldCheck,
   MessageSquareWarning
 } from 'lucide-react';
-import { formatLength, t } from './ui/i18n';
+import { formatLength, formatNumber, t } from './ui/i18n';
 
 export default function App() {
   const [models, setModels] = useState<ModelRecord[]>([]);
@@ -454,9 +463,11 @@ export default function App() {
   }, []);
 
   // Tab state
-  const [leftTab, setLeftTab] = useState<'models' | 'tree' | 'search' | 'compare'>('models');
+  const [leftTab, setLeftTab] = useState<'models' | 'tree' | 'search' | 'compare' | 'clash'>('models');
   const [rightTab, setRightTab] = useState<'props' | 'dxf' | 'ids' | 'bcf'>('props');
   const [isGisExpanded, setIsGisExpanded] = useState<boolean>(false);
+  const [pendingBcfTopic, setPendingBcfTopic] = useState<{ seq: number; topic: BcfTopic } | null>(null);
+  const bcfSeqRef = useRef(0);
 
   // Load IFC file handler (local File, static fetch, or retry of an existing modelId)
   const loadIfcFile = useCallback(
@@ -1163,6 +1174,95 @@ export default function App() {
     }
   }, []);
 
+  const handleInspectClashPair = useCallback(
+    (entry: ClashDisplayEntry) => {
+      const label = t('clash.isolateLabel', { a: entry.metaA.name, b: entry.metaB.name });
+      const { displayTarget, colorsByModel } = buildClashPairIsolation(entry, label);
+      setDisplayRule((prev) => ({ ...prev, isolate: displayTarget }));
+      handleApplyCompareColors({
+        colorsByModel,
+        legend: [
+          { label: t('clash.legendA'), hex: '#ef4444', rgba: CLASH_COLOR_A_RGBA, count: 1 },
+          { label: t('clash.legendB'), hex: '#f97316', rgba: CLASH_COLOR_B_RGBA, count: 1 }
+        ]
+      });
+      renderer.fitToBounds(entry.bounds, true);
+    },
+    [handleApplyCompareColors]
+  );
+
+  const handleClearClashView = useCallback(() => {
+    setDisplayRule((prev) => ({ ...SHOW_ALL, ghost: prev.ghost }));
+    handleClearCompareColors();
+  }, [handleClearCompareColors]);
+
+  const handleSaveClashAsBcf = useCallback(
+    async (entry: ClashDisplayEntry) => {
+      handleInspectClashPair(entry);
+      // Let the renderer draw the isolated and framed pair before capturing the snapshot.
+      await new Promise((resolve) => setTimeout(resolve, 90));
+      const camera = renderer.getCameraPose();
+      const snapshotResult = await captureCanvasSnapshot();
+
+      const [guidA, guidB] = await Promise.all([
+        resolveRefToGuid(entry.elementA),
+        resolveRefToGuid(entry.elementB)
+      ]);
+      const pairGuids = [guidA, guidB].filter((g): g is string => Boolean(g));
+      const coloring: { color: string; ifcGuids: string[] }[] = [];
+      if (guidA) coloring.push({ color: rgbaU32ToBcfHex(CLASH_COLOR_A_RGBA), ifcGuids: [guidA] });
+      if (guidB) coloring.push({ color: rgbaU32ToBcfHex(CLASH_COLOR_B_RGBA), ifcGuids: [guidB] });
+
+      const viewpoint = buildBcfViewpoint({
+        index: 1,
+        camera,
+        aspectRatio: snapshotResult?.aspectRatio,
+        selectedGuids: pairGuids,
+        visibility: { mode: 'isolate', exceptionGuids: pairGuids },
+        coloring,
+        sectionPlanes: sectionPlanes(section, bounds),
+        snapshot: snapshotResult
+          ? { bytes: snapshotResult.bytes, format: snapshotResult.format }
+          : undefined
+      });
+
+      const mm =
+        entry.kind === 'hard'
+          ? formatNumber(entry.penetrationM * 1000, { maximumFractionDigits: 1 })
+          : formatNumber(entry.gapM * 1000, { maximumFractionDigits: 1 });
+      const title =
+        entry.kind === 'hard'
+          ? t('clash.bcfTitleHard', { a: entry.metaA.name, b: entry.metaB.name })
+          : t('clash.bcfTitleSoft', { a: entry.metaA.name, b: entry.metaB.name });
+      const descParams = {
+        a: entry.metaA.name,
+        typeA: entry.metaA.type,
+        modelA: entry.metaA.modelName,
+        b: entry.metaB.name,
+        typeB: entry.metaB.type,
+        modelB: entry.metaB.modelName,
+        mm,
+        x: formatNumber(entry.point[0], { maximumFractionDigits: 3 }),
+        y: formatNumber(entry.point[1], { maximumFractionDigits: 3 }),
+        z: formatNumber(entry.point[2], { maximumFractionDigits: 3 })
+      };
+      const description =
+        entry.kind === 'hard'
+          ? t('clash.bcfDescriptionHard', descParams)
+          : t('clash.bcfDescriptionSoft', descParams);
+
+      bcfSeqRef.current += 1;
+      const topic = buildClashBcfTopic(entry, viewpoint, newGuid(), bcfSeqRef.current, {
+        title,
+        description
+      });
+      setPendingBcfTopic({ seq: bcfSeqRef.current, topic });
+      setRightTab('bcf');
+      setStatusText(t('clash.bcfSavedStatus'));
+    },
+    [handleInspectClashPair, captureCanvasSnapshot, resolveRefToGuid, section, bounds]
+  );
+
   return (
     <div className="app-container">
       <Header
@@ -1209,6 +1309,13 @@ export default function App() {
               <GitCompareArrows size={13} />
               <span>{t('app.tabs.compare')}</span>
             </button>
+            <button
+              className={`tab-btn tab-clash ${leftTab === 'clash' ? 'active' : ''}`}
+              onClick={() => setLeftTab('clash')}
+            >
+              <AlertTriangle size={13} />
+              <span>{t('app.tabs.clash')}</span>
+            </button>
           </div>
 
           <div className="panel-body">
@@ -1253,6 +1360,17 @@ export default function App() {
                 onSelectAndFrame={(ref) => void handleSelectAndFrame(ref)}
                 onApplyCompareColors={handleApplyCompareColors}
                 onClearCompareColors={handleClearCompareColors}
+              />
+            </div>
+            {/* Kept mounted, so clash rules and results survive a change of tab */}
+            <div style={{ display: leftTab === 'clash' ? 'block' : 'none' }}>
+              <ClashPanel
+                models={models}
+                spatialTrees={spatialTrees}
+                kernel={kernel}
+                onInspectPair={handleInspectClashPair}
+                onClearClashView={handleClearClashView}
+                onSaveAsBcf={handleSaveClashAsBcf}
               />
             </div>
           </div>
@@ -1410,6 +1528,7 @@ export default function App() {
               <BcfPanel
                 onCaptureViewpoint={handleCaptureBcfViewpoint}
                 onApplyViewpoint={handleApplyBcfViewpoint}
+                pendingTopic={pendingBcfTopic}
               />
             </div>
           </div>

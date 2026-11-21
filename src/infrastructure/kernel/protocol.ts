@@ -26,6 +26,30 @@ export type WorkerRequest =
       showHidden: boolean;
       showHatching: boolean;
       comment?: string;
+    }
+  | { op: 'clash-bounds'; expressIds: Uint32Array }
+  | { op: 'clash-mesh'; expressId: number }
+  | { op: 'clash-new'; maxCacheBytes: number }
+  | { op: 'clash-broad'; aFlat: Float64Array; bFlat: Float64Array; clearanceM: number }
+  | {
+      op: 'clash-cache';
+      modelIndex: number;
+      expressId: number;
+      positions: Float64Array;
+      indices: Uint32Array;
+    }
+  | {
+      op: 'clash-set-active';
+      modelIndex: number;
+      expressId: number;
+      positions: Float64Array;
+      indices: Uint32Array;
+    }
+  | {
+      op: 'clash-test';
+      cachedModel: number;
+      cachedId: number;
+      clearanceM: number;
     };
 
 /** One pull of a geometry stream. */
