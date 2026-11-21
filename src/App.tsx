@@ -124,6 +124,7 @@ export default function App() {
   const [colorLegend, setColorLegend] = useState<ColorLegendItem[]>([]);
   const [availableColorProps, setAvailableColorProps] = useState<string[]>([]);
   const [compareColorScheme, setCompareColorScheme] = useState<ColorSchemeResult | null>(null);
+  const [colorOverrideMode, setColorOverrideMode] = useState<'compare' | 'clash' | null>(null);
   const prevColorStateRef = useRef<{
     mode: ColorByMode;
     propName: string;
@@ -337,6 +338,7 @@ export default function App() {
       setColorByMode('none');
       setColorLegend([]);
       setCompareColorScheme(null);
+      setColorOverrideMode(null);
       prevColorStateRef.current = null;
       activeColorsByModelRef.current.clear();
       bcfColorsByModelRef.current.clear();
@@ -399,11 +401,12 @@ export default function App() {
     bcfColorsByModelRef.current.clear();
     prevColorStateRef.current = null;
     setCompareColorScheme(null);
+    setColorOverrideMode(null);
     setColorByMode(nextMode);
   }, []);
 
   const handleApplyCompareColors = useCallback(
-    (scheme: ColorSchemeResult) => {
+    (scheme: ColorSchemeResult, kind: 'compare' | 'clash' = 'compare') => {
       if (prevColorStateRef.current === null) {
         prevColorStateRef.current = {
           mode: colorByMode,
@@ -414,12 +417,14 @@ export default function App() {
         };
       }
       setCompareColorScheme(scheme);
+      setColorOverrideMode(kind);
     },
     [colorByMode, colorByPropName]
   );
 
   const handleClearCompareColors = useCallback(() => {
     setCompareColorScheme(null);
+    setColorOverrideMode(null);
     const prev = prevColorStateRef.current;
     prevColorStateRef.current = null;
     if (prev) {
@@ -1166,6 +1171,7 @@ export default function App() {
       activeColorsByModelRef.current = interpreted.colorsByModel;
       prevColorStateRef.current = null;
       setCompareColorScheme(null);
+      setColorOverrideMode(null);
       setColorByMode('none');
       setColorLegend([]);
       for (const m of models) {
@@ -1193,13 +1199,16 @@ export default function App() {
       const label = t('clash.isolateLabel', { a: entry.metaA.name, b: entry.metaB.name });
       const { displayTarget, colorsByModel } = buildClashPairIsolation(entry, label);
       setDisplayRule((prev) => ({ ...prev, isolate: displayTarget }));
-      handleApplyCompareColors({
-        colorsByModel,
-        legend: [
-          { label: t('clash.legendA'), hex: '#ef4444', rgba: CLASH_COLOR_A_RGBA, count: 1 },
-          { label: t('clash.legendB'), hex: '#f97316', rgba: CLASH_COLOR_B_RGBA, count: 1 }
-        ]
-      });
+      handleApplyCompareColors(
+        {
+          colorsByModel,
+          legend: [
+            { label: t('clash.legendA'), hex: '#ef4444', rgba: CLASH_COLOR_A_RGBA, count: 1 },
+            { label: t('clash.legendB'), hex: '#f97316', rgba: CLASH_COLOR_B_RGBA, count: 1 }
+          ]
+        },
+        'clash'
+      );
       renderer.fitToBounds(entry.bounds, true);
     },
     [handleApplyCompareColors]
@@ -1456,7 +1465,8 @@ export default function App() {
                 propertyName={colorByPropName}
                 availableProperties={availableColorProps}
                 legend={colorLegend}
-                compareActive={compareColorScheme !== null}
+                compareActive={colorOverrideMode === 'compare'}
+                overrideMode={colorOverrideMode}
                 onChangeMode={handleChangeColorByMode}
                 onChangePropertyName={setColorByPropName}
               />

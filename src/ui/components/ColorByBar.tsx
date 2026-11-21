@@ -8,6 +8,7 @@ interface ColorByBarProps {
   availableProperties: readonly string[];
   legend: readonly ColorLegendItem[];
   compareActive?: boolean;
+  overrideMode?: 'compare' | 'clash' | null;
   onChangeMode: (mode: ColorByMode) => void;
   onChangePropertyName: (name: string) => void;
 }
@@ -18,9 +19,11 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
   availableProperties,
   legend,
   compareActive = false,
+  overrideMode,
   onChangeMode,
   onChangePropertyName
 }) => {
+  const activeOverride = overrideMode !== undefined ? overrideMode : compareActive ? 'compare' : null;
   return (
     <div
       className="display-bar color-by-bar"
@@ -31,9 +34,11 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
         <span className="display-bar-label">{t('colorBy.label')}</span>
         <select
           className="select color-by-select"
-          value={compareActive ? 'compare' : mode}
+          value={activeOverride ?? mode}
           onChange={(e) => {
-            if (e.target.value !== 'compare') onChangeMode(e.target.value as ColorByMode);
+            if (e.target.value !== 'compare' && e.target.value !== 'clash') {
+              onChangeMode(e.target.value as ColorByMode);
+            }
           }}
           title={t('colorBy.selectTitle')}
         >
@@ -42,11 +47,12 @@ export const ColorByBar: React.FC<ColorByBarProps> = ({
           <option value="storey">{t('colorBy.modeStorey')}</option>
           <option value="material">{t('colorBy.modeMaterial')}</option>
           <option value="property">{t('colorBy.modeProperty')}</option>
-          {compareActive && <option value="compare">{t('colorBy.modeCompare')}</option>}
+          {activeOverride === 'compare' && <option value="compare">{t('colorBy.modeCompare')}</option>}
+          {activeOverride === 'clash' && <option value="clash">{t('colorBy.modeClash')}</option>}
         </select>
       </div>
 
-      {!compareActive && mode === 'property' && (
+      {!activeOverride && mode === 'property' && (
         <div className="display-bar-row" style={{ marginTop: '2px' }}>
           <input
             type="text"

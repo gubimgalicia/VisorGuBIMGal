@@ -400,6 +400,7 @@ export const es = {
     modeMaterial: 'Por material',
     modeProperty: 'Por propiedad…',
     modeCompare: 'Comparación',
+    modeClash: 'Choque',
     propertyPlaceholder: 'Propiedad (ej. Name, IsExternal)',
     noValue: 'Sin valor',
     noMaterial: 'Sin material',
