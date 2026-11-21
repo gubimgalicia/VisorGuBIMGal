@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VisorGuBIMGal",
+  "version": "0.1.0",
+  "identifier": "gal.gubim.visor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:desktop",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "VisorGuBIMGal — Visor BIM/GIS",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["ifc"],
+        "name": "IFC Building Model",
+        "description": "Modelo BIM IFC",
+        "mimeType": "application/x-step"
+      }
+    ],
+    "windows": {
+      "nsis": {
+        "languages": ["Spanish"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

@@ -11,8 +11,13 @@ export interface MapMarkerData {
 export class LeafletService {
   private map: L.Map | null = null;
   private markersLayer: L.LayerGroup | null = null;
+  private tileLayers: L.TileLayer[] = [];
 
-  initialize(container: HTMLElement, onMapClick?: (lat: number, lng: number) => void): L.Map {
+  initialize(
+    container: HTMLElement,
+    onMapClick?: (lat: number, lng: number) => void,
+    onTileStatus?: (ok: boolean) => void
+  ): L.Map {
     if (this.map) {
       this.map.remove();
     }
@@ -36,6 +41,14 @@ export class LeafletService {
       transparent: true,
       attribution: '&copy; Instituto Geográfico Nacional de España'
     });
+
+    this.tileLayers = [pnoaWms, osmTiles];
+    if (onTileStatus) {
+      for (const layer of this.tileLayers) {
+        layer.on('tileload', () => onTileStatus(true));
+        layer.on('tileerror', () => onTileStatus(false));
+      }
+    }
 
     pnoaWms.addTo(map);
 
@@ -97,10 +110,17 @@ export class LeafletService {
     this.map?.invalidateSize();
   }
 
+  redrawTiles(): void {
+    for (const layer of this.tileLayers) {
+      layer.redraw();
+    }
+  }
+
   destroy(): void {
     this.map?.remove();
     this.map = null;
     this.markersLayer = null;
+    this.tileLayers = [];
   }
 }
 

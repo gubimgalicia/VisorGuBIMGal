@@ -76,7 +76,7 @@ import type {
   SelectedElementDetails
 } from './domain/models/ModelRecord';
 import type { KernelDiagnostic, SpatialTree } from './domain/kernel/KernelPort';
-import { kernel, renderer } from './infrastructure/composition';
+import { filePort, kernel, renderer } from './infrastructure/composition';
 import { leafletService } from './infrastructure/gis/LeafletService';
 
 import {
@@ -633,6 +633,24 @@ export default function App() {
     })();
   }, [activeBackend, loadIfcFile]);
 
+  // Subscribe to OS external file opens (e.g. Windows .ifc double-click / single instance) via FilePort
+  const externalFilesConsumedRef = useRef(false);
+  useEffect(() => {
+    if (!activeBackend) return;
+    const stop = filePort.onExternalOpen((source) => {
+      void loadIfcFile(source);
+    });
+    if (!externalFilesConsumedRef.current) {
+      externalFilesConsumedRef.current = true;
+      void filePort.consumeInitialFiles().then(async (initial) => {
+        for (const source of initial) {
+          await loadIfcFile(source);
+        }
+      });
+    }
+    return () => stop();
+  }, [activeBackend, loadIfcFile]);
+
   // Selection handler keyed by ElementRef
   const handleSelectElement = useCallback(
     async (ref: ElementRef | null, keepRightTab = false) => {
@@ -789,16 +807,14 @@ export default function App() {
             groupBy,
             rowCount: rows.length
           };
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
         }
+        await filePort.saveFile({
+          defaultName: filename,
+          content: csv,
+          mimeType: 'text/csv;charset=utf-8',
+          filterName: 'CSV',
+          extensions: ['csv']
+        });
         setStatusText(t('app.statusCsvExported', { filename, count: rows.length }));
       } catch (err) {
         console.error('Error exporting CSV:', err);
@@ -930,16 +946,14 @@ export default function App() {
           byteLength: glb.byteLength,
           elementCount
         };
-        const blob = new Blob([new Uint8Array(glb)], { type: 'model/gltf-binary' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
       }
+      await filePort.saveFile({
+        defaultName: filename,
+        content: glb,
+        mimeType: 'model/gltf-binary',
+        filterName: 'glTF Binary',
+        extensions: ['glb']
+      });
       setStatusText(t('app.statusGlbExported', { filename, count: elementCount }));
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {

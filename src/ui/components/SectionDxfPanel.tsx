@@ -27,6 +27,7 @@ import {
   type PdfPaper,
   type PdfScale
 } from '../viewer/svgToPdf';
+import { filePort } from '../../infrastructure/composition';
 import { widenForPreview } from './drawingPreview';
 import { formatFixed, formatLength, formatNumber, t } from '../i18n';
 
@@ -60,16 +61,14 @@ type DepthMode = 'auto' | 'none' | 'custom';
 type CutPreset = 'plan' | 'section-x' | 'section-y' | 'face';
 
 function downloadBytes(content: string | Uint8Array, mimeType: string, filename: string): void {
-  const part: BlobPart = typeof content === 'string' ? content : new Uint8Array(content);
-  const blob = new Blob([part], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.') + 1).toLowerCase() : '';
+  void filePort.saveFile({
+    defaultName: filename,
+    content,
+    mimeType,
+    filterName: ext ? ext.toUpperCase() : undefined,
+    extensions: ext ? [ext] : undefined
+  });
 }
 
 function downloadExportedDrawing(res: ExportedDrawing): void {
