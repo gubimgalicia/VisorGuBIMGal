@@ -247,6 +247,18 @@ export class Camera {
     return { scale: (2 * Math.tan(this.fovY * 0.5)) / rows, relative: true };
   }
 
+  /**
+   * A14: pixels per metre at unit distance (perspective) or globally (orthographic), for projecting
+   * a shape LoD's local geometric error into screen pixels.
+   */
+  lodPixelScale(heightPx: number): { scale: number; perspective: boolean } {
+    const rows = Math.max(1, heightPx);
+    if (this.projection === 'orthographic') {
+      return { scale: rows / (2 * this.orthoHalfExtents().halfH), perspective: false };
+    }
+    return { scale: rows / (2 * Math.tan(this.fovY * 0.5)), perspective: true };
+  }
+
   setProjection(projection: CameraProjection): void {
     if (projection === 'perspective' || projection === 'orthographic') {
       this.projection = projection;

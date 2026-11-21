@@ -7,11 +7,18 @@ import {
   vertexCountOf,
   InstanceField,
   INSTANCE_WORDS,
+  type Box3,
   type GeometryBatch,
   type ShapeDef,
   type VertexFormat
 } from '../../domain/kernel/GeometryBatch';
 import { packInstances, planInstances, type InstanceRange } from './instances';
+import {
+  buildShapeLods,
+  chooseLodLevel,
+  computeRangeLodBounds,
+  type RangeLodBounds
+} from './lodSimplify';
 import type {
   CameraPose,
   CameraProjection,
@@ -72,11 +79,20 @@ interface GpuBatchEntry {
   /** A13: the batch's instance block (16-byte header, then 96 bytes per instance), or null. */
   instanceBuffer: GPUBuffer | null;
   instanceRanges: InstanceRange[];
+  /** A14: world AABB and max linear stretch per instance range, plus active LoD level per frame. */
+  rangeLodBounds: Array<RangeLodBounds | null>;
+  rangeLodLevels: Uint8Array;
   /** One per shape the batch draws: its instance block and the shape's grid. */
   instanceBindGroups: Map<number, GPUBindGroup>;
   /** The batch index last written into the block's header; -1 until the first frame. */
   instanceHeader: number;
   instanceCount: number;
+}
+
+interface GpuShapeLod {
+  indexBuffer: GPUBuffer;
+  indexCount: number;
+  errorLocal: number;
 }
 
 /** A shared shape on the GPU, kept per model until removeModel (A13). */
@@ -88,6 +104,10 @@ interface GpuShape {
   indexFormat: GPUIndexFormat;
   indexCount: number;
   closed: boolean;
+  /** Exact local box of the shape (A14 uses it to compute range world bounds). */
+  box: Box3;
+  /** A14: coarser index buffers reusing positionBuffer/normalBuffer, ordered [LOD1, LOD2]. */
+  lods: GpuShapeLod[];
   /** min, pad, max, pad: the q16 grid. */
   gridBuffer: GPUBuffer;
   gpuBytes: number;
@@ -920,6 +940,14 @@ export class WebGpuRenderer implements RendererPort {
     const gpuBytes =
       positionBuffer.size + normalBuffer.size + (recordIndexBuffer?.size ?? 0) + indexGpuBytes + (instanceBuffer?.size ?? 0);
 
+    const rangeLodBounds = computeRangeLodBounds(
+      [ox, oy, oz],
+      batch.instanceTransforms,
+      plan,
+      (shapeId) => model.shapes.get(shapeId)?.box
+    );
+    const rangeLodLevels = new Uint8Array(plan.ranges.length);
+
     const { min, max } = batch.box;
     const grid = batch.quantBox ?? batch.box;
     model.batches.push({
@@ -944,6 +972,8 @@ export class WebGpuRenderer implements RendererPort {
       gpuBytes,
       instanceBuffer,
       instanceRanges: plan.ranges,
+      rangeLodBounds,
+      rangeLodLevels,
       instanceBindGroups,
       instanceHeader: -1,
       instanceCount
@@ -980,6 +1010,12 @@ export class WebGpuRenderer implements RendererPort {
     const positionBuffer = upload(shape.positions, GPUBufferUsage.VERTEX);
     const normalBuffer = upload(shape.normals, GPUBufferUsage.VERTEX);
     const indexBuffer = upload(shape.indices, GPUBufferUsage.INDEX);
+    let lodBytes = 0;
+    const lods: GpuShapeLod[] = buildShapeLods(shape).map((lod) => {
+      const lodBuf = upload(lod.indices, GPUBufferUsage.INDEX);
+      lodBytes += lodBuf.size;
+      return { indexBuffer: lodBuf, indexCount: lod.indices.length, errorLocal: lod.errorLocal };
+    });
     model.shapes.set(shape.shapeId, {
       vertexFormat: shape.vertexFormat,
       positionBuffer,
@@ -988,14 +1024,17 @@ export class WebGpuRenderer implements RendererPort {
       indexFormat: shape.indices instanceof Uint16Array ? 'uint16' : 'uint32',
       indexCount: shape.indices.length,
       closed: shape.closed,
+      box: shape.box,
+      lods,
       gridBuffer,
-      gpuBytes: positionBuffer.size + normalBuffer.size + indexBuffer.size + gridBuffer.size
+      gpuBytes: positionBuffer.size + normalBuffer.size + indexBuffer.size + gridBuffer.size + lodBytes
     });
   }
 
   /**
    * Draws a batch's instances for one pass, range by range: each range is one shape, opaque or
    * transparent, in one call. Closed shapes cull back faces while no section plane is set.
+   * Picking always uses LOD0 (full detail); main/ghost passes select coarse LoD per range.
    */
   private drawInstances(
     pass: GPURenderPassEncoder,
@@ -1004,14 +1043,18 @@ export class WebGpuRenderer implements RendererPort {
     kind: 'opaque' | 'transparent' | 'ghost' | 'pick'
   ): void {
     if (!this.pipelines || batch.instanceRanges.length === 0) return;
-    for (const range of batch.instanceRanges) {
+    for (let rangeIdx = 0; rangeIdx < batch.instanceRanges.length; rangeIdx++) {
+      const range = batch.instanceRanges[rangeIdx];
       if (kind === 'opaque' && range.transparent) continue;
       if (kind === 'transparent' && !range.transparent) continue;
       const shape = model.shapes.get(range.shapeId);
       const group = batch.instanceBindGroups.get(range.shapeId);
       if (!shape || !group) continue;
+      const lodLevel = kind === 'pick' ? 0 : batch.rangeLodLevels[rangeIdx];
+      const lod = lodLevel > 0 ? shape.lods[lodLevel - 1] : null;
       const set = this.pipelines[shape.vertexFormat === 'q16' ? 'q16i' : 'f32i'];
-      const cull = shape.closed && !range.transparent && this.sectionPlanes.length === 0;
+      // Coarse LoD levels draw without backface culling to avoid holes on decimated open/curved shapes.
+      const cull = !lod && shape.closed && !range.transparent && this.sectionPlanes.length === 0;
       const pipeline =
         kind === 'ghost'
           ? set.ghost
@@ -1028,8 +1071,8 @@ export class WebGpuRenderer implements RendererPort {
       pass.setBindGroup(1, group);
       pass.setVertexBuffer(0, shape.positionBuffer);
       pass.setVertexBuffer(1, shape.normalBuffer);
-      pass.setIndexBuffer(shape.indexBuffer, shape.indexFormat);
-      pass.drawIndexed(shape.indexCount, range.count, 0, 0, range.first);
+      pass.setIndexBuffer(lod ? lod.indexBuffer : shape.indexBuffer, shape.indexFormat);
+      pass.drawIndexed(lod ? lod.indexCount : shape.indexCount, range.count, 0, 0, range.first);
     }
   }
 
@@ -1583,7 +1626,22 @@ export class WebGpuRenderer implements RendererPort {
     const pipelines = this.pipelines;
     this.uploadQueuedBatches();
     this.updateGpuSceneTables();
-    this.drawnBatches = markBatchesInView(this.models.values(), this.camera.frustum(), this.camera.getEye());
+    const eye = this.camera.getEye();
+    this.drawnBatches = markBatchesInView(this.models.values(), this.camera.frustum(), eye);
+    const lodPixelScale = this.camera.lodPixelScale(this.canvas?.height ?? 1);
+    for (const model of this.models.values()) {
+      if (!model.visible) continue;
+      for (const batch of model.batches) {
+        if (!batch.inView || batch.instanceRanges.length === 0) continue;
+        for (let i = 0; i < batch.instanceRanges.length; i++) {
+          const shape = model.shapes.get(batch.instanceRanges[i].shapeId);
+          batch.rangeLodLevels[i] =
+            shape && shape.lods.length > 0
+              ? chooseLodLevel(shape.lods, batch.rangeLodBounds[i], eye, lodPixelScale, batch.rangeLodLevels[i])
+              : 0;
+        }
+      }
+    }
 
     const colorView = this.context.getCurrentTexture().createView();
     const encoder = this.device.createCommandEncoder();
@@ -2119,10 +2177,11 @@ function padToWord(values: Uint32Array | Uint16Array): Uint16Array {
   return padded;
 }
 
-/** Frees a shape's four buffers. */
+/** Frees a shape's buffers (including coarse LoD index buffers). */
 function destroyShape(shape: GpuShape): void {
   shape.positionBuffer.destroy();
   shape.normalBuffer.destroy();
   shape.indexBuffer.destroy();
+  for (const lod of shape.lods) lod.indexBuffer.destroy();
   shape.gridBuffer.destroy();
 }
