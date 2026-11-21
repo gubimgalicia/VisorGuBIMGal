@@ -123,9 +123,9 @@ const TAN_HALF_FOV = Math.SQRT2 - 1; // tan(pi/8) = sqrt(2) - 1
 // ---------------------------------------------------------------------------
 // Same pose with projection = 'orthographic':
 // -> halfH = 10 * tan(pi/8) = 10*(sqrt(2) - 1), halfW = 20*(sqrt(2) - 1)
-// -> near = 0.02 m, far = 50000 m
+// -> symmetric depth range near = -25000 m, far = 25000 m (span = 50000 m)
 // For forward distance d = 8 m (world y = -2):
-// Reverse-Z ortho depth z_ortho = (far - d) / (far - near) = 49992 / 49999.98 = 2499600 / 2499999
+// Reverse-Z ortho depth z_ortho = (far - d) / (far - near) = (25000 - 8) / 50000 = 24992 / 50000
 // At ndcX = 0.5, ndcY = -0.25:
 // -> x_cam = 0.5 * halfW = 10*(sqrt(2) - 1), y_cam = -0.25 * halfH = -2.5*(sqrt(2) - 1)
 {
@@ -139,7 +139,7 @@ const TAN_HALF_FOV = Math.SQRT2 - 1; // tan(pi/8) = sqrt(2) - 1
     projection: 'orthographic'
   });
 
-  const zOrtho8m = 2499600 / 2499999;
+  const zOrtho8m = (25000 - 8) / 50000;
   const pOrtho = typeof cam.unproject === 'function' ? cam.unproject(0.5, -0.25, zOrtho8m) : null;
   const expectedOrtho = [10 * TAN_HALF_FOV, -2, -2.5 * TAN_HALF_FOV];
   const roundTrip = pOrtho ? cam.project(pOrtho) : null;
@@ -233,7 +233,7 @@ const TAN_HALF_FOV = Math.SQRT2 - 1; // tan(pi/8) = sqrt(2) - 1
   const halfW = halfH * (16 / 9);
   const ndcXOrtho = xCam / halfW;
   const ndcYOrtho = yCam / halfH;
-  const zOrthoF64 = (50000 - d) / (50000 - 0.05);
+  const zOrthoF64 = (25000 - d) / 50000;
   const zOrthoF32 = Math.fround(zOrthoF64);
   const gotUtmOrtho =
     typeof camOrtho.unproject === 'function'
@@ -538,6 +538,98 @@ const TAN_HALF_FOV = Math.SQRT2 - 1; // tan(pi/8) = sqrt(2) - 1
   check('T5e fallback outside batch boxes returns null', pFallbackMiss === null, {
     got: pFallbackMiss
   });
+}
+
+// ---------------------------------------------------------------------------
+// 6. Close-up orthographic inspection, tight framing, and wheel zoom in FP
+// ---------------------------------------------------------------------------
+{
+  // T6a: Zoomed in close (distance = 0.5 m inside a 20 m building), front facade at depth = -9.5 m
+  // behind `eye` is NOT clipped: project, unproject, frustum, and rayAt/batch pick all succeed.
+  const cam = new Camera();
+  cam.setAspect(16 / 9);
+  cam.setPose({
+    target: [0, 0, 0],
+    distance: 0.5,
+    azimuth: -Math.PI / 2,
+    elevation: 0,
+    projection: 'orthographic'
+  });
+  // eye = [0, -0.5, 0], looking +Y; front facade is at y = -10 (depth = -9.5 m behind eye!)
+  const facadePoint = [0.1, -10, 0.05];
+  const ndc = cam.project(facadePoint);
+  const zFacade = (25000 - -9.5) / 50000;
+  const unproj = ndc ? cam.unproject(ndc.x, ndc.y, zFacade) : null;
+  const frustum = cam.frustum();
+  // Near plane is plane 0: n . p + d >= 0
+  const nearSide =
+    frustum[0] * facadePoint[0] +
+    frustum[1] * facadePoint[1] +
+    frustum[2] * facadePoint[2] +
+    frustum[3];
+  const models = [{ visible: true, batches: [{ min: [-10, -10, -3], max: [10, 10, 3] }] }];
+  const picked = pickBatchOrbitPivot(cam.rayAt(0, 0), models, []);
+  check(
+    'T6a close-up orthographic view does not clip facade behind eye',
+    ndc !== null &&
+      unproj !== null &&
+      vnear(unproj, facadePoint, 1e-9) &&
+      nearSide > 0 &&
+      vnear(picked, [0, -10, 0], 1e-9),
+    { ndc, unproj, nearSide, picked }
+  );
+
+  // T6b: Orthographic framing via setPreset('front') and fitToBounds fits tightly (>75% of limiting axis)
+  const bldg = { min: { x: -10, y: -5, z: 0 }, max: { x: 10, y: 5, z: 6 } };
+  const camFit = new Camera();
+  camFit.setAspect(16 / 9);
+  camFit.setProjection('orthographic');
+  camFit.setPreset('front', bldg);
+  let maxAbsX = 0;
+  let maxAbsY = 0;
+  let allInside = true;
+  for (const x of [bldg.min.x, bldg.max.x]) {
+    for (const y of [bldg.min.y, bldg.max.y]) {
+      for (const z of [bldg.min.z, bldg.max.z]) {
+        const s = camFit.project([x, y, z]);
+        if (!s || Math.abs(s.x) > 1 || Math.abs(s.y) > 1) allInside = false;
+        if (s) {
+          maxAbsX = Math.max(maxAbsX, Math.abs(s.x));
+          maxAbsY = Math.max(maxAbsY, Math.abs(s.y));
+        }
+      }
+    }
+  }
+  const fill = Math.max(maxAbsX, maxAbsY);
+  check(
+    'T6b orthographic preset frames building tightly inside viewport',
+    allInside && fill > 0.75 && fill < 0.95,
+    { allInside, maxAbsX, maxAbsY, fill, distance: camFit.getDistance() }
+  );
+
+  // T6c: Wheel scrolling zooms in orthographic mode even when navigationMode is first-person
+  const camFp = new Camera();
+  camFp.setAspect(16 / 9);
+  camFp.setPose({
+    target: [0, 0, 0],
+    distance: 20,
+    azimuth: -Math.PI / 2,
+    elevation: 0,
+    projection: 'orthographic'
+  });
+  const canvas = createMockCanvas(800, 600);
+  const detach = attachCanvasInput(canvas, camFp, {
+    onViewChange: () => {},
+    onClick: () => {},
+    getNavigationMode: () => 'first-person'
+  });
+  canvas.dispatch('wheel', { deltaY: -100, preventDefault: () => {} });
+  detach();
+  check(
+    'T6c wheel zooms in orthographic mode even while in first-person navigation',
+    camFp.getDistance() < 20,
+    { distanceAfterWheel: camFp.getDistance() }
+  );
 }
 
 const failed = results.filter((r) => !r.ok);

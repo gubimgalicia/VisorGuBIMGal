@@ -242,7 +242,8 @@ export class Camera {
   edgeDepthScale(heightPx: number): { scale: number; relative: boolean } {
     const rows = Math.max(1, heightPx);
     if (this.projection === 'orthographic') {
-      return { scale: (2 * this.orthoHalfExtents().halfH) / rows / (this.far() - this.near()), relative: false };
+      const { near, far } = this.depthRange();
+      return { scale: (2 * this.orthoHalfExtents().halfH) / rows / (far - near), relative: false };
     }
     return { scale: (2 * Math.tan(this.fovY * 0.5)) / rows, relative: true };
   }
@@ -469,12 +470,40 @@ export class Camera {
   /** Multiplies the distance to the target: below 1 moves closer. */
   zoomBy(factor: number): void {
     if (!Number.isFinite(factor) || factor <= 0) return;
-    this.distance = Math.max(0.05, Math.min(500000, this.distance * factor));
+    this.distance = Math.max(0.02, Math.min(500000, this.distance * factor));
     this.holdEye();
+  }
+
+  /** Frames `bounds` tightly in orthographic projection for the current camera orientation. */
+  private frameBoundsOrtho(bounds: ModelBounds): void {
+    const cx = (bounds.min.x + bounds.max.x) * 0.5;
+    const cy = (bounds.min.y + bounds.max.y) * 0.5;
+    const cz = (bounds.min.z + bounds.max.z) * 0.5;
+    this.target = [cx, cy, cz];
+
+    const hx = Math.max(0.05, (bounds.max.x - bounds.min.x) * 0.5);
+    const hy = Math.max(0.05, (bounds.max.y - bounds.min.y) * 0.5);
+    const hz = Math.max(0.05, (bounds.max.z - bounds.min.z) * 0.5);
+    const { right, up } = this.axes();
+    const projW = hx * Math.abs(right[0]) + hy * Math.abs(right[1]) + hz * Math.abs(right[2]);
+    const projH = hx * Math.abs(up[0]) + hy * Math.abs(up[1]) + hz * Math.abs(up[2]);
+
+    const halfFov = this.fovY * 0.5;
+    const reqHalfH = Math.max(projH, projW / Math.max(0.25, this.aspect)) * 1.15;
+    this.distance = Math.max(0.5, reqHalfH / Math.tan(halfFov));
   }
 
   fitToBounds(bounds: ModelBounds, keepAngles = false): void {
     this.eyeLock = null;
+    if (!keepAngles) {
+      this.azimuth = ISO_AZIMUTH;
+      this.elevation = ISO_ELEVATION;
+    }
+    if (this.projection === 'orthographic') {
+      this.frameBoundsOrtho(bounds);
+      return;
+    }
+
     const cx = (bounds.min.x + bounds.max.x) * 0.5;
     const cy = (bounds.min.y + bounds.max.y) * 0.5;
     const cz = (bounds.min.z + bounds.max.z) * 0.5;
@@ -488,26 +517,10 @@ export class Camera {
     const halfFov = this.fovY * 0.5;
     const fitScale = this.aspect < 1 ? 1 / Math.max(0.25, this.aspect) : 1;
     this.distance = Math.max(1.0, (radius / Math.tan(halfFov)) * 1.25 * fitScale);
-    if (!keepAngles) {
-      this.azimuth = ISO_AZIMUTH;
-      this.elevation = ISO_ELEVATION;
-    }
   }
 
   setPreset(preset: ViewPreset, bounds: ModelBounds | null): void {
     this.eyeLock = null;
-    if (bounds) {
-      this.target = [
-        (bounds.min.x + bounds.max.x) * 0.5,
-        (bounds.min.y + bounds.max.y) * 0.5,
-        (bounds.min.z + bounds.max.z) * 0.5
-      ];
-      const dx = Math.max(0.1, bounds.max.x - bounds.min.x);
-      const dy = Math.max(0.1, bounds.max.y - bounds.min.y);
-      const dz = Math.max(0.1, bounds.max.z - bounds.min.z);
-      const maxDim = Math.max(dx, dy, dz);
-      this.distance = Math.max(1.5, maxDim * 2.1);
-    }
 
     switch (preset) {
       case 'iso':
@@ -546,6 +559,23 @@ export class Camera {
         this.elevation = 0;
         break;
     }
+
+    if (bounds) {
+      if (this.projection === 'orthographic') {
+        this.frameBoundsOrtho(bounds);
+      } else {
+        this.target = [
+          (bounds.min.x + bounds.max.x) * 0.5,
+          (bounds.min.y + bounds.max.y) * 0.5,
+          (bounds.min.z + bounds.max.z) * 0.5
+        ];
+        const dx = Math.max(0.1, bounds.max.x - bounds.min.x);
+        const dy = Math.max(0.1, bounds.max.y - bounds.min.y);
+        const dz = Math.max(0.1, bounds.max.z - bounds.min.z);
+        const maxDim = Math.max(dx, dy, dz);
+        this.distance = Math.max(1.5, maxDim * 2.1);
+      }
+    }
   }
 
   private near(): number {
@@ -556,9 +586,23 @@ export class Camera {
     return Math.max(50000.0, this.distance * 250.0);
   }
 
+  /**
+   * Active view-space depth span `[near, far]` along `forward` from `eye`.
+   * Orthographic projection uses a symmetric span around `eye` (`[-half, +half]`) so zooming in
+   * closely never clips geometry sitting in front of `target` (behind `eye`) while keeping the
+   * same 50 km Reverse-Z depth precision as perspective.
+   */
+  private depthRange(): { near: number; far: number } {
+    if (this.projection === 'orthographic') {
+      const half = Math.max(25000.0, this.distance * 250.0);
+      return { near: -half, far: half };
+    }
+    return { near: this.near(), far: this.far() };
+  }
+
   /** Half-width and half-height in metres of the orthographic view volume at `distance`. */
   private orthoHalfExtents(): { halfW: number; halfH: number } {
-    const halfH = Math.max(0.05, this.distance * Math.tan(this.fovY * 0.5));
+    const halfH = Math.max(0.01, this.distance * Math.tan(this.fovY * 0.5));
     const halfW = halfH * this.aspect;
     return { halfW, halfH };
   }
@@ -586,7 +630,8 @@ export class Camera {
     const d: Vec3 = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
     const along = (axis: Vec3) => d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
     const depth = along(forward);
-    if (!(depth >= this.near()) || depth > this.far()) return null;
+    const { near, far } = this.depthRange();
+    if (!(depth >= near) || depth > far) return null;
     if (this.projection === 'orthographic') {
       const { halfW, halfH } = this.orthoHalfExtents();
       return { x: along(right) / halfW, y: along(up) / halfH };
@@ -609,8 +654,7 @@ export class Camera {
     ) {
       return null;
     }
-    const near = this.near();
-    const far = this.far();
+    const { near, far } = this.depthRange();
     const eye = this.getEye();
     const { forward, right, up } = this.axes();
 
@@ -637,15 +681,16 @@ export class Camera {
     ];
   }
 
-  /** The ray from the eye through a point in normalised device coordinates. */
+  /** The ray from the eye (or near plane in ortho) through a point in normalised device coordinates. */
   rayAt(ndcX: number, ndcY: number): Ray {
     const { forward, right, up } = this.axes();
     const eye = this.getEye();
     if (this.projection === 'orthographic') {
       const { halfW, halfH } = this.orthoHalfExtents();
-      const ox = eye[0] + right[0] * (ndcX * halfW) + up[0] * (ndcY * halfH);
-      const oy = eye[1] + right[1] * (ndcX * halfW) + up[1] * (ndcY * halfH);
-      const oz = eye[2] + right[2] * (ndcX * halfW) + up[2] * (ndcY * halfH);
+      const { near } = this.depthRange();
+      const ox = eye[0] + forward[0] * near + right[0] * (ndcX * halfW) + up[0] * (ndcY * halfH);
+      const oy = eye[1] + forward[1] * near + right[1] * (ndcX * halfW) + up[1] * (ndcY * halfH);
+      const oz = eye[2] + forward[2] * near + right[2] * (ndcX * halfW) + up[2] * (ndcY * halfH);
       return { origin: [ox, oy, oz], direction: [forward[0], forward[1], forward[2]] };
     }
     const h = 1.0 / Math.tan(this.fovY * 0.5);
@@ -668,13 +713,14 @@ export class Camera {
   frustum(window: ViewWindow = WHOLE_VIEW): Frustum {
     const eye = this.getEye();
     const { forward, right, up } = this.axes();
+    const { near, far } = this.depthRange();
     const planes = new Float64Array(24);
     const put = (at: number, n: Vec3, offset: number) => {
       planes.set(n, at);
       planes[at + 3] = offset - (n[0] * eye[0] + n[1] * eye[1] + n[2] * eye[2]);
     };
-    put(0, forward, -this.near());
-    put(4, [-forward[0], -forward[1], -forward[2]], this.far());
+    put(0, forward, -near);
+    put(4, [-forward[0], -forward[1], -forward[2]], far);
 
     if (this.projection === 'orthographic') {
       const { halfW, halfH } = this.orthoHalfExtents();
@@ -705,8 +751,7 @@ export class Camera {
    * rotation-only view matrix at the camera eye (floats 16..31).
    */
   writeUniforms(out: Float32Array): void {
-    const near = this.near();
-    const far = this.far();
+    const { near, far } = this.depthRange();
 
     if (this.projection === 'orthographic') {
       // Reverse-Z orthographic projection: z_view = -near -> z_clip = 1, z_view = -far -> z_clip = 0, w_clip = 1

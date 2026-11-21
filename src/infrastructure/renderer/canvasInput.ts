@@ -230,7 +230,7 @@ export function attachCanvasInput(
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    if (isFirstPerson()) {
+    if (isFirstPerson() && camera.getPose().projection !== 'orthographic') {
       const step = Math.max(0.3, Math.min(20, camera.getDistance() * 0.08));
       camera.walk(e.deltaY < 0 ? step : -step, 0, 0);
     } else {
