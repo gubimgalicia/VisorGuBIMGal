@@ -89,4 +89,15 @@ await test('vite.config.ts preserves /VisorGuBIMGal/ for web production and uses
   assert.match(cfg, /'\.\/'/);
 });
 
+await test('src-tauri/tauri.conf.json defines a strict non-null Content Security Policy', () => {
+  const conf = JSON.parse(readFileSync(path.resolve('src-tauri', 'tauri.conf.json'), 'utf8'));
+  const csp = conf?.app?.security?.csp;
+  assert.equal(typeof csp, 'string', 'CSP must be a non-null policy string');
+  assert.ok(csp.includes("default-src 'self'"), 'CSP must restrict default-src to self');
+  assert.ok(csp.includes("script-src 'self' 'wasm-unsafe-eval'"), 'CSP must allow only self scripts + wasm');
+  assert.ok(csp.includes("object-src 'none'"), 'CSP must disallow plugins/objects');
+  assert.ok(csp.includes('http://gubim-file.localhost'), 'CSP must allow local gubim-file protocol');
+  assert.ok(!csp.includes("'unsafe-eval'"), 'CSP must not allow unsafe-eval (only wasm-unsafe-eval)');
+});
+
 console.log(`\nt169-desktop-test: ${passed}/${passed} pass`);

@@ -92,7 +92,7 @@ Paralelismo: GitHub Pages no envía COOP/COEP y el `coi-serviceworker` se quitó
 
 | ID | Mejora | Evidencia en el código | Tam. | Prio. | Origen | Comprobado |
 |---|---|---|---|---|---|---|
-| E1 | Aplicación de escritorio con Tauri (MIT/Apache) para Windows: abrir un `.ifc` con doble clic, una sola instancia que recibe los archivos siguientes. Usa WebView2 (Chromium), así que WebGPU funciona; donde no lo haya, cae a WebGL2 | Ninguna | M | 4 | C | Diseño. **Hecho en `feat/desktop-T-169`** (2026-11-21, Gemini, verificado por Claude): E1 a E6 en `src-tauri/`, con instalador NSIS sin firmar. Pendiente de Nick: la firma de E6, la prueba de E4 con el modelo de 184 MB, y si se aceptan las dependencias MPL-2.0 indirectas de Tauri (`option-ext`, `cssparser`, `selectors`, `dtoa-short`, `servo_arc`). Pendiente técnico: una CSP en `tauri.conf.json`, que hoy es `null` |
+| E1 | Aplicación de escritorio con Tauri (MIT/Apache) para Windows: abrir un `.ifc` con doble clic, una sola instancia que recibe los archivos siguientes. Usa WebView2 (Chromium), así que WebGPU funciona; donde no lo haya, cae a WebGL2 | Ninguna | M | 4 | C | Diseño. **Hecho en `feat/desktop-T-169`** (2026-11-21, Gemini, verificado por Claude): E1 a E6 en `src-tauri/`, con instalador NSIS sin firmar y CSP estricta en `src-tauri/tauri.conf.json` (verificada en vivo sin infracciones CSP). Pendiente de Nick: la firma de E6 y la prueba de E4 con el modelo de 184 MB. **Decisión de Nick (2026-11-21):** las dependencias MPL-2.0 indirectas de Tauri (`option-ext`, `cssparser`, `cssparser-macros`, `selectors`, `dtoa-short`, `servo_arc`) **no son aceptables** → ver **E9** para sustituir Tauri por una carcasa propia sin MPL en el siguiente sprint |
 | E2 | Puerto de archivos: abrir desde una ruta y guardar con el diálogo nativo, con versión navegador y versión escritorio elegidas en `composition.ts`, sin ramas `if (escritorio)` repartidas por el código | Descarga por enlace en `SectionDxfPanel.tsx:23` | S | 4 | C | Sí |
 | E3 | Compilación de escritorio: `base` propia, porque `vite.config.ts:5` apunta a la ruta de Pages | `vite.config.ts:5` | S | 4 | C | Sí |
 | E4 | Archivos grandes por el protocolo de archivos locales de Tauri, no por su canal de mensajes. Probar primero con el modelo público de 184 MB | Ninguna | S | 4 | C | Riesgo principal del puerto |
@@ -100,6 +100,7 @@ Paralelismo: GitHub Pages no envía COOP/COEP y el `coi-serviceworker` se quitó
 | E6 | Publicación: una etiqueta de versión hace que CI construya el instalador y lo suba a GitHub Releases; el actualizador de Tauri lo ofrece al abrir la aplicación. La firma de código (certificado de pago) la decide el propietario del proyecto | Ninguna | M | 4 | C | Diseño |
 | E7 | macOS y Linux, cuando haya equipos donde compilar y probar | Ninguna | M | aplazada | C | Diseño |
 | E8 | Opcional y más adelante: kernel nativo en vez de WASM, sin el límite de 4 GB por modelo y con carga en varios hilos. Necesita un camino nuevo para la geometría hasta el renderizador; semanas de trabajo | Ninguna | L | aplazada | C | Diseño |
+| E9 | **Siguiente sprint (decisión de Nick, 2026-11-21):** sustituir Tauri por una carcasa de escritorio propia en Rust puro (Win32 + `windows` MIT/Apache-2.0 + `webview2-com` MIT) sin ninguna dependencia MPL-2.0. Tauri v2 arrastra de forma incondicional crates MPL-2.0 (`cssparser`, `cssparser-macros`, `dtoa-short`, `selectors`, `servo_arc` vía `tauri-utils` → `dom_query`, y `option-ext` vía `tauri` → `dirs-sys`), lo cual **no es aceptable**. La nueva carcasa reutiliza íntegramente `FilePort` (`src/domain/files/FilePort.ts`), `composition.ts`, `vite.config.ts` (`base: './'`), el estado sin conexión de GIS (E5) y el protocolo local de archivos grandes (`WebResourceRequested`), implementando instancia única (`CreateMutexW` + `WM_COPYDATA`) y diálogos nativos (`IFileOpenDialog` / `IFileSaveDialog`) para pasar `cargo deny check` también en escritorio | `src-tauri/Cargo.lock` (`cargo metadata`) | M | siguiente sprint | N | Comprobado el 2026-11-21 |
 
 ## Prioridades (2026-11-15, Nick)
 
@@ -114,10 +115,10 @@ Nick fija el orden: primero robustez (D), después rendimiento (A), después fun
 - **Estudiadas y descartadas (Nick, 2026-11-19):** A4, A5, A12 y A16. Se consideraron, se midieron y no compensan; cada fila dice cuánto. No se construyen.
 - **Aplazadas:** C18 (de momento solo castellano; C23 deja todo listo para añadir idiomas), D5 (Firefox), E7 (macOS y Linux, faltan equipos) y E8 (kernel nativo, opcional).
 
-## Sprint actual y siguiente (Nick, 2026-11-19)
+## Sprint actual y siguiente (Nick, 2026-11-19; actualizado 2026-11-21)
 
 - **Este sprint** se queda con lo que esta lista ya tiene pendiente: no se añaden mejoras nuevas. Termina cuando todo esté fusionado en `main`.
-- **El siguiente sprint** empieza evaluando otras mejoras del visor, antes de elegir trabajo nuevo.
+- **El siguiente sprint** arranca sustituyendo Tauri por una carcasa de escritorio Windows propia sin dependencias MPL-2.0 (**E9**, decisión de Nick del 2026-11-21), además de evaluar otras mejoras del visor antes de elegir trabajo nuevo.
 
 ## Orden propuesto (revisión 1, 2026-11-02, cumplido salvo lo que lleva Prio. arriba)
 
