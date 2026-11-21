@@ -7,11 +7,18 @@ import {
   vertexCountOf,
   InstanceField,
   INSTANCE_WORDS,
+  type Box3,
   type GeometryBatch,
   type ShapeDef,
   type VertexFormat
 } from '../../domain/kernel/GeometryBatch';
 import { packInstances, planInstances, type InstanceRange } from './instances';
+import {
+  buildShapeLods,
+  chooseLodLevel,
+  computeRangeLodBounds,
+  type RangeLodBounds
+} from './lodSimplify';
 import {
   MAX_SECTION_PLANES,
   type CameraPose,
@@ -77,6 +84,9 @@ interface GlBatchEntry {
   /** A13: 88 bytes per instance in draw order, ranges by shape, and a vertex array per shape. */
   instanceBuffer: WebGLBuffer | null;
   instanceRanges: InstanceRange[];
+  /** A14: world AABB and max linear stretch per instance range, plus active LoD level per frame. */
+  rangeLodBounds: Array<RangeLodBounds | null>;
+  rangeLodLevels: Uint8Array;
   instanceVaos: Map<number, WebGLVertexArrayObject>;
   instanceCount: number;
   opaqueIndexBuffer: WebGLBuffer | null;
@@ -160,6 +170,12 @@ const Q16_DECODE = `void main() {
 
 /** The q16 variant of a vertex shader written for f32 attributes. */
 /** A shared shape on the GPU, kept per model until removeModel (A13). */
+interface GlShapeLod {
+  indexBuffer: WebGLBuffer;
+  indexCount: number;
+  errorLocal: number;
+}
+
 interface GlShape {
   vertexFormat: VertexFormat;
   positionBuffer: WebGLBuffer;
@@ -168,6 +184,8 @@ interface GlShape {
   indexType: number;
   indexCount: number;
   closed: boolean;
+  box: Box3;
+  lods: GlShapeLod[];
   min: readonly [number, number, number];
   max: readonly [number, number, number];
   gpuBytes: number;
@@ -1110,6 +1128,14 @@ export class WebGl2Renderer implements RendererPort {
 
     const gpuBytes = posByteLen + normByteLen + recIdxByteLen + indexGpuBytes + instanceBytes;
 
+    const rangeLodBounds = computeRangeLodBounds(
+      [ox, oy, oz],
+      batch.instanceTransforms,
+      plan,
+      (shapeId) => model.shapes.get(shapeId)?.box
+    );
+    const rangeLodLevels = new Uint8Array(plan.ranges.length);
+
     const { min, max } = batch.box;
     const grid = batch.quantBox ?? batch.box;
     const u16 = indices instanceof Uint16Array;
@@ -1126,6 +1152,8 @@ export class WebGl2Renderer implements RendererPort {
       vao,
       instanceBuffer,
       instanceRanges: plan.ranges,
+      rangeLodBounds,
+      rangeLodLevels,
       instanceVaos,
       instanceCount,
       recordOffsetInModel,
@@ -1669,6 +1697,20 @@ export class WebGl2Renderer implements RendererPort {
     for (const info of mainPrograms) this.setFrameUniforms(gl, info, 0);
 
     const eye = this.camera.getEye();
+    const lodPixelScale = this.camera.lodPixelScale(height);
+    for (const model of this.models.values()) {
+      if (!model.visible) continue;
+      for (const batch of model.batches) {
+        if (!batch.inView || batch.instanceRanges.length === 0) continue;
+        for (let i = 0; i < batch.instanceRanges.length; i++) {
+          const shape = model.shapes.get(batch.instanceRanges[i].shapeId);
+          batch.rangeLodLevels[i] =
+            shape && shape.lods.length > 0
+              ? chooseLodLevel(shape.lods, batch.rangeLodBounds[i], eye, lodPixelScale, batch.rangeLodLevels[i])
+              : 0;
+        }
+      }
+    }
 
     // Pass 1: Opaque geometry
     let hasTransparent = false;
@@ -1878,6 +1920,15 @@ export class WebGl2Renderer implements RendererPort {
       return buffer;
     };
     const u16 = shape.indices instanceof Uint16Array;
+    let lodBytes = 0;
+    const lods: GlShapeLod[] = buildShapeLods(shape).map((lod) => {
+      lodBytes += lod.indices.byteLength;
+      return {
+        indexBuffer: upload(gl.ELEMENT_ARRAY_BUFFER, lod.indices),
+        indexCount: lod.indices.length,
+        errorLocal: lod.errorLocal
+      };
+    });
     model.shapes.set(shape.shapeId, {
       vertexFormat: shape.vertexFormat,
       positionBuffer: upload(gl.ARRAY_BUFFER, shape.positions),
@@ -1886,9 +1937,11 @@ export class WebGl2Renderer implements RendererPort {
       indexType: u16 ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT,
       indexCount: shape.indices.length,
       closed: shape.closed,
+      box: shape.box,
+      lods,
       min: shape.box.min,
       max: shape.box.max,
-      gpuBytes: shape.positions.byteLength + shape.normals.byteLength + shape.indices.byteLength
+      gpuBytes: shape.positions.byteLength + shape.normals.byteLength + shape.indices.byteLength + lodBytes
     });
   }
 
@@ -1896,6 +1949,7 @@ export class WebGl2Renderer implements RendererPort {
    * Draws a batch's instances for one pass, range by range: one shape, opaque or transparent,
    * in one call. WebGL2 has no base instance, so each range points the instance attributes at its
    * first instance. Closed shapes cull back faces while no section plane is set.
+   * Picking always uses LOD0 (full detail); main/ghost passes select coarse LoD per range.
    */
   private drawInstances(
     gl: WebGL2RenderingContext,
@@ -1905,12 +1959,15 @@ export class WebGl2Renderer implements RendererPort {
     kind: 'opaque' | 'transparent' | 'ghost' | 'pick'
   ): void {
     if (batch.instanceRanges.length === 0 || !batch.instanceBuffer) return;
-    for (const range of batch.instanceRanges) {
+    for (let rangeIdx = 0; rangeIdx < batch.instanceRanges.length; rangeIdx++) {
+      const range = batch.instanceRanges[rangeIdx];
       if (kind === 'opaque' && range.transparent) continue;
       if (kind === 'transparent' && !range.transparent) continue;
       const shape = model.shapes.get(range.shapeId);
       const vao = batch.instanceVaos.get(range.shapeId);
       if (!shape || !vao) continue;
+      const lodLevel = kind === 'pick' ? 0 : batch.rangeLodLevels[rangeIdx];
+      const lod = lodLevel > 0 ? shape.lods[lodLevel - 1] : null;
       const q16 = shape.vertexFormat === 'q16';
       const info = kind === 'pick' ? (q16 ? this.pickInstQ16 : this.pickInstF32) : q16 ? this.mainInstQ16 : this.mainInstF32;
       if (!info) continue;
@@ -1922,10 +1979,13 @@ export class WebGl2Renderer implements RendererPort {
       gl.uniform3f(u.u_quantMin, shape.min[0], shape.min[1], shape.min[2]);
       gl.uniform3f(u.u_quantMax, shape.max[0], shape.max[1], shape.max[2]);
       gl.bindVertexArray(vao);
+      if (shape.lods.length > 0) {
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lod ? lod.indexBuffer : shape.indexBuffer);
+      }
       pointInstances(gl, batch.instanceBuffer, range.first * GL_INSTANCE_BYTES);
-      const cull = shape.closed && !range.transparent && kind !== 'ghost' && this.sectionPlanes.length === 0;
+      const cull = !lod && shape.closed && !range.transparent && kind !== 'ghost' && this.sectionPlanes.length === 0;
       if (cull) gl.enable(gl.CULL_FACE);
-      gl.drawElementsInstanced(gl.TRIANGLES, shape.indexCount, shape.indexType, 0, range.count);
+      gl.drawElementsInstanced(gl.TRIANGLES, lod ? lod.indexCount : shape.indexCount, shape.indexType, 0, range.count);
       if (cull) gl.disable(gl.CULL_FACE);
     }
     gl.bindVertexArray(null);
@@ -2267,9 +2327,10 @@ function pointInstances(gl: WebGL2RenderingContext, buffer: WebGLBuffer, offset:
   gl.vertexAttribIPointer(5, 1, gl.UNSIGNED_INT, GL_INSTANCE_BYTES, offset + 48);
 }
 
-/** Frees a shape's three buffers. */
+/** Frees a shape's buffers (including coarse LoD index buffers). */
 function deleteShape(gl: WebGL2RenderingContext, shape: GlShape): void {
   gl.deleteBuffer(shape.positionBuffer);
   gl.deleteBuffer(shape.normalBuffer);
   gl.deleteBuffer(shape.indexBuffer);
+  for (const lod of shape.lods) gl.deleteBuffer(lod.indexBuffer);
 }
