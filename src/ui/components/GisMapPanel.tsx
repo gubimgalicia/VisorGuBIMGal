@@ -21,6 +21,10 @@ export const GisMapPanel: React.FC<GisMapPanelProps> = ({
   onUpdateModelLocation
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const modelsRef = useRef(models);
+  modelsRef.current = models;
+  const onUpdateRef = useRef(onUpdateModelLocation);
+  onUpdateRef.current = onUpdateModelLocation;
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [conn, setConn] = useState<GisOnlineState>(() =>
     initialGisOnlineState(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -50,8 +54,9 @@ export const GisMapPanel: React.FC<GisMapPanelProps> = ({
       mapContainerRef.current,
       (lat, lng) => {
         setClickedCoords({ lat, lng });
-        if (models.length > 0 && onUpdateModelLocation) {
-          onUpdateModelLocation(models[0].id, lat, lng);
+        const current = modelsRef.current;
+        if (current.length > 0 && onUpdateRef.current) {
+          onUpdateRef.current(current[0].id, lat, lng);
         }
       },
       (ok) => {
@@ -59,7 +64,19 @@ export const GisMapPanel: React.FC<GisMapPanelProps> = ({
       }
     );
 
-    // Add markers for models
+    const raf = requestAnimationFrame(() => leafletService.invalidateSize());
+    const timer = setTimeout(() => {
+      leafletService.invalidateSize();
+    }, 200);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+      leafletService.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
     const markers = models
       .filter((m) => m.coordinateReference?.latLng)
       .map((m) => ({
@@ -70,15 +87,7 @@ export const GisMapPanel: React.FC<GisMapPanelProps> = ({
       }));
 
     leafletService.updateModelMarkers(markers);
-
-    const timer = setTimeout(() => {
-      leafletService.invalidateSize();
-    }, 200);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [models, onUpdateModelLocation]);
+  }, [models]);
 
   const handleCenterModel = () => {
     const firstWithCoords = models.find((m) => m.coordinateReference?.latLng);

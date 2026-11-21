@@ -20,6 +20,7 @@ import { t } from '../i18n';
 
 interface HeaderProps {
   onOpenFile: (file: OpenedFileSource) => void;
+  onOpenFiles?: (files: readonly OpenedFileSource[]) => void;
   onLoadSample: (samplePath: string, name: string) => void;
   onSetPreset: (preset: ViewPreset) => void;
   onFitView: () => void;
@@ -32,6 +33,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenFile,
+  onOpenFiles,
   onLoadSample,
   onSetPreset,
   onFitView,
@@ -51,9 +53,13 @@ export const Header: React.FC<HeaderProps> = ({
       : null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onOpenFile(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) {
+      if (onOpenFiles) {
+        onOpenFiles(files);
+      } else {
+        onOpenFile(files[0]);
+      }
       e.target.value = '';
     }
   };
@@ -164,6 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
           ref={fileInputRef}
           type="file"
           accept=".ifc"
+          multiple
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />

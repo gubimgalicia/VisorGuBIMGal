@@ -1492,6 +1492,8 @@ canvas.bim-viewport {
   color: var(--text-muted);
   text-align: center;
   padding: 4px;
+}
+
 /* GIS offline state (E5, T-169) */
 .gis-map-stage {
   position: relative;

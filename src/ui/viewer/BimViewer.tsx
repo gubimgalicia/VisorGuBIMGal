@@ -15,6 +15,7 @@ import { t } from '../i18n';
 interface BimViewerProps {
   renderer: RendererPort;
   onOpenFile: (file: File) => void;
+  onOpenFiles?: (files: readonly File[]) => void;
   onSelectElement: (ref: ElementRef | null) => void;
   onHoverElement?: (ref: ElementRef | null) => void;
   onInitError?: (message: string | null) => void;
@@ -37,6 +38,7 @@ interface BimViewerProps {
 export const BimViewer: React.FC<BimViewerProps> = ({
   renderer,
   onOpenFile,
+  onOpenFiles,
   onSelectElement,
   onHoverElement,
   onInitError,
@@ -136,9 +138,14 @@ export const BimViewer: React.FC<BimViewerProps> = ({
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.name.toLowerCase().endsWith('.ifc')) {
-      onOpenFile(file);
+    const files = Array.from(e.dataTransfer.files ?? []).filter((f) =>
+      f.name.toLowerCase().endsWith('.ifc')
+    );
+    if (files.length === 0) return;
+    if (onOpenFiles) {
+      onOpenFiles(files);
+    } else {
+      onOpenFile(files[0]);
     }
   };
 

@@ -100,4 +100,27 @@ await test('src-tauri/tauri.conf.json defines a strict non-null Content Security
   assert.ok(!csp.includes("'unsafe-eval'"), 'CSP must not allow unsafe-eval (only wasm-unsafe-eval)');
 });
 
+await test('index.css has balanced braces so .gis-map-stage is never swallowed by a CSS syntax error', () => {
+  const css = readFileSync(path.resolve('src', 'ui', 'styles', 'index.css'), 'utf8');
+  // Strip comments and check brace balance, and ensure .gis-map-stage starts at brace depth 0.
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  let depth = 0;
+  const stageIdx = stripped.indexOf('.gis-map-stage');
+  assert.ok(stageIdx > 0, '.gis-map-stage selector must exist');
+  for (let i = 0; i < stripped.length; i++) {
+    if (i === stageIdx) {
+      assert.equal(depth, 0, `.gis-map-stage must be at top-level CSS depth (got ${depth})`);
+    }
+    if (stripped[i] === '{') depth++;
+    else if (stripped[i] === '}') depth--;
+    assert.ok(depth >= 0, `unexpected closing brace at offset ${i}`);
+  }
+  assert.equal(depth, 0, `unbalanced CSS braces: final depth ${depth}`);
+});
+
+await test('Header IFC file input supports multi-file upload', () => {
+  const header = readFileSync(path.resolve('src', 'ui', 'components', 'Header.tsx'), 'utf8');
+  assert.match(header, /type="file"[\s\S]*?accept="\.ifc"[\s\S]*?multiple/);
+});
+
 console.log(`\nt169-desktop-test: ${passed}/${passed} pass`);

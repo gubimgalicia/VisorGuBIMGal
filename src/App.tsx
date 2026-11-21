@@ -587,6 +587,18 @@ export default function App() {
     [activeBackend]
   );
 
+  const loadIfcFiles = useCallback(
+    async (files: readonly ModelFileSource[]) => {
+      for (const file of files) {
+        await loadIfcFile(file);
+      }
+      if (files.length > 1) {
+        renderer.fitToView();
+      }
+    },
+    [loadIfcFile]
+  );
+
   const handleRetryModel = useCallback(
     (modelId: ModelId) => {
       const source = modelSourcesRef.current.get(modelId);
@@ -1290,6 +1302,7 @@ export default function App() {
     <div className="app-container">
       <Header
         onOpenFile={(file) => void loadIfcFile(file)}
+        onOpenFiles={(files) => void loadIfcFiles(files)}
         onLoadSample={handleLoadSample}
         onSetPreset={(p) => renderer.setViewPreset(p)}
         onFitView={() => renderer.fitToView()}
@@ -1404,6 +1417,7 @@ export default function App() {
           <BimViewer
             renderer={renderer}
             onOpenFile={(file) => void loadIfcFile(file)}
+            onOpenFiles={(files) => void loadIfcFiles(files)}
             onSelectElement={(ref) => void handleSelectElement(ref)}
             onHoverElement={setHoveredRef}
             onInitError={setRendererError}
