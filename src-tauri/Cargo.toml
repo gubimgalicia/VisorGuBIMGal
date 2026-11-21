@@ -1,0 +1,24 @@
+# Standalone Cargo workspace so the Linux/WASM kernel workspace and cargo-deny stay untouched.
+[workspace]
+
+[package]
+name = "visor-gubim-desktop"
+version = "0.1.0"
+description = "VisorGuBIMGal — Aplicacion de escritorio Windows (Tauri v2)"
+authors = ["VisorGuBIMGal"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+
+[lib]
+name = "visor_gubim_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

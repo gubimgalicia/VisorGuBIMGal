@@ -5,6 +5,7 @@ node_modules/
 
 # Rust
 target/
+src-tauri/gen/
 src/infrastructure/kernel/pkg/
 
 # Production build

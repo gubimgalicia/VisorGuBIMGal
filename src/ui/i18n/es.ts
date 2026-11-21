@@ -418,7 +418,14 @@ export const es = {
     headerTitle: 'Contexto GIS 2D (Leaflet / PNOA / OSM)',
     coordsLabel: 'Lat: {lat}, Lng: {lng}',
     centerModelTitle: 'Centrar en el modelo IFC',
-    closeTitle: 'Cerrar panel GIS'
+    closeTitle: 'Cerrar panel GIS',
+    offlineBadge: 'Sin conexión',
+    offlineTitle: 'Mapa base sin conexión',
+    offlineDescription:
+      'Los mosaicos de IGN PNOA y OpenStreetMap necesitan conexión a internet. El visor 3D, los planos y las mediciones siguen funcionando localmente sin conexión.',
+    offlineModelCoord: '{fileName} ({crs}): {lat}, {lng}',
+    crsLocal: 'local',
+    offlineRetryBtn: 'Reintentar mosaicos'
   },
   ids: {
     evalError: 'Error al evaluar el archivo IDS.',

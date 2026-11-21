@@ -11,13 +11,15 @@ import {
   Info,
   X
 } from 'lucide-react';
+import type { OpenedFileSource } from '../../domain/files/FilePort';
 import type { ViewPreset } from '../../domain/kernel/RendererPort';
+import { filePort } from '../../infrastructure/composition';
 import noticeText from '../../../NOTICE.md?raw';
 import { GeometryCacheControl } from './GeometryCacheControl';
 import { t } from '../i18n';
 
 interface HeaderProps {
-  onOpenFile: (file: File) => void;
+  onOpenFile: (file: OpenedFileSource) => void;
   onLoadSample: (samplePath: string, name: string) => void;
   onSetPreset: (preset: ViewPreset) => void;
   onFitView: () => void;
@@ -54,6 +56,15 @@ export const Header: React.FC<HeaderProps> = ({
       onOpenFile(file);
       e.target.value = '';
     }
+  };
+
+  const handleOpenClick = async () => {
+    if (filePort.usesNativePicker) {
+      const picked = await filePort.pickIfcFile();
+      if (picked) onOpenFile(picked);
+      return;
+    }
+    fileInputRef.current?.click();
   };
 
   return (
@@ -159,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           className="btn btn-primary"
           disabled={isWorking}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => void handleOpenClick()}
         >
           <Upload size={15} />
           <span>{isWorking ? t('header.loadingEllipsis') : t('header.openIfc')}</span>

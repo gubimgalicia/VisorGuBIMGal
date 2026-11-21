@@ -18,6 +18,7 @@ import {
   type BcfTopic,
   type BcfViewpoint
 } from '../viewer/bcf';
+import { filePort } from '../../infrastructure/composition';
 import { t } from '../i18n';
 
 const DEFAULT_TYPES = ['Issue', 'Clash', 'Request', 'Remark'];
@@ -182,18 +183,14 @@ export const BcfPanel: React.FC<BcfPanelProps> = ({
           bytes,
           topicCount: project.topics.length
         };
-        const copy = new Uint8Array(bytes.byteLength);
-        copy.set(bytes);
-        const blob = new Blob([copy], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
       }
+      await filePort.saveFile({
+        defaultName: filename,
+        content: bytes,
+        mimeType: 'application/octet-stream',
+        filterName: 'BCF 3.0',
+        extensions: ['bcf']
+      });
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t('bcf.exportError'));
     } finally {
